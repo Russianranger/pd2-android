@@ -49,18 +49,27 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_runtime_relocation.py' -v
           ./scripts/test-import.sh
           python3 tests/test_input_router.py
+          python3 tests/test_crash_recovery.py
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-      - name: Build ARM64 preview
-        run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Test Android 13 startup and build ARM64 preview
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Upload Android startup test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-startup-tests
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
       - name: Package APK and checksums
+        id: package
         run: ./scripts/package-preview.sh
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: PD2-Android-0.1.0-preview
+          name: PD2-Android-${{ steps.package.outputs.version }}-preview
           path: |
-            app/build/distributions/PD2-Android-0.1.0-preview.apk
+            ${{ steps.package.outputs.apk_path }}
             app/build/distributions/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
@@ -68,11 +77,13 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
+          PD2_PREVIEW_VERSION: ${{ steps.package.outputs.version }}
+          PD2_PREVIEW_APK: ${{ steps.package.outputs.apk_path }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \
             --prerelease \
-            --title 'PD2 Android 0.1.0 Preview' \
-            --notes-file docs/RELEASE-0.1.0.md \
-            app/build/distributions/PD2-Android-0.1.0-preview.apk \
+            --title "PD2 Android $PD2_PREVIEW_VERSION Preview" \
+            --notes-file "docs/RELEASE-$PD2_PREVIEW_VERSION.md" \
+            "$PD2_PREVIEW_APK" \
             app/build/distributions/SHA256SUMS

@@ -70,6 +70,11 @@ public final class Pd2Activity extends AppCompatActivity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (Pd2CrashLog.hasPending(this)) {
+            startActivity(new Intent(this, Pd2RecoveryActivity.class));
+            finish();
+            return;
+        }
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
         if (!preferences.contains("pd2_defaults")) {
             File logs = new File(getFilesDir(), "pd2/logs");
@@ -82,7 +87,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 .putString("pd2_renderer", "turnip,zink").putString("pd2_arguments", "-3dfx -w").apply();
         }
         buildUi();
-        if (!busy) runOperation("Checking installation", () -> {
+        if (!busy) runOperation("Checking installation", false, () -> {
             Pd2Installer.recover(getApplicationContext());
             installation = Pd2InstallValidator.validate(Pd2Installer.installedDirectory(getApplicationContext()));
             operation = installation.valid ? "Installation ready. Prepare the runtime, then Play." : installation.message;
@@ -104,7 +109,7 @@ public final class Pd2Activity extends AppCompatActivity {
         title.setTextSize(27); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         layout.addView(title);
         TextView subtitle = new TextView(this);
-        subtitle.setText("Android launcher · Preview 0.1.0");
+        subtitle.setText("Android launcher · Preview " + appVersion());
         subtitle.setTextColor(Color.rgb(190, 164, 148)); subtitle.setTextSize(14);
         layout.addView(subtitle);
         status = new TextView(this);
@@ -162,7 +167,7 @@ public final class Pd2Activity extends AppCompatActivity {
         params.setMargins(dp(4), dp(5), dp(4), dp(5)); row.addView(button, params);
         button.setOnClickListener(v -> action.run()); return button;
     }
-    @Override protected void onResume() { super.onResume(); handler.post(refresh); }
+    @Override protected void onResume() { super.onResume(); if (status != null) handler.post(refresh); }
     @Override protected void onPause() { handler.removeCallbacks(refresh); super.onPause(); }
 
     private void updateUi() {
@@ -238,15 +243,24 @@ public final class Pd2Activity extends AppCompatActivity {
     }
     private interface Job { void run() throws Exception; }
     private void runOperation(String title, Job job) {
+        runOperation(title, true, job);
+    }
+    private void runOperation(String title, boolean protect, Job job) {
         synchronized (Pd2Activity.class) { if (busy) return; busy = true; }
         operation = title;
-        try { Pd2WorkService.start(getApplicationContext()); }
-        catch (Exception e) { busy = false; operation = "Cannot start import protection: " + e.getMessage(); return; }
-        WORKER.execute(() -> {
+        Runnable execute = () -> WORKER.execute(() -> {
             try { job.run(); }
             catch (Exception e) { operation = title + " failed: " + e.getMessage(); appendLauncherLog(operation); }
-            finally { busy = false; Pd2WorkService.stop(getApplicationContext()); }
+            finally { busy = false; if (protect) Pd2WorkService.stop(getApplicationContext()); }
         });
+        // Automatic validation needs no service. Explicit jobs wait until the
+        // service has entered foreground before they can finish and stop it.
+        try { if (protect) Pd2WorkService.start(getApplicationContext(), execute); else execute.run(); }
+        catch (Exception e) { busy = false; operation = "Cannot start " + title.toLowerCase(Locale.US) + ": " + e.getMessage(); appendLauncherLog(operation); }
+    }
+    private String appVersion() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
+        catch (android.content.pm.PackageManager.NameNotFoundException e) { return "unknown"; }
     }
     private void appendLauncherLog(String text) {
         try {
@@ -265,7 +279,7 @@ public final class Pd2Activity extends AppCompatActivity {
             if (old != null) for (File file : old) if (file.getName().startsWith("pd2-support-") && file.lastModified() < System.currentTimeMillis() - 2 * 86400000L) file.delete();
             String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
             File archive = new File(directory, "pd2-support-" + stamp + ".zip");
-            JSONObject report = new JSONObject().put("appVersion", "0.1.0").put("android", Build.VERSION.RELEASE)
+            JSONObject report = new JSONObject().put("appVersion", appVersion()).put("android", Build.VERSION.RELEASE)
                 .put("device", Build.MANUFACTURER + " " + Build.MODEL).put("supportedAbis", new JSONArray(Build.SUPPORTED_ABIS))
                 .put("runtimePrepared", Pd2Runtime.hasRuntime(this)).put("sessionRunning", XServerDisplayActivity.hasPd2Session())
                 .put("renderer", preferences.getString("pd2_renderer", "turnip,zink"))
@@ -283,6 +297,7 @@ public final class Pd2Activity extends AppCompatActivity {
             try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(archive))) {
                 out.putNextEntry(new ZipEntry("support.json")); out.write(report.toString(2).getBytes(StandardCharsets.UTF_8)); out.closeEntry();
                 zipLog(out, "launcher.log", new File(getFilesDir(), "pd2/logs/launcher.log"));
+                zipLog(out, "crash.txt", Pd2CrashLog.getCrashFile(this));
                 zipLog(out, "runtime.log", new File(getFilesDir(), "pd2/logs/runtime.log"));
                 if (installation != null && installation.valid) {
                     File game = new File(Pd2Installer.installedDirectory(this), installation.gameExecutableRelativePath).getParentFile();

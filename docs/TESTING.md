@@ -1,14 +1,29 @@
-# First Thor test
+# 0.1.1 startup retest and Thor qualification
 
-Use the 0.1.0 preview with your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
+Use the 0.1.1 startup correction and diagnostics preview. The original 0.1.0 opening crash has not been diagnosed from device logs; this retest comes before runtime preparation or gameplay.
 
-## First launch
+## Launcher startup first
 
-1. Install the preview APK and open PD2 Android.
-2. Press **Prepare runtime**. Wait for completion with the app visible; the first Play creates the Wine prefix.
-3. Import the complete Diablo II folder through the folder picker, or import a ZIP containing that whole installation. Do not select only `ProjectD2`.
-4. Confirm the installation reports ready. In **Launch settings**, start with **Turnip + Zink · D2GL / Glide** (`-3dfx -w`). Input starts in **Native controller**.
-5. Press **Play** and note the time to reach the main menu. Confirm the display, sound, and cursor are correct.
+1. Install 0.1.1 **over the existing app**. Keep it installed and keep its storage; the same application ID and signing identity preserve private runtime/game files.
+2. Open PD2 Android and leave the launcher visible for **five seconds**. Do not press Prepare runtime or import yet.
+3. Close the app from Android's recent apps, reopen it, and leave the launcher visible for another **five seconds**.
+4. Report whether both opens remained stable. Continue below only if they did.
+
+If it closes again:
+
+1. Reopen the app. A captured Java exception should lead to **PD2 Android recovery**.
+2. Choose **Export crash details**, save/share the `crash.txt` file, and upload it to the chat. Include whether it closed immediately or after the launcher appeared.
+3. **Retry launcher** lets you try again and retains the report. If the launcher becomes accessible, **Export support logs** provides the full diagnostic ZIP, including that report when present.
+4. If recovery never appears or no report can be shared, report that exact behavior. Some process exits cannot be captured by the Java handler. Do not uninstall or clear storage to retry.
+
+## After startup passes
+
+Use your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
+
+1. Press **Prepare runtime** only if the runtime is not already ready. Wait for completion with the app visible; the first Play creates the Wine prefix.
+2. If an accepted installation already exists, reuse it. Otherwise import the complete Diablo II folder through the folder picker, or import a ZIP containing that whole installation. Do not select only `ProjectD2`.
+3. Confirm the installation reports ready. In **Launch settings**, start with **Turnip + Zink · D2GL / Glide** (`-3dfx -w`). Input starts in **Native controller**.
+4. Press **Play** and note the time to reach the main menu. Confirm the display, sound, and cursor are correct.
 
 If the game exits or rendering fails, export support information before changing settings. Try Turnip/VirGL with the same launch arguments; if needed, try DirectDraw (`-ddraw -w`). Restart the game after changing runtime/launch settings, and record which combination was used. Do not repeat a successful import simply to test another renderer.
 

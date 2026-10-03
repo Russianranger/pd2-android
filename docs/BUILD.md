@@ -21,7 +21,9 @@ python3 scripts/fetch-runtime.py --check-final
 python3 -m unittest discover -s tests -p 'test_runtime_relocation.py' -v
 ./scripts/test-import.sh
 python3 tests/test_input_router.py
+python3 tests/test_crash_recovery.py
 sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;24.0.8215888' 'cmake;3.22.1'
+./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.winlator.pd2.Pd2*Test'
 ./gradlew --no-daemon :app:assembleDebug
 ./scripts/package-preview.sh
 ```
@@ -36,7 +38,7 @@ be supplied with `--cache-dir /path/to/tree`, or the already verified assets can
 be retained locally. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.0-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.1-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -60,6 +62,32 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum; the initial version tag is `v0.1.0`.
+GitHub prerelease with the APK and checksum; the startup diagnostics preview tag is `v0.1.1`.
+
+## Startup verification boundary
+
+The 0.1.1 JVM crash-recovery check exercises the production Java report storage
+and uncaught-handler delegation using small Android metadata stand-ins. It does
+not demonstrate that Android delivers the same exception on the Thor or that the
+recovery sharing UI works there. APK assembly, manifest inspection, and modeled
+Android UI tests are separate checks; none identifies the original 0.1.0 device
+crash without a device report or successful retest.
+
+The Gradle unit-test task runs `Pd2ActivityStartupTest` and
+`Pd2ServiceAndRecoveryTest` through Robolectric 4.14.1 with Android 13/API 33.
+All six tests passed for 0.1.1, covering the actual manifest/themed launcher,
+both platform entry routes, recovery fallback and retry report retention, and
+foreground notification before protected jobs. An isolated original `ebcd311`
+baseline opened its UI but failed the regression assertion because startup
+requested `Pd2WorkService`. This verifies the changed startup behavior; it does
+not reproduce the original device crash. Robolectric runs in the JVM and does
+not reproduce Android's service watchdog, ARM64 native-library loading, Wine,
+graphics drivers, or the physical Thor. The ARM64 0.1.1 APK build also passed,
+with version code 2 and the same application ID and preview signing key.
+
+Install the preview as an update using the same signing key and application ID
+to retain imported files. The immediate device check is two launcher opens of
+five seconds each, before runtime preparation. The full sequence is in
+[Testing](TESTING.md).
 
 Preview certificate SHA-256: `A6:12:97:BE:F1:BE:26:52:B5:3B:76:37:30:27:5E:1F:0E:09:75:22:22:94:60:2E:D8:FF:A5:F8:14:7D:DB:1E`.

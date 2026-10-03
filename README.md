@@ -4,7 +4,17 @@ A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruc
 
 The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 10.10 and Box64 0.4.4 from Winlator 11.2, with an Android X server and controller bridge. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.0 preview, awaiting physical-device qualification.** Building the APK and passing automated checks do not establish that PD2 launches, renders, accepts both sticks, or connects online on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
+**Status: 0.1.1 startup correction and diagnostics preview.** The user reported that 0.1.0 closed immediately when opening the app, before gameplay. The original crash cause remains unconfirmed. The new preview removes an unnecessary foreground-service start from the automatic installation check and adds Java crash capture with a recovery screen. A Thor retest is required.
+
+Building the APK and passing automated checks do not establish that PD2 launches, renders, accepts both sticks, or connects online on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
+
+## First 0.1.1 check
+
+Install 0.1.1 over the existing app without uninstalling or clearing storage; the application ID and preview signing identity are unchanged, preserving private files.
+
+Open the app, leave the launcher visible for **five seconds**, close it from Android's recent apps, and reopen it for another five seconds. Proceed to **Prepare runtime** only if both launches remain stable, and only if the runtime is not already ready.
+
+If the app still closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. **Retry launcher** acknowledges the pending report while retaining it for export. If recovery does not appear, report that too; Java crash capture does not cover every possible process exit. See [Testing](docs/TESTING.md) for the exact sequence.
 
 ## First preview
 
@@ -19,9 +29,9 @@ The app preserves imported game files and official PD2 DLLs. It does not include
 
 ## Install and import
 
-1. Install the preview APK provided with this source package (or from the repository preview release when published).
-2. Open **PD2 Android** and press **Prepare runtime**. The first preparation extracts the bundled runtime; leave the app open until it finishes. The managed prefix is created on the first Play.
-3. Import the complete **Diablo II** folder, not only `ProjectD2`. A ZIP may contain the installation directly or inside a parent folder.
+1. Install the preview APK from this repository's release and complete the startup check above.
+2. Press **Prepare runtime** if the runtime is not already ready. The first preparation extracts the bundled runtime; leave the app open until it finishes. The managed prefix is created on the first Play.
+3. If no accepted installation is present, import the complete **Diablo II** folder, not only `ProjectD2`. A ZIP may contain the installation directly or inside a parent folder. Reuse a previously accepted installation after updating the app.
 4. Wait for copying and validation to finish, then press **Play**.
 
 The import must include the base archives `d2data.mpq`, `d2char.mpq`, `d2sfx.mpq`, and `d2exp.mpq`, plus `ProjectD2/Game.exe`, `ProjectD2/ProjectDiablo.dll`, and `ProjectD2/pd2data.mpq`. These are minimum structural checks; importing your complete working English installation is required. They do not verify every game dependency or authenticate the contents. A Diablo II: Resurrected installation is not supported.
@@ -45,6 +55,6 @@ verify their SHA-256 values, and relocate their package paths before compiling.
 The APK includes these dependencies and launches independently of Winlator or
 GameNative once your game files are imported.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the first device checklist; [Handoff](docs/HANDOFF.md) records the implemented scope and remaining gates. [Release notes](docs/RELEASE-0.1.0.md) describe the preview.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the startup retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the implemented scope and remaining gates. [0.1.1 release notes](docs/RELEASE-0.1.1.md) describe the startup correction and diagnostics; [0.1.0 release notes](docs/RELEASE-0.1.0.md) describe the original milestone preview.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

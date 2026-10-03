@@ -8,7 +8,20 @@ The initial implementation uses Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-This is an initial **0.1.0 preview**. Qualification is pending the user's physical-device results. Do not record the milestone as qualified based on an APK build, header validation, or source review.
+The current build is **0.1.1, a startup correction and diagnostics preview**. The user reported that 0.1.0 closed immediately on opening the app, before gameplay, and supplied no crash log. The original device crash cause remains unconfirmed. Do not record this as a confirmed Thor fix or a qualified gameplay milestone based on source review, modeled UI tests, or an APK build.
+
+The first retest is opening the launcher for five seconds, closing it from recent apps, and reopening it for five seconds. Runtime preparation follows only if the launcher is stable. Install over the existing app with the same preview signing identity; do not uninstall or clear storage.
+
+## Startup correction and diagnostics
+
+- Automatic installation validation runs on the existing worker without starting `Pd2WorkService`.
+- Explicit import/export jobs wait until the service's `onStartCommand`, after `onCreate` has promoted it to foreground, before work can finish and stop the service. This removes a possible service-start/stop race; it does not identify the original Thor crash cause.
+- `Pd2Application` installs Java uncaught-exception capture during `attachBaseContext`, before manifest content providers are created, then delegates the original exception to Android's handler.
+- The last Java exception is written to `pd2/logs/crash.txt`, bounded at 128 KiB. A separate pending marker routes the next launch to recovery.
+- Platform entry/recovery activities avoid initializing the AppCompat launcher and game runtime on the recovery path. **Export crash details** shares the report; **Retry launcher** removes the pending marker while retaining the report.
+- Normal **Export support logs** includes `crash.txt` when present, in addition to its existing device, exit-history, and runtime logs.
+
+Crash capture covers uncaught Java exceptions when the process can write its report. Native crashes, abrupt process kills, and storage failures may leave no recovery report. If the launcher still closes without recovery, obtain the user's exact observation and any support export available before choosing another fix.
 
 ## Implemented design
 
@@ -30,13 +43,21 @@ The initial source checks passed with JDK 17:
 
 - `./scripts/test-import.sh`: 47 checks, including unsafe ZIP rejection, ZIP64, synthetic PE/MPQ structure validation, replacement preservation, and interrupted-promotion recovery.
 - `python3 tests/test_input_router.py`: tests the actual fallback router with small Android/X-server stand-ins; pointer/key release, shared input sources, direction reversal, analog/digital triggers, drift, alternate axes, and timer cleanup passed.
+- `python3 tests/test_crash_recovery.py`: 11 checks passed for the production crash-store/handler code, including bounded valid UTF-8 output, pending-marker acknowledgement, report retention, and delegation when report writing fails. Android metadata is represented by JVM stand-ins.
 
-APK compilation and packaging are separate build/CI checks. These JVM tests do not execute Android lifecycle behavior, the Wine controller bridge, graphics drivers, or PD2. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation.
+The 0.1.1 startup pass also verified:
+
+- `./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.winlator.pd2.Pd2*Test'`: all six Robolectric 4.14.1 Android 13/API 33 tests passed, with no failures, errors, or skips. They cover the actual manifest/themed launcher, both platform entry routes, recovery fallback and retry report retention, and foreground notification before protected jobs.
+- The original published `ebcd311` source was tested in isolation with its actual manifest. Its UI opened, but the startup regression assertion failed because it requested `Pd2WorkService`. This confirms the behavior changed; it does not reproduce Android's foreground-service watchdog or the user's device crash.
+- The ARM64 0.1.1 APK build passed with version code 2, the unchanged `com.pd2.thor` application ID, and the same preview signing key.
+
+Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The original crash cause and the physical startup retest remain unconfirmed.
 
 The release is ready for a first physical test only after its APK and checksums have been produced. The following remain pending:
 
 | Gate | Required evidence |
 | --- | --- |
+| Launcher startup | On the Thor, launcher remains visible for five seconds, closes normally, and reopens for another five seconds; any new Java crash can be exported from recovery |
 | First preparation/import | Bundled runtime prepares; full user installation imports without crash or unexplained memory pressure |
 | Rendering/audio | PD2 reaches a playable scene with correct textures, UI, and audio |
 | Native controller | Left-stick movement, independent right-stick aiming, triggers/buttons, and controller UI work on the Thor |
@@ -45,7 +66,7 @@ The release is ready for a first physical test only after its APK and checksums 
 | Offline saves | Save and exit, stop, relaunch, and reopen the same character successfully |
 | Online play | User can authenticate and enter a normal PD2 online game using the unmodified imported install |
 
-The native controller path is the priority qualification step. Keyboard emulation working is not evidence that native movement/aiming works.
+Launcher startup is the immediate qualification step. After it passes, native controller forwarding remains the priority gameplay check. Keyboard emulation working is not evidence that native movement/aiming works. All original rendering, controller, lifecycle, save, and online gates remain pending.
 
 ## Next work after the first device test
 

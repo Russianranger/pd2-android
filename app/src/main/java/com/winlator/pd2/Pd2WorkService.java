@@ -10,11 +10,19 @@ import android.content.Intent;
 import android.os.IBinder;
 import android.os.PowerManager;
 
+import java.util.ArrayList;
+
 /** Protects an explicit import/export job while Android's document picker or another app is visible. */
 public final class Pd2WorkService extends Service {
+    private static final ArrayList<Runnable> waiting = new ArrayList<>();
     private PowerManager.WakeLock wakeLock;
-    public static void start(Context context) {
-        context.startForegroundService(new Intent(context, Pd2WorkService.class));
+    public static void start(Context context, Runnable ready) {
+        synchronized (waiting) { waiting.add(ready); }
+        try { context.startForegroundService(new Intent(context, Pd2WorkService.class)); }
+        catch (RuntimeException error) {
+            synchronized (waiting) { waiting.remove(ready); }
+            throw error;
+        }
     }
     public static void stop(Context context) {
         context.stopService(new Intent(context, Pd2WorkService.class));
@@ -32,7 +40,14 @@ public final class Pd2WorkService extends Service {
         wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pd2:import");
         wakeLock.acquire(30 * 60 * 1000L);
     }
-    @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_NOT_STICKY; }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        // onCreate has already posted the foreground notification. Even a
+        // tiny export can now stop us without racing service creation.
+        ArrayList<Runnable> ready;
+        synchronized (waiting) { ready = new ArrayList<>(waiting); waiting.clear(); }
+        for (Runnable callback : ready) callback.run();
+        return START_NOT_STICKY;
+    }
     @Override public void onDestroy() {
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         super.onDestroy();
