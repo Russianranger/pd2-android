@@ -90,7 +90,9 @@ public final class Pd2Activity extends AppCompatActivity {
         if (!busy) runOperation("Checking installation", false, () -> {
             Pd2Installer.recover(getApplicationContext());
             installation = Pd2InstallValidator.validate(Pd2Installer.installedDirectory(getApplicationContext()));
-            operation = installation.valid ? "Installation ready. Prepare the runtime, then Play." : installation.message;
+            operation = getIntent().hasExtra("pd2_runtime_exit_status")
+                    ? runtimeExitMessage(getIntent().getIntExtra("pd2_runtime_exit_status", 0))
+                    : installation.valid ? "Installation ready. Prepare the runtime, then Play." : installation.message;
         });
     }
 
@@ -206,17 +208,20 @@ public final class Pd2Activity extends AppCompatActivity {
                 Pd2Runtime.configure(this, container, preferences.getString("pd2_renderer", "turnip,zink"));
                 File game = new File(Pd2Installer.installedDirectory(this), installation.gameExecutableRelativePath);
                 if (!game.isFile()) throw new IOException("Imported Game.exe is missing; import your installation again.");
-                appendLauncherLog("Launching PD2; renderer=" + container.getGraphicsDriver() + "; arguments=" + preferences.getString("pd2_arguments", "-3dfx -w"));
+                String arguments = preferences.getString("pd2_arguments", "-3dfx -w");
+                String launchId = Pd2LaunchDiagnostics.begin(this, container, arguments);
+                appendLauncherLog("Launching PD2; id=" + launchId + "; renderer=" + container.getGraphicsDriver()
+                        + "; arguments=" + arguments + "; CPU=" + (preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability"));
                 Intent intent = new Intent(this, XServerDisplayActivity.class)
                     .putExtra("pd2_session", true).putExtra("container_id", container.id)
-                    .putExtra("exec_path", game.getPath()).putExtra("exec_args", preferences.getString("pd2_arguments", "-3dfx -w"));
+                    .putExtra("pd2_launch_id", launchId).putExtra("exec_path", game.getPath()).putExtra("exec_args", arguments);
                 startActivity(intent);
             } catch (Exception e) { operation = "Launch setup failed: " + e.getMessage(); appendLauncherLog(operation); }
             updateUi();
         });
     }
     private void showSettings() {
-        String[] choices = {"Turnip + Zink · D2GL / Glide", "Turnip + Zink · DirectDraw", "Turnip + VirGL · D2GL / Glide", "Turnip + VirGL · DirectDraw"};
+        String[] choices = {"Turnip + Zink · D2GL / Glide", "Turnip + Zink · Wine DirectDraw (compatibility)", "Turnip + VirGL · D2GL / Glide", "Turnip + VirGL · Wine DirectDraw (compatibility)"};
         String renderer = preferences.getString("pd2_renderer", "turnip,zink");
         String args = preferences.getString("pd2_arguments", "-3dfx -w");
         int selected = (renderer.equals("turnip,virgl") ? 2 : 0) + (args.contains("-ddraw") ? 1 : 0);
@@ -225,7 +230,25 @@ public final class Pd2Activity extends AppCompatActivity {
                 .putString("pd2_arguments", which % 2 == 0 ? "-3dfx -w" : "-ddraw -w").apply();
             operation = "Launch profile saved. Imported PD2 files and graphics settings are preserved.";
             d.dismiss(); updateUi();
-        }).setNegativeButton("Close", null).show());
+        }).setNeutralButton("CPU mode", (d, w) -> showCpuSettings()).setNegativeButton("Close", null).show());
+    }
+    private void showCpuSettings() {
+        String[] modes = {"Stability (default)", "Interpreter (diagnostic; very slow)"};
+        int selected = preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? 1 : 0;
+        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("CPU mode")
+            .setSingleChoiceItems(modes, selected, (d, which) -> {
+                preferences.edit().putBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, which == 1).apply();
+                operation = which == 1 ? "Interpreter selected for a short startup diagnostic. Return to Stability afterward."
+                        : "Stability selected.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
+    }
+    public static void recordRuntimeExit(android.content.Context context, int status) {
+        operation = runtimeExitMessage(status);
+        appendLauncherLog(context, operation);
+    }
+    private static String runtimeExitMessage(int status) {
+        return "Windows runtime exited (status " + status + "). If the title screen did not appear, export support logs.";
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
@@ -263,8 +286,11 @@ public final class Pd2Activity extends AppCompatActivity {
         catch (android.content.pm.PackageManager.NameNotFoundException e) { return "unknown"; }
     }
     private void appendLauncherLog(String text) {
+        appendLauncherLog(this, text);
+    }
+    private static void appendLauncherLog(android.content.Context context, String text) {
         try {
-            File file = new File(getFilesDir(), "pd2/logs/launcher.log"); file.getParentFile().mkdirs();
+            File file = new File(context.getFilesDir(), "pd2/logs/launcher.log"); file.getParentFile().mkdirs();
             if (file.length() > 1024 * 1024) file.delete();
             try (FileOutputStream out = new FileOutputStream(file, true)) {
                 out.write((new Date() + " " + text + "\n").getBytes(StandardCharsets.UTF_8));
@@ -284,6 +310,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("runtimePrepared", Pd2Runtime.hasRuntime(this)).put("sessionRunning", XServerDisplayActivity.hasPd2Session())
                 .put("renderer", preferences.getString("pd2_renderer", "turnip,zink"))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
+                .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")
                 .put("installation", installation == null ? "unchecked" : installation.details).put("lastOperation", operation);
             if (Build.VERSION.SDK_INT >= 30) {
                 JSONArray exits = new JSONArray();
@@ -298,8 +325,23 @@ public final class Pd2Activity extends AppCompatActivity {
                 out.putNextEntry(new ZipEntry("support.json")); out.write(report.toString(2).getBytes(StandardCharsets.UTF_8)); out.closeEntry();
                 zipLog(out, "launcher.log", new File(getFilesDir(), "pd2/logs/launcher.log"));
                 zipLog(out, "crash.txt", Pd2CrashLog.getCrashFile(this));
-                zipLog(out, "runtime.log", new File(getFilesDir(), "pd2/logs/runtime.log"));
+                File runtimeLog = new File(getFilesDir(), "pd2/logs/runtime.log");
+                if (runtimeLog.isFile()) {
+                    out.putNextEntry(new ZipEntry("runtime.log"));
+                    Pd2SessionLog.writeSnapshot(runtimeLog, out);
+                    out.closeEntry();
+                }
+                zipLog(out, "launch.json", new File(getFilesDir(), "pd2/logs/launch.json"));
+                File[] attempts = Pd2SessionLog.getAttemptsDirectory(this).listFiles();
+                if (attempts != null) for (File file : attempts) {
+                    if (file.isFile() && file.getName().matches("runtime-attempt-[0-9]{13,19}\\.log"))
+                        zipLog(out, "attempts/" + file.getName(), file);
+                }
                 if (installation != null && installation.valid) {
+                    out.putNextEntry(new ZipEntry("installation-files.json"));
+                    out.write(Pd2LaunchDiagnostics.installationFiles(Pd2Installer.installedDirectory(this), installation)
+                            .toString(2).getBytes(StandardCharsets.UTF_8));
+                    out.closeEntry();
                     File game = new File(Pd2Installer.installedDirectory(this), installation.gameExecutableRelativePath).getParentFile();
                     zipLog(out, "d2gl.log", new File(game, "d2gl.log"));
                 }

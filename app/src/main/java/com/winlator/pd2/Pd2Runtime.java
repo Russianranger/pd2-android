@@ -8,7 +8,6 @@ import android.os.Looper;
 
 import androidx.preference.PreferenceManager;
 
-import com.winlator.box64.Box64Preset;
 import com.winlator.container.AudioDrivers;
 import com.winlator.container.Container;
 import com.winlator.container.ContainerManager;
@@ -36,9 +35,6 @@ public final class Pd2Runtime {
     private static final String WIN_COMPONENTS =
             "direct3d=0,directsound=0,directmusic=0,directshow=0,directplay=0,"+
             "xaudio=0,vcrun2005=0,vcrun2010=1,wmdecoder=0";
-    private static final String ENVIRONMENT =
-            Container.DEFAULT_ENV_VARS+
-            " WINEDLLOVERRIDES=ddraw,glide3x=n,b;mscoree,mshtml=d";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ArrayList<Callback<Container>> WAITING = new ArrayList<>();
     private static boolean creating;
@@ -140,10 +136,10 @@ public final class Pd2Runtime {
         container.setDXWrapperConfig("");
         container.setAudioDriver(AudioDrivers.ALSA);
         container.setAudioDriverConfig("");
-        container.setBox64Preset(Box64Preset.CONSERVATIVE);
+        container.setBox64Preset(Pd2LaunchPolicy.cpuPreset());
         container.setWinComponents(WIN_COMPONENTS);
         container.setStartupSelection(Container.STARTUP_SELECTION_ESSENTIAL);
-        container.setEnvVars(ENVIRONMENT);
+        container.setEnvVars(environment(context));
         container.setDrives("P:" + installed.getAbsolutePath());
         container.putExtra(MANAGED, "1");
         container.saveData();
@@ -223,7 +219,7 @@ public final class Pd2Runtime {
         return new JSONObject()
                 .put("name", CONTAINER_NAME)
                 .put("screenSize", "1280x720")
-                .put("envVars", ENVIRONMENT)
+                .put("envVars", environment(context))
                 .put("graphicsDriver", DEFAULT_RENDERER)
                 .put("graphicsDriverConfig", "")
                 .put("dxwrapper", DXWrappers.WINED3D)
@@ -234,8 +230,14 @@ public final class Pd2Runtime {
                 .put("drives", "P:" + Pd2Installer.installedDirectory(context).getAbsolutePath())
                 .put("hudMode", 0)
                 .put("startupSelection", Container.STARTUP_SELECTION_ESSENTIAL)
-                .put("box64Preset", Box64Preset.CONSERVATIVE)
+                .put("box64Preset", Pd2LaunchPolicy.cpuPreset())
                 .put("desktopTheme", WineThemeManager.DEFAULT_DESKTOP_THEME);
+    }
+
+    private static String environment(Context context) {
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        return Pd2LaunchPolicy.environment(preferences.getString("pd2_arguments", "-3dfx -w"),
+                preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false));
     }
 
     private static void deliver(Container result) {

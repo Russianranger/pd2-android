@@ -73,6 +73,8 @@ import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.pd2.Pd2InputRouter;
 import com.winlator.pd2.Pd2ControllerDialogs;
+import com.winlator.pd2.Pd2Activity;
+import com.winlator.pd2.Pd2LaunchDiagnostics;
 import com.winlator.math.Mathf;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.services.ForegroundService;
@@ -153,6 +155,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean pd2Paused;
     private boolean pd2HasWindowFocus = true;
     private volatile boolean pd2StopRequested;
+    private Integer pd2RuntimeExitStatus;
     private boolean pd2LeftThumbDown, pd2RightThumbDown, pd2ChordConsumed;
     private boolean pd2LeftThumbDeferred, pd2RightThumbDeferred;
     private Pd2InputRouter pd2InputRouter;
@@ -212,8 +215,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         NavigationView navigationView = findViewById(R.id.NavigationView);
         ProcessHelper.removeAllDebugCallbacks();
-        boolean enableLogs = preferences.getBoolean("enable_wine_debug", false) || preferences.getInt("box64_logs", 0) >= 1;
-        if (enableLogs) ProcessHelper.addDebugCallback(debugDialog = new DebugDialog(this));
+        boolean enableLogs = pd2Session || preferences.getBoolean("enable_wine_debug", false) || preferences.getInt("box64_logs", 0) >= 1;
+        if (enableLogs) {
+            ProcessHelper.addDebugCallback(debugDialog = new DebugDialog(this));
+            if (pd2Session) debugDialog.call("=== PD2 launch ===\n" + FileUtils.readString(new File(getFilesDir(), "pd2/logs/launch.json")));
+        }
         Menu menu = navigationView.getMenu();
         menu.findItem(R.id.menu_item_logs).setVisible(enableLogs);
         navigationView.setNavigationItemSelectedListener(this);
@@ -523,8 +529,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             environment = null;
             pd2ActiveSession.clear();
             ForegroundService.stopSession(this);
-            startActivity(new Intent().setClassName(getPackageName(), "com.winlator.pd2.Pd2Activity")
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));
+            Intent launcher = new Intent().setClassName(getPackageName(), "com.winlator.pd2.Pd2Activity")
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            if (pd2RuntimeExitStatus != null) launcher.putExtra("pd2_runtime_exit_status", pd2RuntimeExitStatus.intValue());
+            startActivity(launcher);
             finish();
             return;
         }
@@ -657,7 +665,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
 
         guestProgramLauncherComponent.setEnvVars(envVars);
-        guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(this::exit));
+        guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
+            if (pd2Session && !pd2StopRequested) {
+                pd2RuntimeExitStatus = status;
+                String id = getIntent().getStringExtra("pd2_launch_id");
+                if (id != null) Pd2LaunchDiagnostics.exited(this, id, status);
+                Pd2Activity.recordRuntimeExit(this, status);
+                if (debugDialog != null) debugDialog.call("=== Windows runtime exit status: " + status + " ===");
+            }
+            exit();
+        }));
         environment.addComponent(guestProgramLauncherComponent);
 
         if (isGenerateWineprefix()) {

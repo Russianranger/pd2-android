@@ -1,31 +1,35 @@
-# 0.1.1 startup retest and Thor qualification
+# 0.1.2 launch diagnostics and Thor qualification
 
-Use the 0.1.1 startup correction and diagnostics preview. The original 0.1.0 opening crash has not been diagnosed from device logs; this retest comes before runtime preparation or gameplay.
+Launcher startup, runtime preparation, and installation import were accepted on 0.1.1. The user reported that all four graphics launch profiles returned to the launcher. The surviving final-attempt log records a Wine stack overflow; its cause is unconfirmed. Use this preview for one controlled launch with improved evidence collection.
 
-## Launcher startup first
+## Next launch test
 
-1. Install 0.1.1 **over the existing app**. Keep it installed and keep its storage; the same application ID and signing identity preserve private runtime/game files.
-2. Open PD2 Android and leave the launcher visible for **five seconds**. Do not press Prepare runtime or import yet.
-3. Close the app from Android's recent apps, reopen it, and leave the launcher visible for another **five seconds**.
-4. Report whether both opens remained stable. Continue below only if they did.
+1. Install 0.1.2 **over the existing app**. Keep its storage; the same application ID and signing identity preserve private runtime/game files.
+2. Reuse the accepted runtime and game installation. **Do not press Prepare runtime or re-import.**
+3. In **Launch settings**, choose **Turnip + Zink · Wine DirectDraw (compatibility)**. Leave **CPU mode → Stability (default)** selected for the first attempt.
+4. Press **Play once**. Report whether a game window or PD2 menu appears, the last screen visible, and roughly how long it takes to return if it fails.
+5. If it returns to the launcher, immediately use **Export support logs**, save/share the ZIP, and upload it to the chat. Keep this graphics profile; testing all four choices again is unnecessary.
 
-If it closes again:
+If that attempt also fails, one optional comparison uses **Launch settings → CPU mode → Interpreter (diagnostic; very slow)** with the same Wine DirectDraw profile. Press Play once and allow up to **60 seconds** for the title screen. If it remains unfinished, use the quick menu to return to the launcher and press **Stop client**, then export another support ZIP. Record whether it returned, displayed the title, or was stopped at the limit. Interpreter can take much longer; this interval bounds the diagnostic test and does not establish how long every valid load should take. Return CPU mode to **Stability (default)** afterward.
+
+If the whole Android app closes:
 
 1. Reopen the app. A captured Java exception should lead to **PD2 Android recovery**.
-2. Choose **Export crash details**, save/share the `crash.txt` file, and upload it to the chat. Include whether it closed immediately or after the launcher appeared.
+2. Choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Include whether it closed before or after pressing Play.
 3. **Retry launcher** lets you try again and retains the report. If the launcher becomes accessible, **Export support logs** provides the full diagnostic ZIP, including that report when present.
 4. If recovery never appears or no report can be shared, report that exact behavior. Some process exits cannot be captured by the Java handler. Do not uninstall or clear storage to retry.
 
-## After startup passes
+The preview uses the Box64 Stability preset and captures Wine exception/module-load output. Support export includes `launch.json`, `installation-files.json`, the current `runtime.log`, and up to four archived attempts under `attempts/`. These record settings, client-file inventory, and runtime process exit status. The active log is bounded at 8 MiB and each archived attempt at 2 MiB. This is diagnostic evidence, not proof that the stack overflow has been corrected.
+
+The compatibility profile explicitly uses Wine's built-in DirectDraw. The old 0.1.1 DirectDraw profiles could still use the imported D2GL wrapper. This first test is for client display; native controller features may depend on D2GL and are not qualified by a built-in DirectDraw success.
+
+## After PD2 reaches the menu
 
 Use your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
 
-1. Press **Prepare runtime** only if the runtime is not already ready. Wait for completion with the app visible; the first Play creates the Wine prefix.
-2. If an accepted installation already exists, reuse it. Otherwise import the complete Diablo II folder through the folder picker, or import a ZIP containing that whole installation. Do not select only `ProjectD2`.
-3. Confirm the installation reports ready. In **Launch settings**, start with **Turnip + Zink · D2GL / Glide** (`-3dfx -w`). Input starts in **Native controller**.
-4. Press **Play** and note the time to reach the main menu. Confirm the display, sound, and cursor are correct.
+Report that the menu appeared and export the result before pursuing graphics/controller changes. Runtime preparation and import have already passed; this launch qualification does not require repeating them. The controls and save checklist below remains the later milestone, after an appropriate PD2/D2GL graphics path is established.
 
-If the game exits or rendering fails, export support information before changing settings. Try Turnip/VirGL with the same launch arguments; if needed, try DirectDraw (`-ddraw -w`). Restart the game after changing runtime/launch settings, and record which combination was used. Do not repeat a successful import simply to test another renderer.
+Export support information after any new failure before changing settings. Further renderer comparisons should follow diagnosis of the first 0.1.2 attempt; do not cycle through all four settings before sending that evidence.
 
 ## Native controller
 
@@ -85,3 +89,5 @@ Use **Export support logs** after a failed attempt, save/share the resulting ZIP
 An import success is not a gameplay success. APK build/CI success is not physical-device qualification. Performance comparisons should use the same character, area, resolution, and settings in this app and the existing working setup.
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
+
+The 0.1.2 local verification passed 13 Android 13/API 33 Robolectric tests and 26 session-log host checks. The ARM64 APK build also passed with the same application ID and signing certificate. These checks cover launcher/service/recovery behavior, diagnostic policy/reporting, PE inventory, and log limits; they do not run PD2 or confirm a fix on the Thor. Published GitHub Actions verification remains pending until its run is inspected, and the next physical test remains the compatibility launch described above.

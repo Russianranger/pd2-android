@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Check actual runtime-attempt retention and head/tail preservation on the JVM."""
+from pathlib import Path
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+SOURCES = {
+    "android/content/Context.java": """package android.content;
+import java.io.File;
+public class Context {
+ private final File files;
+ public Context(File files) { this.files=files; }
+ public File getFilesDir() { return files; }
+}
+""",
+    "SessionLogTest.java": """import android.content.Context;
+import com.winlator.pd2.Pd2SessionLog;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.*;
+import java.util.zip.*;
+
+public class SessionLogTest {
+ static int checks;
+ static void check(boolean ok,String message) { checks++; if(!ok)throw new AssertionError(message); }
+ static String read(File file)throws Exception { return Files.readString(file.toPath()); }
+ static File[] attempts(File folder) { return folder.listFiles(f -> f.isFile() && f.getName().matches("runtime-attempt-[0-9]{13,19}\\\\.log")); }
+ public static void main(String[] args)throws Exception {
+  File work=Files.createTempDirectory("pd2-session-log-tests-").toFile();
+  try {
+   Context context=new Context(work);
+   check(Pd2SessionLog.archivePrevious(context)==null,"no log does not create a fabricated attempt");
+   File source=new File(work,"pd2/logs/runtime.log"); source.getParentFile().mkdirs();
+   Files.write(source.toPath(),new byte[0]);
+   check(Pd2SessionLog.archivePrevious(work)==null,"empty log does not create a fabricated attempt");
+   String first="FIRST-FAULT: stack overflow\\nsmall complete log\\nLAST-EXIT: status7\\n";
+   Files.writeString(source.toPath(),first);
+   File small=Pd2SessionLog.archivePrevious(context);
+   check(read(small).endsWith(first) && !read(small).contains("middle omitted"),"small previous log copied intact");
+   check(read(source).equals(first),"current runtime.log never altered or deleted");
+   File folder=Pd2SessionLog.getAttemptsDirectory(work);
+   File unrelated=new File(folder,"personal-note.log"); Files.writeString(unrelated.toPath(),"keep me");
+   File unrelatedTemp=new File(folder,"personal-note.log.tmp"); Files.writeString(unrelatedTemp.toPath(),"keep temp");
+   File unrelatedDirectory=new File(folder,"runtime-attempt-0000000000001.log");unrelatedDirectory.mkdir();
+   File stale=new File(folder,"runtime-attempt-0000000000002.log.tmp");Files.writeString(stale.toPath(),"interrupted");
+   File reservation=new File(folder,"runtime-attempt-0000000000002.log");reservation.createNewFile();
+   File save=new File(work,"pd2/install/test.d2s");save.getParentFile().mkdirs();Files.write(save.toPath(),new byte[]{7});
+
+   byte[] large=new byte[5*1024*1024]; Arrays.fill(large,(byte)'m');
+   byte[] head="FIRST-FAULT: preserve early SEH evidence\\n".getBytes(StandardCharsets.UTF_8);
+   byte[] tail="\\nLAST-EXIT: preserve final exit status123".getBytes(StandardCharsets.UTF_8);
+   System.arraycopy(head,0,large,0,head.length);
+   System.arraycopy(tail,0,large,large.length-tail.length,tail.length);
+   Files.write(source.toPath(),large);
+   File capped=Pd2SessionLog.archivePrevious(work);
+   check(capped.length()<=Pd2SessionLog.MAX_ARCHIVE_BYTES,"large archive strictly bounded to2MiB including metadata");
+   String bounded=read(capped);
+   check(bounded.contains(new String(head,StandardCharsets.UTF_8)) && bounded.endsWith(new String(tail,StandardCharsets.UTF_8)),
+     "large log retains early fault and final exit");
+   check(bounded.contains("middle omitted") && bounded.contains("Original log bytes: "+large.length),"explicit truncation and original length metadata");
+   check(Files.size(source.toPath())==large.length && Arrays.equals(Files.readAllBytes(source.toPath()),large),"oversized source remains unchanged");
+   check(!stale.exists() && !reservation.exists(),"interrupted temporary/reservation recovered");
+
+   int priorAttempts=attempts(folder).length;
+   ByteArrayOutputStream memory=new ByteArrayOutputStream();
+   try(ZipOutputStream zip=new ZipOutputStream(memory)) {
+    zip.putNextEntry(new ZipEntry("runtime.log"));
+    Pd2SessionLog.writeSnapshot(source,zip);zip.closeEntry();
+    zip.putNextEntry(new ZipEntry("another.txt"));zip.write("still open".getBytes(StandardCharsets.UTF_8));zip.closeEntry();
+   }
+   try(ZipInputStream zip=new ZipInputStream(new ByteArrayInputStream(memory.toByteArray()))) {
+    check(zip.getNextEntry().getName().equals("runtime.log"),"snapshot writes into caller ZIP entry");
+    byte[] snapshot=zip.readAllBytes();String text=new String(snapshot,StandardCharsets.UTF_8);
+    check(snapshot.length<=Pd2SessionLog.MAX_ARCHIVE_BYTES && text.contains("FIRST-FAULT") && text.endsWith(new String(tail,StandardCharsets.UTF_8))
+      && text.contains("middle omitted"),"stream snapshot preserves first fault and last exit within2MiB");
+    check(zip.getNextEntry().getName().equals("another.txt") && new String(zip.readAllBytes(),StandardCharsets.UTF_8).equals("still open"),
+      "snapshot leaves caller stream open for subsequent ZIP entries");
+   }
+   check(attempts(folder).length==priorAttempts && Arrays.equals(Files.readAllBytes(source.toPath()),large),
+     "stream snapshot does not archive, prune or modify source");
+
+   ArrayList<File> captured=new ArrayList<>();
+   Files.writeString(source.toPath(),first);
+   for(int i=0;i<8;i++)captured.add(Pd2SessionLog.archivePrevious(work));
+   check(new HashSet<>(captured).size()==8,"rapid captures have unique names");
+   check(attempts(folder).length==Pd2SessionLog.MAX_ATTEMPTS,"latest four attempts retained");
+   for(int i=0;i<captured.size();i++)check(captured.get(i).exists()==(i>=4),"retention preserves newest captures");
+   check(unrelated.isFile() && read(unrelated).equals("keep me") && unrelatedTemp.isFile() && unrelatedDirectory.isDirectory()
+     && save.isFile(),"pruning/recovery never deletes unrelated logs, directories or game saves");
+   check(Arrays.stream(folder.listFiles()).noneMatch(f -> f.getName().startsWith("runtime-attempt-") && f.getName().endsWith(".tmp")),
+     "complete captures leave no staging files");
+   // Retention still applies if an old process left more than four logs and no current log.
+   File old=new File(folder,"runtime-attempt-0000000000000.log"); Files.writeString(old.toPath(),"stale attempt");
+   source.delete();check(Pd2SessionLog.archivePrevious(work)==null && !old.exists() && attempts(folder).length==4,
+     "missing current log still prunes stale attempt history");
+   System.out.println("PD2 session log tests passed: "+checks+" checks");
+  }finally {
+   try(var paths=Files.walk(work.toPath())) {
+    paths.sorted(Comparator.reverseOrder()).forEach(p -> {try{Files.delete(p);}catch(IOException ignored){}});
+   }
+  }
+ }
+}
+""",
+}
+with tempfile.TemporaryDirectory(prefix="pd2-session-log-jvm-") as directory:
+    work = Path(directory)
+    sources = []
+    for name, content in SOURCES.items():
+        path = work / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        sources.append(str(path))
+    sources.append(str(ROOT / "app/src/main/java/com/winlator/pd2/Pd2SessionLog.java"))
+    subprocess.run(["javac", "-d", str(work / "classes"), *sources], check=True)
+    subprocess.run(["java", "-cp", str(work / "classes"), "SessionLogTest"], check=True)

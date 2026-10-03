@@ -8,9 +8,35 @@ The initial implementation uses Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current build is **0.1.1, a startup correction and diagnostics preview**. The user reported that 0.1.0 closed immediately on opening the app, before gameplay, and supplied no crash log. The original device crash cause remains unconfirmed. Do not record this as a confirmed Thor fix or a qualified gameplay milestone based on source review, modeled UI tests, or an APK build.
+The current build is **0.1.2, a diagnostics and stability preview**. The user confirmed that 0.1.1 opens, prepares the runtime, and imports their installation on the Thor. Preserve those accepted steps. PD2 returned to the launcher with all four graphics profiles. A Windows-client failure is now recorded, but its underlying cause remains unconfirmed; gameplay is not qualified.
 
-The first retest is opening the launcher for five seconds, closing it from recent apps, and reopening it for five seconds. Runtime preparation follows only if the launcher is stable. Install over the existing app with the same preview signing identity; do not uninstall or clear storage.
+The next test is a single **Turnip + Zink · Wine DirectDraw (compatibility)** launch with CPU Stability, followed immediately by **Export support logs** if it returns to the launcher. If needed, one second attempt uses Interpreter with the same graphics choice and a separate export. Install over the existing app with the same preview signing identity. Do not uninstall, clear storage, prepare the accepted runtime again, or re-import the accepted game files.
+
+## 0.1.1 device evidence and 0.1.2 response
+
+The user's support ZIP records Android 13 on an AYN Thor, `runtimePrepared: true`, and a structurally accepted installation with launch path `Diablo2/ProjectD2/Game.exe`. `launcher.log` records all four graphics/argument attempts. The user reports that each returned to the launcher.
+
+Only the final **Turnip/VirGL + DirectDraw** attempt's runtime log survived because the prior logger restarted the same file for every session. It reaches the imported `Game.exe` through Wine's 32-bit/WoW64 path and ends with:
+
+```text
+wine: Unhandled stack overflow at address 6FF6879A (thread 00e0), starting debugger...
+```
+
+The surviving log ends before any logged OpenGL-library initialization, and Wine's detailed output was suppressed with `WINEDEBUG=-all`. This evidence does not identify the faulting game DLL, establish that all four attempts had the same exception, or prove a graphics-driver cause. Do not describe a Fog/module fault, CPU translator bug, or renderer fix as confirmed.
+
+All four 0.1.1 choices used `WINEDLLOVERRIDES=ddraw,glide3x=n,b`; the DirectDraw options could still load the imported native D2GL wrapper. They therefore did not establish a built-in Wine DirectDraw baseline.
+
+The 0.1.2 response:
+
+- Uses Box64's **Stability** preset instead of **Conservative**, with **Launch settings → CPU mode** offering **Stability (default)** and **Interpreter (diagnostic; very slow)**.
+- Makes both DirectDraw choices use Wine's built-in `ddraw=b` without editing imported files; Glide keeps the native wrapper.
+- Captures `WINEDEBUG=-all,err+all,warn+all,+seh,+loaddll` and `BOX64_SHOWSEGV=1` for exception/module-load evidence.
+- Exports the latest launch record as `launch.json` and selected-file inventory as `installation-files.json`, with settings and runtime process exit status.
+- Retains the latest four attempt logs under `attempts/`, each at most 2 MiB in support export. The live runtime log is capped at 8 MiB.
+
+These changes make failures distinguishable without repeating import/setup or cycling through all renderers before collecting evidence. The first compatibility test qualifies client appearance only; using Wine's built-in DirectDraw may bypass D2GL/controller features, which need their own later test. CPU profiles and wrapper selection are compatibility candidates, not proven remedies or performance optimizations.
+
+For the optional Interpreter attempt, allow up to 60 seconds for the title screen. If it remains unfinished, return to the launcher, stop the client, export that result, and restore Stability. This is a bounded diagnostic interval, not proof that a valid interpreter launch must complete within 60 seconds.
 
 ## Startup correction and diagnostics
 
@@ -31,7 +57,7 @@ Crash capture covers uncaught Java exceptions when the process can write its rep
 - The managed `P:` drive points to the imported installation. The selected `ProjectD2/Game.exe` is launched with its directory as the working directory.
 - The dedicated Wine prefix seeds Diablo II's `InstallPath` and `GamePath` registry keys from the validated base/client directories so imported PD2 can find its base installation.
 - Structural validation looks for a 32-bit x86 PE `Game.exe` and `ProjectDiablo.dll`, PD2 data, and the required base MPQ archive headers. It is bounded and read-only; it is not full file-integrity or version verification.
-- The initial screen size is 1280×720. Runtime options expose Turnip/Zink and Turnip/VirGL; game launch options expose `-3dfx -w` and `-ddraw -w`. Turnip/Zink with Glide is the initial setting.
+- The initial screen size is 1280×720. Runtime options expose Turnip/Zink and Turnip/VirGL; Glide uses `-3dfx -w` with the imported native wrapper, while Wine DirectDraw compatibility uses `-ddraw -w` with built-in `ddraw=b`. The first 0.1.2 test is Turnip/Zink with Wine DirectDraw.
 - Physical-controller input uses the Windows gamepad bridge by default. The mouse/keyboard fallback is a fixed PD2-oriented layout with adjustable cursor speed and stick deadzone.
 - The on-screen gear and L3 + R3 open a quick menu for input switching, keyboard access, and returning to the launcher. Held input is released at mode/menu/lifecycle transitions.
 - Game DLLs are imported as supplied. No custom PD2/BH patching is part of this milestone.
@@ -51,22 +77,32 @@ The 0.1.1 startup pass also verified:
 - The original published `ebcd311` source was tested in isolation with its actual manifest. Its UI opened, but the startup regression assertion failed because it requested `Pd2WorkService`. This confirms the behavior changed; it does not reproduce Android's foreground-service watchdog or the user's device crash.
 - The ARM64 0.1.1 APK build passed with version code 2, the unchanged `com.pd2.thor` application ID, and the same preview signing key.
 
-Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The original crash cause and the physical startup retest remain unconfirmed.
+The completed local 0.1.2 checks are:
 
-The release is ready for a first physical test only after its APK and checksums have been produced. The following remain pending:
+- `./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.winlator.pd2.Pd2*Test'`: all 13 Android 13/API 33 Robolectric tests passed, with no failures, errors, or skips. The previous six startup/service/recovery tests passed alongside seven new diagnostic checks for launch policy, PE inventory, exit-status reporting, and bounded logs.
+- `python3 tests/test_session_logs.py`: 26 host checks passed for attempt-log retention, size bounds, preservation, and cleanup behavior.
+- The ARM64 APK build passed in 22 seconds as version 0.1.2/code 3. Application ID, signing certificate, minimum SDK 26, and target SDK 28 are unchanged. Runtime dependency sources/archives and the native libraries are unchanged from 0.1.1.
 
-| Gate | Required evidence |
-| --- | --- |
-| Launcher startup | On the Thor, launcher remains visible for five seconds, closes normally, and reopens for another five seconds; any new Java crash can be exported from recovery |
-| First preparation/import | Bundled runtime prepares; full user installation imports without crash or unexplained memory pressure |
-| Rendering/audio | PD2 reaches a playable scene with correct textures, UI, and audio |
-| Native controller | Left-stick movement, independent right-stick aiming, triggers/buttons, and controller UI work on the Thor |
-| Input switching | Gear and L3 + R3 menu work; switching repeatedly leaves no held keys, clicks, or analog input |
-| Lifecycle | Return to launcher and Resume preserve the same session; background/foreground behavior is verified |
-| Offline saves | Save and exit, stop, relaunch, and reopen the same character successfully |
-| Online play | User can authenticate and enter a normal PD2 online game using the unmodified imported install |
+These are completed local results. GitHub Actions verification for the published 0.1.2 commit/release is pending until its run is inspected; do not infer a CI pass from the local build.
 
-Launcher startup is the immediate qualification step. After it passes, native controller forwarding remains the priority gameplay check. Keyboard emulation working is not evidence that native movement/aiming works. All original rendering, controller, lifecycle, save, and online gates remain pending.
+Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user has now accepted launcher startup, runtime preparation, and import on 0.1.1; the original 0.1.0 startup-crash cause and the current Windows-client stack-overflow cause remain unconfirmed.
+
+The 0.1.2 launch retest follows once its APK and checksums have been produced. Preserve the accepted steps and continue from the failing client launch:
+
+| Gate | Status | Evidence or next requirement |
+| --- | --- | --- |
+| Launcher startup | Accepted on 0.1.1 | User opened the launcher and completed setup/import |
+| Runtime preparation | Accepted on 0.1.1 | User report and `runtimePrepared: true` in support ZIP |
+| Installation import | Accepted on 0.1.1 | User report, import-completed log, and structural validation details |
+| Client launch | Failed on 0.1.1; 0.1.2 retest pending | Four profiles returned; last runtime log records Wine stack overflow |
+| Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
+| Native controller | Pending | Left-stick movement, independent right-stick aiming, triggers/buttons, and controller UI on the Thor |
+| Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
+| Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
+| Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |
+| Online play | Pending | User authenticates and enters a normal PD2 online game |
+
+Reaching the PD2 menu is the immediate qualification step. Native controller forwarding follows once gameplay is accessible. Keyboard emulation working is not evidence that native movement/aiming works. All original rendering, controller, lifecycle, save, and online gates remain pending.
 
 ## Next work after the first device test
 

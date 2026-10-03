@@ -21,6 +21,7 @@ import com.winlator.core.FileUtils;
 import com.winlator.core.StreamUtils;
 import com.winlator.core.UnitUtils;
 import com.winlator.math.Mathf;
+import com.winlator.pd2.Pd2LogOutputStream;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
@@ -29,6 +30,7 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 
 public class LogView extends View {
@@ -64,6 +66,11 @@ public class LogView extends View {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         String logPath = preferences.getString("log_file", getLogFile().getPath());
         boolean saveToFile = preferences.getBoolean("save_logs_to_file", false);
+        boolean pd2 = "com.pd2.thor".equals(context.getPackageName());
+        if (pd2) {
+            logPath = new File(context.getFilesDir(), "pd2/logs/runtime.log").getPath();
+            saveToFile = true;
+        }
 
         File logFile = new File(logPath);
         FileUtils.delete(logFile);
@@ -71,7 +78,8 @@ public class LogView extends View {
         if (saveToFile) {
             PrintStream printStream = null;
             try {
-                printStream = new PrintStream(new BufferedOutputStream(new FileOutputStream(logFile), StreamUtils.BUFFER_SIZE));
+                OutputStream output = new BufferedOutputStream(new FileOutputStream(logFile), StreamUtils.BUFFER_SIZE);
+                printStream = new PrintStream(pd2 ? new Pd2LogOutputStream(output) : output);
             }
             catch (IOException e) {}
             this.printStream = printStream;

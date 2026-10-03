@@ -4,17 +4,19 @@ A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruc
 
 The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 10.10 and Box64 0.4.4 from Winlator 11.2, with an Android X server and controller bridge. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.1 startup correction and diagnostics preview.** The user reported that 0.1.0 closed immediately when opening the app, before gameplay. The original crash cause remains unconfirmed. The new preview removes an unnecessary foreground-service start from the automatic installation check and adds Java crash capture with a recovery screen. A Thor retest is required.
+**Status: 0.1.2 diagnostics and stability preview.** The user confirmed that 0.1.1 opens, prepares its runtime, and imports the installation on the Thor. Launching PD2 with each of the four graphics profiles returned to the launcher. The last surviving runtime log reaches `Game.exe` and ends with a Wine stack overflow at `6FF6879A`; the underlying cause is not yet confirmed.
+
+This preview changes the default Box64 CPU profile from Conservative to Stability, adds a genuine Wine DirectDraw compatibility path, and captures exception/module-load diagnostics with separate launch logs. These changes support the next diagnosis; they are not a confirmed gameplay fix.
 
 Building the APK and passing automated checks do not establish that PD2 launches, renders, accepts both sticks, or connects online on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
 
-## First 0.1.1 check
+## Next 0.1.2 check
 
-Install 0.1.1 over the existing app without uninstalling or clearing storage; the application ID and preview signing identity are unchanged, preserving private files.
+Install 0.1.2 over the existing app without uninstalling or clearing storage; the application ID and preview signing identity are unchanged, preserving private files. Keep the accepted runtime and imported installation. **Do not prepare or import them again for this test.**
 
-Open the app, leave the launcher visible for **five seconds**, close it from Android's recent apps, and reopen it for another five seconds. Proceed to **Prepare runtime** only if both launches remain stable, and only if the runtime is not already ready.
+In **Launch settings**, select **Turnip + Zink · Wine DirectDraw (compatibility)**, then press **Play once**. If it returns to the launcher, immediately choose **Export support logs** and upload the ZIP to the chat. Report the last screen visible and whether a game window appeared. This path uses Wine's built-in DirectDraw rather than the imported D2GL DirectDraw wrapper; it tests whether the client can display before qualifying D2GL/controller features. See [Testing](docs/TESTING.md) for the optional second Interpreter attempt.
 
-If the app still closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. **Retry launcher** acknowledges the pending report while retaining it for export. If recovery does not appear, report that too; Java crash capture does not cover every possible process exit. See [Testing](docs/TESTING.md) for the exact sequence.
+If the whole Android app closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Java crash capture does not cover every possible process exit.
 
 ## First preview
 
@@ -29,7 +31,7 @@ The app preserves imported game files and official PD2 DLLs. It does not include
 
 ## Install and import
 
-1. Install the preview APK from this repository's release and complete the startup check above.
+1. Install the preview APK from this repository's release. For an existing accepted installation, use the next-test sequence above.
 2. Press **Prepare runtime** if the runtime is not already ready. The first preparation extracts the bundled runtime; leave the app open until it finishes. The managed prefix is created on the first Play.
 3. If no accepted installation is present, import the complete **Diablo II** folder, not only `ProjectD2`. A ZIP may contain the installation directly or inside a parent folder. Reuse a previously accepted installation after updating the app.
 4. Wait for copying and validation to finish, then press **Play**.
@@ -46,7 +48,9 @@ Private game files and saves survive APK updates using the same signing identity
 
 **Mouse / keyboard layout** turns the controller into mouse and keyboard input. Its left stick sends WASD, so enable PD2's WASD movement if you want to move using that fallback layout. The right stick moves the pointer; A and B provide left and right click. The quick menu also provides the Android keyboard and cursor-speed adjustment. Full bindings and switch tests are in [Testing](docs/TESTING.md).
 
-The default screen size is 1280×720, with **Turnip/Zink** and `-3dfx -w`. The fallback choices are **Turnip/VirGL** and `-ddraw -w`. These are candidates for qualification, not proven fastest settings. Preserve the current configuration when reporting results and change one option at a time.
+The screen size is 1280×720. Glide (`-3dfx -w`) retains the imported native wrapper; the Wine DirectDraw compatibility choices (`-ddraw -w`) explicitly select Wine's built-in `ddraw`. The 0.1.1 DirectDraw choices still preferred the native wrapper, so those failed attempts were not a built-in Wine baseline. Native controller support may depend on D2GL and remains a separate qualification gate after the first client display.
+
+Under **Launch settings → CPU mode**, **Stability (default)** is the CPU default. **Interpreter (diagnostic; very slow)** is available for one diagnostic comparison after a captured Stability failure. These profiles and the Turnip/Zink or Turnip/VirGL choices are candidates for qualification, not proven fastest settings.
 
 ## Development
 
@@ -55,6 +59,6 @@ verify their SHA-256 values, and relocate their package paths before compiling.
 The APK includes these dependencies and launches independently of Winlator or
 GameNative once your game files are imported.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the startup retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the implemented scope and remaining gates. [0.1.1 release notes](docs/RELEASE-0.1.1.md) describe the startup correction and diagnostics; [0.1.0 release notes](docs/RELEASE-0.1.0.md) describe the original milestone preview.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the next launch test and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.2 release notes](docs/RELEASE-0.1.2.md) describe the diagnostics and CPU-profile changes; [0.1.1 release notes](docs/RELEASE-0.1.1.md) and [0.1.0 release notes](docs/RELEASE-0.1.0.md) retain the earlier preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.
