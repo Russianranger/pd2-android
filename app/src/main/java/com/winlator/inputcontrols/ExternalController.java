@@ -14,6 +14,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 public class ExternalController implements GamepadSlot {
     public static final byte IDX_BUTTON_A = 0;
@@ -270,16 +271,33 @@ public class ExternalController implements GamepadSlot {
 
     public static boolean isGameController(InputDevice device) {
         if (device == null) return false;
-        String name = device.getName();
+        return acceptsController(device.getName(), device.isVirtual(), device.getSources(),
+                hasGamepadKeys(device), hasControllerAxis(device, MotionEvent.AXIS_X)
+                        || hasControllerAxis(device, MotionEvent.AXIS_Y));
+    }
+
+    public static boolean acceptsController(String name, boolean virtual, int sources,
+                                             boolean gamepadKeys, boolean controllerAxes) {
         if (name != null) {
-            String lowerName = name.toLowerCase();
-            if (lowerName.contains("uinput-fpc") || lowerName.contains("goodix_fp") || lowerName.contains("uinput-")) {
+            String lowerName = name.toLowerCase(Locale.ROOT);
+            if (lowerName.contains("uinput-fpc") || lowerName.contains("goodix_fp")) {
                 return false;
             }
         }
-        int sources = device.getSources();
-        return !device.isVirtual() && ((sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-               (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK);
+        return !virtual && (((sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD && gamepadKeys) ||
+                ((sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK && controllerAxes));
+    }
+
+    public static boolean hasGamepadKeys(InputDevice device) {
+        for (boolean available : device.hasKeys(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B,
+                KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y)) if (available) return true;
+        return false;
+    }
+
+    /** Mouse/touchpad axes on a composite device do not establish joystick capability. */
+    public static boolean hasControllerAxis(InputDevice device, int axis) {
+        return device.getMotionRange(axis, InputDevice.SOURCE_JOYSTICK) != null
+                || device.getMotionRange(axis, InputDevice.SOURCE_GAMEPAD) != null;
     }
 
     public static float getCenteredAxis(MotionEvent event, int axis, int historyPos) {

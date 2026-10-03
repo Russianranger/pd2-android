@@ -2,19 +2,19 @@
 
 A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruction installation with Project Diablo 2. The first preview targets the AYN Thor's ARM64/Adreno hardware and imports an existing working installation into the app's private storage.
 
-The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. The 0.1.4 comparison uses Wine 9.2 (Custom) from official Winlator 10.1, retaining Box64 0.4.4 and the current Android display/input and graphics components. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
+The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 9.2 (Custom) from official Winlator 10.1, retaining Box64 0.4.4 and the current Android display/input and graphics components. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.4 Wine baseline comparison preview.** Launcher startup, runtime preparation, and installation import were accepted on the Thor. Both 0.1.2 CPU modes and the 0.1.3 GameNative-arguments test failed at the same native Fog stack write. The new trace records Fog export 10021 returning 23, then export 10019 not returning before the fault. The exact source folder works in GameNative's reported Bionic Proton 9.0/Box64 0.3.7 setup. The underlying failure cause remains unconfirmed.
+**Status: 0.1.5 controller detection preview.** The user reached the PD2 title screen on the Thor with 0.1.4, accepting client startup after the Wine 9.2 change. Native controller detection did not work. Launcher startup, runtime preparation, and import remain accepted; gameplay, both native sticks, saves, and online play remain unqualified.
 
-This preview replaces Wine 10.10 and its matching prefix template/common DLLs with Wine 9.2 for a controlled compatibility comparison. It preserves imported game files and saves, retains the previous prefixes, and creates a fresh managed prefix for the new runtime. A Wine 10 compatibility issue is a hypothesis awaiting device validation; this is not a confirmed fix or a recreation of GameNative's runtime.
+This preview corrects Java controller discovery/response handling and adds controller status and export diagnostics. It retains the working runtime, prefix, graphics settings, and imported files. The exact cause of the device's controller failure remains unconfirmed; the correction requires a device retest.
 
-Building the APK and passing automated checks do not establish that PD2 launches, renders, accepts both sticks, or connects online on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
+Passing automated checks does not qualify gameplay, native controller input, rendering/audio, or online play on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
 
-## Next 0.1.4 check
+## Next 0.1.5 check
 
-Install 0.1.4 over the existing app without uninstalling or clearing storage; the application ID and preview signing identity are unchanged. **Press Prepare runtime once after upgrading** to install the replacement runtime. Reuse the accepted installation; **do not re-import**. The first Play creates the new Wine 9.2 prefix.
+Install 0.1.5 over 0.1.4 without uninstalling or clearing storage; the application ID and preview signing identity are unchanged. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.**
 
-In **Launch settings**, select the fifth choice, **Turnip + Zink · Glide (GameNative arguments)**, and set **CPU mode → Stability (default)**. Press **Play once**, allow up to **60 seconds** for the title/menu, then export support logs whether it succeeds or fails. If unfinished, return to the launcher and stop the client before exporting. Report the last visible screen; see [Testing](docs/TESTING.md).
+Keep **Turnip + Zink · Glide (GameNative arguments)** and **CPU mode → Stability (default)**. Use the mouse/keyboard fallback to enter a temporary offline character if needed, then switch to **Native controller**, close the quick menu, and press a controller button. Check movement/aiming without mouse input. Open **Controller status** after the attempt, then export support logs whether controller input works or fails; see [Testing](docs/TESTING.md).
 
 If the whole Android app closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Java crash capture does not cover every possible process exit.
 
@@ -25,6 +25,7 @@ If the whole Android app closes, reopen it. If **PD2 Android recovery** appears,
 - Launch and resume PD2 from the app's home screen.
 - Use PD2's native controller support by default, or switch to a mouse/keyboard controller layout in the in-game quick menu.
 - Open the quick menu with the on-screen gear or the **L3 + R3** chord.
+- Inspect accepted Android pads and input/bridge counters through **Controller status**; support export includes `controller.json`.
 - Select Turnip/Zink or Turnip/VirGL, and choose Glide or DirectDraw launch arguments for compatibility testing.
 
 The app preserves imported game files and official PD2 DLLs. It does not include Diablo II assets, game licenses, account credentials, a PD2 updater, or a loot-filter manager. Update your installation through its normal updater before importing it.
@@ -61,6 +62,6 @@ retain their existing pinned sources.
 The APK includes these dependencies and launches independently of Winlator or
 GameNative once your game files are imported.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the next launch test and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.4 release notes](docs/RELEASE-0.1.4.md) describe the runtime comparison. Earlier release notes retain the preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.5 release notes](docs/RELEASE-0.1.5.md) describe the discovery/response correction and diagnostics. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

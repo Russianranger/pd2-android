@@ -10,6 +10,7 @@ import com.winlator.core.FileUtils;
 import com.winlator.core.GeneralComponents;
 import com.winlator.core.StringUtils;
 import com.winlator.core.WineInfo;
+import com.winlator.pd2.Pd2ControllerDiagnostics;
 import com.winlator.xserver.XServer;
 
 import java.io.IOException;
@@ -29,24 +30,28 @@ import java.util.concurrent.atomic.AtomicReference;
 public class WinHandler {
     private static final short SERVER_PORT = 7947;
     private static final short CLIENT_PORT = 7946;
-    private DatagramSocket socket;
+    private volatile DatagramSocket socket;
     protected final ByteBuffer sendData = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN);
     protected final ByteBuffer receiveData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
     private final DatagramPacket sendPacket = new DatagramPacket(sendData.array(), sendData.capacity());
     private final DatagramPacket receivePacket = new DatagramPacket(receiveData.array(), receiveData.capacity());
     private final ArrayDeque<Runnable> actions = new ArrayDeque<>();
-    protected boolean initReceived = false;
-    private boolean running = false;
+    private final ArrayDeque<Runnable> controllerActions = new ArrayDeque<>();
+    protected volatile boolean initReceived = false;
+    private volatile boolean socketReady;
+    private volatile boolean running = false;
     private OnGetProcessInfoListener onGetProcessInfoListener;
     private OnPreExecListener onPreExecListener;
     private InetAddress localhost;
     protected final XServerDisplayActivity activity;
     private MIDIHandler midiHandler;
     public final GamepadHandler gamepadHandler = new GamepadHandler(this);
+    public final Pd2ControllerDiagnostics controllerDiagnostics;
     private Callback<String> requestCallback;
 
     public WinHandler(XServerDisplayActivity activity) {
         this.activity = activity;
+        controllerDiagnostics = new Pd2ControllerDiagnostics(activity);
     }
 
     String getWineIdentifier() {
@@ -55,31 +60,40 @@ public class WinHandler {
     }
 
     protected boolean sendPacket(int port) {
-        try {
+        synchronized (sendPacket) { try {
             int size = sendData.position();
-            if (size == 0) return false;
+            DatagramSocket activeSocket = socket;
+            if (size == 0 || !socketReady || activeSocket == null || activeSocket.isClosed()) return false;
             sendPacket.setAddress(localhost);
             sendPacket.setPort(port);
-            socket.send(sendPacket);
+            // Keep the upstream fixed-width process/modern-controller protocol.
+            sendPacket.setLength(sendData.capacity());
+            activeSocket.send(sendPacket);
+            controllerDiagnostics.recordReply(sendData.get(0), port, true);
             return true;
         }
         catch (IOException e) {
+            controllerDiagnostics.recordReply(sendData.get(0), port, false);
             return false;
-        }
+        } }
     }
 
     protected boolean sendPacket(int port, byte[] data) {
-        try {
+        synchronized (sendPacket) { try {
+            DatagramSocket activeSocket = socket;
+            if (data == null || data.length == 0 || !socketReady || activeSocket == null || activeSocket.isClosed()) return false;
             sendPacket.setData(data);
             sendPacket.setAddress(localhost);
             sendPacket.setPort(port);
-            socket.send(sendPacket);
-            sendPacket.setData(sendData.array());
+            activeSocket.send(sendPacket);
+            controllerDiagnostics.recordReply(data[0], port, true);
             return true;
         }
         catch (IOException e) {
+            controllerDiagnostics.recordReply(data[0], port, false);
             return false;
         }
+        finally { sendPacket.setData(sendData.array()); } }
     }
 
     public void exec(final String filename, final String parameters) {
@@ -270,6 +284,32 @@ public class WinHandler {
         }
     }
 
+    /** Wine controller DLLs have their own UDP connection, independent of winhandler.exe. */
+    protected void addControllerAction(Runnable action) {
+        synchronized (actions) {
+            controllerActions.add(action);
+            actions.notify();
+        }
+    }
+
+    void setSocketReady(boolean ready) {
+        synchronized (actions) {
+            socketReady = ready;
+            controllerDiagnostics.setSocketReady(ready);
+            actions.notify();
+        }
+    }
+
+    int drainPendingActions() {
+        synchronized (actions) {
+            int count = 0;
+            if (!socketReady) return count;
+            while (!controllerActions.isEmpty()) { controllerActions.poll().run(); count++; }
+            while (initReceived && !actions.isEmpty()) { actions.poll().run(); count++; }
+            return count;
+        }
+    }
+
     public OnGetProcessInfoListener getOnGetProcessInfoListener() {
         return onGetProcessInfoListener;
     }
@@ -288,9 +328,9 @@ public class WinHandler {
         Executors.newSingleThreadExecutor().execute(() -> {
             while (running) {
                 synchronized (actions) {
-                    while (initReceived && !actions.isEmpty()) actions.poll().run();
+                    drainPendingActions();
                     try {
-                        actions.wait();
+                        if (running) actions.wait();
                     }
                     catch (InterruptedException e) {}
                 }
@@ -300,6 +340,8 @@ public class WinHandler {
 
     public void stop() {
         running = false;
+        setSocketReady(false);
+        controllerDiagnostics.save();
 
         if (socket != null) {
             socket.close();
@@ -307,6 +349,8 @@ public class WinHandler {
         }
 
         synchronized (actions) {
+            controllerActions.clear();
+            actions.clear();
             actions.notify();
         }
 
@@ -321,6 +365,7 @@ public class WinHandler {
         switch (requestCode) {
             case RequestCodes.INIT: {
                 initReceived = true;
+                controllerDiagnostics.recordInit();
 
                 synchronized (actions) {
                     actions.notify();
@@ -438,10 +483,12 @@ public class WinHandler {
         receiveData.limit(packetBytes);
         try {
             byte requestCode = receiveData.get();
+            controllerDiagnostics.recordRequest(requestCode, port);
             handleRequest(requestCode, port);
             return true;
         }
         catch (BufferUnderflowException | IllegalArgumentException invalidPacket) {
+            controllerDiagnostics.recordInvalidPacket();
             return false;
         }
     }
@@ -460,14 +507,18 @@ public class WinHandler {
         running = true;
         startSendThread();
         Executors.newSingleThreadExecutor().execute(() -> {
+            DatagramSocket receiver = null;
             try {
-                socket = new DatagramSocket(null);
-                socket.setReuseAddress(true);
-                socket.bind(new InetSocketAddress(localhost, SERVER_PORT));
+                receiver = new DatagramSocket(null);
+                socket = receiver;
+                receiver.setReuseAddress(true);
+                receiver.bind(new InetSocketAddress(localhost, SERVER_PORT));
+                if (!running) return;
+                setSocketReady(true);
 
                 while (running) {
                     receivePacket.setLength(receiveData.capacity());
-                    socket.receive(receivePacket);
+                    receiver.receive(receivePacket);
                     if (!receivePacket.getAddress().equals(localhost) || receivePacket.getLength() == 0) continue;
 
                     synchronized (actions) {
@@ -475,7 +526,14 @@ public class WinHandler {
                     }
                 }
             }
-            catch (IOException e) {}
+            catch (IOException e) {
+                if (running) controllerDiagnostics.recordSocketFailure();
+            }
+            finally {
+                setSocketReady(false);
+                if (receiver != null) receiver.close();
+                controllerDiagnostics.save();
+            }
         });
     }
 

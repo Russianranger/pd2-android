@@ -168,6 +168,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         return activity != null && !activity.isFinishing() && !activity.isDestroyed();
     }
 
+    public static void savePd2ControllerDiagnostics() {
+        XServerDisplayActivity activity = pd2ActiveSession.get();
+        if (activity != null) activity.winHandler.controllerDiagnostics.save();
+    }
+
     public static boolean resumePd2Session(Context context) {
         if (!hasPd2Session()) return false;
         Intent intent = new Intent(context, XServerDisplayActivity.class);
@@ -197,7 +202,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
         pd2Session = getIntent().getBooleanExtra("pd2_session", false);
         pd2MouseKeyboard = preferences.getBoolean("pd2_mouse_keyboard", false);
-        if (pd2Session) pd2ActiveSession = new WeakReference<>(this);
+        if (pd2Session) {
+            pd2ActiveSession = new WeakReference<>(this);
+            winHandler.controllerDiagnostics.setLaunchId(getIntent().getStringExtra("pd2_launch_id"));
+            winHandler.controllerDiagnostics.setMode(pd2MouseKeyboard ? "mouse_keyboard" : "native", false);
+            winHandler.controllerDiagnostics.setNativeInputEnabled(false);
+            winHandler.controllerDiagnostics.save();
+        }
         boolean useAndroidClipboardOnWine = preferences.getBoolean("use_android_clipboard_on_wine", false);
         clipboardManager = useAndroidClipboardOnWine ? (ClipboardManager)getSystemService(CLIPBOARD_SERVICE) : null;
 
@@ -401,6 +412,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             pd2LeftThumbDeferred = pd2RightThumbDeferred = false;
             releasePd2Input();
             winHandler.gamepadHandler.setInputEnabled(false);
+            updatePd2InputMode();
         }
         ForegroundService.onPauseSession(this);
         super.onPause();
@@ -778,6 +790,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         boolean inputAvailable = !pd2MenuOpen && !pd2Paused && pd2HasWindowFocus && !drawerLayout.isDrawerOpen(GravityCompat.START);
         winHandler.gamepadHandler.setStickDeadzone(pd2InputRouter.getDeadzone());
         winHandler.gamepadHandler.setInputEnabled(!pd2MouseKeyboard && inputAvailable);
+        winHandler.controllerDiagnostics.setMode(pd2MouseKeyboard ? "mouse_keyboard" : "native", inputAvailable);
+        winHandler.controllerDiagnostics.save();
         // Touch remains usable for inventory, login and text in either mode.
         touchpadView.setEnabled(inputAvailable);
         xServerView.getRenderer().setCursorVisible(true);
@@ -801,7 +815,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             "Mouse / keyboard bindings",
             "Runtime settings and logs",
             "Back to Launcher Menu",
-            "Stop game"
+            "Stop game",
+            "Controller status"
         };
         pd2QuickDialog = new AlertDialog.Builder(this)
             .setTitle("PD2 quick menu · " + current)
@@ -840,6 +855,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                                 .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
                         break;
                     case 10: exit(); break;
+                    case 11: new Handler(Looper.getMainLooper()).post(this::showPd2ControllerStatus); break;
                 }
             }).create();
         pd2QuickDialog.setOnDismissListener(dialog -> {
@@ -862,6 +878,39 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         help.setOnDismissListener(dialog -> { pd2MenuOpen = false; updatePd2InputMode(); });
         help.show();
         Pd2ControllerDialogs.enable(help);
+    }
+
+    private void showPd2ControllerStatus() {
+        releasePd2Input();
+        pd2MenuOpen = true;
+        updatePd2InputMode();
+        JSONObject report = winHandler.controllerDiagnostics.snapshot();
+        StringBuilder message = new StringBuilder("Layout: ")
+                .append(pd2MouseKeyboard ? "Mouse / keyboard" : "Native controller")
+                .append("\n\nDetected controllers:");
+        JSONArray devices = report.optJSONArray("devices");
+        int accepted = 0;
+        if (devices != null) for (int i = 0; i < devices.length(); i++) {
+            JSONObject device = devices.optJSONObject(i);
+            if (device != null && device.optBoolean("accepted")) {
+                message.append("\n• ").append(device.optString("name", "Controller"));
+                accepted++;
+            }
+        }
+        if (accepted == 0) message.append("\nNone detected by Android as a gamepad.");
+        JSONObject counts = report.optJSONObject("counts");
+        if (counts != null) message.append("\n\nController buttons received: ")
+                .append(counts.optLong("handledKeyEvents"))
+                .append("\nStick events received: ").append(counts.optLong("handledMotionEvents"))
+                .append("\nGame discovery replies: ").append(counts.optLong("deviceReplies"))
+                .append("\nGame state replies: ").append(counts.optLong("stateReplies"));
+        message.append("\n\nInput pauses while this menu is open. Close it, enter a single-player game using touch if needed, then press a controller button. PD2 switches back to mouse controls when you move or click the mouse.")
+                .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
+        AlertDialog status = new AlertDialog.Builder(this).setTitle("Controller status")
+                .setMessage(message.toString()).setPositiveButton("Done", null).create();
+        status.setOnDismissListener(dialog -> { pd2MenuOpen = false; updatePd2InputMode(); });
+        status.show();
+        Pd2ControllerDialogs.enable(status);
     }
 
     private void showInputControlsDialog() {

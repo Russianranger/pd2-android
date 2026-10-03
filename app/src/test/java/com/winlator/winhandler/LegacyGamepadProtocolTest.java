@@ -171,6 +171,38 @@ public final class LegacyGamepadProtocolTest {
         assertTrue(handler.initReceived);
     }
 
+    @Test public void controllerRepliesAndPressReleaseRunBeforeInitWhileRuntimeActionsWait() throws Exception {
+        FixtureHandler handler = new FixtureHandler(false);
+        handler.initReceived = false;
+        final int[] runtimeActions = {0};
+        handler.addAction(() -> runtimeActions[0]++);
+        handler.addControllerAction(() -> handler.sendPacket(7949, LegacyGamepadProtocol.device(1, (byte)1, "Thor")));
+
+        assertEquals(0, handler.drainPendingActions()); // No bound socket yet.
+        assertTrue(handler.packets.isEmpty());
+        handler.setSocketReady(true);
+        assertEquals(1, handler.drainPendingActions());
+        assertEquals(8, handler.packets.get(0).bytes[0]);
+        assertEquals(0, runtimeActions[0]);
+
+        FixtureSlot slot = connect(handler, false);
+        slot.state.buttons = 1;
+        handler.gamepadHandler.sendGamepadState(slot);
+        slot.state.buttons = 0;
+        handler.gamepadHandler.sendGamepadState(slot);
+        assertEquals(2, handler.drainPendingActions());
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(6));
+        assertEquals(0, littleEndian(handler.packets.get(2).bytes).getShort(6));
+        assertEquals(0, runtimeActions[0]);
+
+        handler.receiveData.clear();
+        handler.receiveData.put(RequestCodes.INIT);
+        handler.dispatchPacket(1, 7946);
+        assertEquals(1, handler.drainPendingActions());
+        assertEquals(1, runtimeActions[0]);
+        assertEquals(0, handler.drainPendingActions());
+    }
+
     private static String repeat(String value, int count) {
         StringBuilder output = new StringBuilder();
         for (int index = 0; index < count; index++) output.append(value);
@@ -216,9 +248,16 @@ public final class LegacyGamepadProtocolTest {
     private static final class FixtureHandler extends WinHandler {
         final ArrayDeque<Runnable> actions = new ArrayDeque<>();
         final ArrayList<Packet> packets = new ArrayList<>();
-        FixtureHandler() { super(null); initReceived = true; }
+        final boolean interceptActions;
+        FixtureHandler() { this(true); }
+        FixtureHandler(boolean interceptActions) { super(null); this.interceptActions = interceptActions; initReceived = true; }
         @Override String getWineIdentifier() { return "wine-9.2-custom"; }
-        @Override protected void addAction(Runnable action) { actions.add(action); }
+        @Override protected void addAction(Runnable action) {
+            if (interceptActions) actions.add(action); else super.addAction(action);
+        }
+        @Override protected void addControllerAction(Runnable action) {
+            if (interceptActions) actions.add(action); else super.addControllerAction(action);
+        }
         @Override protected boolean sendPacket(int port, byte[] packet) {
             packets.add(new Packet(port, packet.clone())); return true;
         }

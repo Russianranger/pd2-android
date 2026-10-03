@@ -48,7 +48,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.4-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.5-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -72,7 +72,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum; the runtime comparison preview tag is `v0.1.4`.
+GitHub prerelease with the APK and checksum; the controller detection preview tag is `v0.1.5`.
 
 ## Startup verification boundary
 
@@ -108,14 +108,23 @@ For 0.1.4, all 39 API 33 Robolectric tests, the 47 import/11 crash/26 session-lo
 checks, input-router checks, and 24 runtime tests (13 fetch, six composition,
 five relocation) passed. All 206 final dependency hashes and 49 relocated assets
 verified. The ARM64 APK build passed in 28 seconds as version code 5, retaining
-the same identity/certificate and SDK levels. Published 0.1.4 CI remains pending.
+the same identity/certificate and SDK levels. Its [CI run 37153029246](https://github.com/Russianranger/pd2-android/actions/runs/37153029246)
+also succeeded for commit `3537161`.
 The baseline fixtures verify whole-Wine-tree replacement, preservation of other
 members, pin rejection, and failed-conversion cleanup. They do not run Wine or PD2.
 
-Install 0.1.4 as an update using the same signing key/application ID to retain
-imported files. Press **Prepare runtime once** for rootfs version 24. First Play
-creates a fresh `wine-9.2-pd2-1` managed prefix; previous prefixes and the private
-imported game/save tree remain in place. Do not re-import. The physical runtime
-comparison and remaining qualification sequence are in [Testing](TESTING.md).
+For 0.1.5, all 49 API 33 Robolectric tests, the 47 import/11 crash/26 session-log
+checks, input-router checks, and the ARM64 APK build passed. The build took
+16 seconds as version code 6; all 35 packaged native libraries and 25 runtime
+archives match 0.1.4. Identity/certificate and SDK levels are unchanged.
+Published 0.1.5 CI remains pending. Its controller changes require a physical
+in-game retest; title startup was accepted on 0.1.4.
+
+Install 0.1.5 over 0.1.4 with the same signing key/application ID to retain
+imported files. This Java update reuses rootfs version 24 and the current
+`wine-9.2-pd2-1` managed prefix; **no Prepare runtime or re-import is needed**.
+A first installation or an upgrade from the older Wine 10 baseline still needs
+runtime preparation. The controller retest and remaining qualification sequence
+are in [Testing](TESTING.md).
 
 Preview certificate SHA-256: `A6:12:97:BE:F1:BE:26:52:B5:3B:76:37:30:27:5E:1F:0E:09:75:22:22:94:60:2E:D8:FF:A5:F8:14:7D:DB:1E`.

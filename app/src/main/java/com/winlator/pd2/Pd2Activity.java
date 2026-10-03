@@ -211,6 +211,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 if (!game.isFile()) throw new IOException("Imported Game.exe is missing; import your installation again.");
                 String arguments = preferences.getString("pd2_arguments", "-3dfx -w");
                 String launchId = Pd2LaunchDiagnostics.begin(this, container, arguments);
+                Pd2ControllerDiagnostics.clearPreviousReport(this);
                 appendLauncherLog("Launching PD2; id=" + launchId + "; renderer=" + container.getGraphicsDriver()
                         + "; arguments=" + arguments + "; CPU=" + (preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability"));
                 Intent intent = new Intent(this, XServerDisplayActivity.class)
@@ -304,6 +305,7 @@ public final class Pd2Activity extends AppCompatActivity {
     private void exportSupport() {
         if (busy) { operation = "Finish the current operation before exporting logs."; return; }
         runOperation("Exporting support logs", () -> {
+            XServerDisplayActivity.savePd2ControllerDiagnostics();
             File directory = new File(getFilesDir(), "pd2/exports"); directory.mkdirs();
             File[] old = directory.listFiles();
             if (old != null) for (File file : old) if (file.getName().startsWith("pd2-support-") && file.lastModified() < System.currentTimeMillis() - 2 * 86400000L) file.delete();
@@ -316,6 +318,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("runtimeRevision", Pd2Runtime.RUNTIME_REVISION)
                 .put("rootfsVersion", RootFS.find(this).getVersion())
                 .put("renderer", preferences.getString("pd2_renderer", "turnip,zink"))
+                .put("inputMode", preferences.getBoolean("pd2_mouse_keyboard", false) ? "mouse_keyboard" : "native")
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
                 .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")
                 .put("installation", installation == null ? "unchecked" : installation.details).put("lastOperation", operation);
@@ -339,6 +342,8 @@ public final class Pd2Activity extends AppCompatActivity {
                     out.closeEntry();
                 }
                 zipLog(out, "launch.json", new File(getFilesDir(), "pd2/logs/launch.json"));
+                zipControllerDiagnostics(out, Pd2ControllerDiagnostics.getFile(this),
+                        new File(getFilesDir(), "pd2/logs/launch.json"));
                 File[] attempts = Pd2SessionLog.getAttemptsDirectory(this).listFiles();
                 if (attempts != null) for (File file : attempts) {
                     if (file.isFile() && file.getName().matches("runtime-attempt-[0-9]{13,19}\\.log"))
@@ -370,6 +375,31 @@ public final class Pd2Activity extends AppCompatActivity {
             while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
         }
         out.closeEntry();
+    }
+    private static void zipControllerDiagnostics(ZipOutputStream out, File file, File launch) throws IOException {
+        byte[] bytes = readBoundedReport(file);
+        byte[] launchBytes = readBoundedReport(launch);
+        if (bytes == null || launchBytes == null) return;
+        try {
+            String launchId = new JSONObject(new String(launchBytes, StandardCharsets.UTF_8)).optString("launchId");
+            if (launchId.isEmpty() || !launchId.equals(new JSONObject(new String(bytes, StandardCharsets.UTF_8)).optString("launchId"))) return;
+        }
+        catch (org.json.JSONException invalidReport) { return; }
+        out.putNextEntry(new ZipEntry("controller.json"));
+        out.write(bytes);
+        out.closeEntry();
+    }
+    private static byte[] readBoundedReport(File file) throws IOException {
+        if (!file.isFile() || file.length() > Pd2ControllerDiagnostics.MAX_REPORT_BYTES) return null;
+        try (FileInputStream in = new FileInputStream(file);
+             java.io.ByteArrayOutputStream data = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192]; int read;
+            while ((read = in.read(buffer)) != -1) {
+                if (data.size() + read > Pd2ControllerDiagnostics.MAX_REPORT_BYTES) return null;
+                data.write(buffer, 0, read);
+            }
+            return data.toByteArray();
+        }
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getKeyCode() == KeyEvent.KEYCODE_BUTTON_A && event.getAction() == KeyEvent.ACTION_UP) {

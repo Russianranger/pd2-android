@@ -58,7 +58,8 @@ public final class Pd2LaunchDiagnosticsTest {
         assertEquals("0", merged.get("BOX64_DYNAREC_WEAKBARRIER"));
         assertTrue(merged.get("WINEDEBUG").contains("+seh"));
         assertTrue(merged.get("WINEDEBUG").contains("+loaddll"));
-        assertTrue(merged.get("WINEDEBUG").contains("+snoop"));
+        assertTrue(merged.get("WINEDEBUG").contains("+xinput"));
+        assertTrue(merged.get("WINEDEBUG").contains("+rawinput"));
         assertEquals("1", merged.get("BOX64_SHOWSEGV"));
         assertEquals("1", new EnvVars(Pd2LaunchPolicy.environment("-ddraw -w", false)).get("BOX64_DYNAREC"));
     }

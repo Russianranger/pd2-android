@@ -4,23 +4,35 @@
 
 The user requested the first milestone of a dedicated Project Diablo 2 Android app in `Russianranger/pd2-android`: import an existing working installation, play using PD2's own controller support, and switch to mouse/keyboard input from a quick menu. The primary target is the AYN Thor Max, Android 13, Snapdragon 8 Gen 2/Adreno 740, ARM64, 16 GB RAM.
 
-The initial implementation uses Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 runtime and Android display/input components. Java/JNI keeps its upstream `com.winlator` namespace; the distinct installed application ID is `com.pd2.thor`.
+The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 runtime and Android display/input components. The accepted current baseline is Wine 9.2 (Custom) with Box64 0.4.4. Java/JNI keeps its upstream `com.winlator` namespace; the distinct installed application ID is `com.pd2.thor`.
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current implementation is **0.1.4, a Wine baseline comparison preview**, version code 5. Launcher startup, runtime preparation, and import were accepted on the Thor. Both 0.1.2 CPU modes and the 0.1.3 matching-arguments comparison failed at the same native Fog stack write. The latter trace records export 10021 returning 23, then export 10019 not returning before the fault. The exact source folder works in the user's reported GameNative Bionic Proton 9.0/Box64 0.3.7 Performance setup. A Wine 10 compatibility issue remains a hypothesis, not a confirmed root cause or fix.
+The current implementation is **0.1.5, a controller detection preview**, version code 6. The user reached PD2's title screen on the Thor with 0.1.4, accepting client startup. The support bundle confirms Wine 9.2/rootfs 24 and prefix revision `wine-9.2-pd2-1`; Fog export 10019 now returns 1 past the earlier failing interval. Native controller detection did not work. The exact earlier Fog failure mechanism and the current controller failure cause remain unconfirmed.
 
-The next test installs 0.1.4 over the existing app, presses **Prepare runtime once** to install the changed runtime, then uses **Turnip + Zink · Glide (GameNative arguments)** and **CPU mode → Stability (default)**. Press Play once, allow at most 60 seconds for the title/menu, then stop/export whether it succeeds or fails. Preserve the accepted imported installation; do not uninstall, clear storage, re-import, cycle through renderers, or repeat Interpreter.
+The next test installs 0.1.5 over 0.1.4 and reuses the accepted runtime/prefix/import: **no Prepare runtime or re-import**. Keep **Turnip + Zink · Glide (GameNative arguments)** and **Stability (default)**. Enter a temporary offline character using fallback if needed, select Native, close the menu, press a controller button, and test both sticks without mouse input. Inspect **Controller status** and export the ZIP after the attempt. Native title-menu navigation is unverified and is not the sole detection test.
+
+## 0.1.5 controller scope
+
+- Send controller discovery/state replies and press/release pushes when the socket is ready, independently of `winhandler.exe` INIT. Process/runtime actions still wait for INIT. This removes a source-level controller-response gate without proving it caused the device report.
+- Accept capability-qualified `uinput` gamepads/joysticks instead of rejecting their names wholesale. Fingerprint devices (`uinput-fpc`/`goodix_fp`) and Android virtual devices remain excluded. The actual Thor device identity is not present in the 0.1.4 bundle, so filtering is not a verified device cause.
+- Add quick-menu **Controller status** for accepted pads, aggregate button/stick events, and discovery/state replies. Opening the menu pauses gameplay input; the display is diagnostic, not proof that PD2 consumed replies.
+- Export `controller.json`, bounded to 64 KiB and 32 Android devices, and record `inputMode` in `support.json`. The snapshot records capabilities, selected device, route/availability, socket/INIT status, and aggregate request/reply/input counts; it excludes current keys, axis values, and device descriptors.
+- Match its `launchId` to `launch.json`, clear the prior report when a launch begins, and reject stale/invalid reports during saving and export. A previous session's counters must not describe a new launch.
+- Replace the Fog `+snoop` channel after accepted startup with `+xinput,+rawinput`, retaining error/warning/exception/module-load logging.
+- Keep Wine 9.2, rootfs 24, revision `wine-9.2-pd2-1`, runtime assets, prefix, imported game files/saves, and application/signing identity unchanged. There is no new runtime preparation or prefix migration.
+
+Local 0.1.5 tests and the ARM64 build passed; published 0.1.5 CI remains pending. Actual PD2 controller activation, both sticks, and the remaining milestone gates still require the device retest. See the [controller evidence note](evidence/2026-10-03-controller-detection.md).
 
 ## 0.1.4 runtime comparison
 
 - Wine 9.2 (Custom), its complete `opt/wine` tree, prefix template, and common DLLs come from the official Winlator 10.1 APK. Box64 0.4.4, current graphics components, and the other rootfs dependencies are retained. This is not GameNative's Bionic Proton 9.0 runtime.
 - Rootfs version 24 requires runtime preparation after the upgrade. Managed runtime revision `wine-9.2-pd2-1` creates/selects a fresh prefix on first Play. Previous `xuser-N` prefixes are retained but not selected; the entire private `pd2` tree, including the accepted installation and its saves, is preserved.
 - The existing fifth launch choice retains `-3dfx -dxnocompatmodefix` without `-w`. Selected settings from the 0.1.3 attempt persist; explicitly confirm that choice and Stability for the comparison.
-- Support/launch records identify the Wine version, rootfs version, and runtime revision. Existing Fog export tracing and bounded game/file diagnostics remain available.
+- The 0.1.4 support/launch records identified the Wine version, rootfs version, and runtime revision, with Fog export tracing and bounded game/file diagnostics.
 - The Wine 9.2 controller DLLs use the older UDP bridge: XInput 7949 and DirectInput 7948 communicate with Java 7947. The matching Java codec is selected only for `wine-9.2-custom` on those ports; other runtimes retain the modern bridge. This baseline exposes one active gamepad, digital XInput triggers, and no rumble. Binary/source protocol verification and focused checks passed; physical Thor controller behavior remains unqualified.
 
-Application/signing identity and SDK levels are unchanged. Local 0.1.4 tests and the ARM64 APK build passed; published 0.1.4 CI and the physical runtime comparison remain pending. Gameplay and controller qualification remain pending.
+Application/signing identity and SDK levels were unchanged. Local 0.1.4 checks and [CI run 37153029246](https://github.com/Russianranger/pd2-android/actions/runs/37153029246) passed for commit `3537161`; its physical title-startup test was accepted. The runtime baseline is retained for the controller work.
 
 ## 0.1.3 device trace
 
@@ -29,7 +41,7 @@ The fifth-profile attempt reached `CALL Fog.10021`, returned `0x17` (23) to `0x0
 ## 0.1.3 diagnostic scope
 
 - The fifth choice uses `-3dfx -dxnocompatmodefix` without `-w`, with the imported native wrapper and Stability. This matches arguments only; the app does not replace its runtime with GameNative's Bionic Proton. The D2DX compatibility flag is a later wrapper option, not an explanation for the early Fog stack fault.
-- Wine `+snoop` is enabled with a written-and-verified `Fog.*` registry filter. It records native export ordinals/arguments and caller return addresses where calls traverse those exports. It does not establish internal recursion or provide a complete stack. Box64 0.4.4's x64-only `SHOWBT` is not used as an x86-game trace.
+- In 0.1.3, Wine `+snoop` was enabled with a written-and-verified `Fog.*` registry filter. It recorded native export ordinals/arguments and caller return addresses, without establishing internal recursion or a complete stack. Box64 0.4.4's x64-only `SHOWBT` was not used as an x86-game trace. The 0.1.5 policy replaces this with controller tracing.
 - `launch.json` includes selected persisted `InstallPath`, `GamePath`, Wine version settings, and `SnoopInclude`; full registry hives are not exported.
 - `installation-files.json` adds PE stack reserve/commit sizes and SHA-256 for `Game.exe`, `Fog.dll`, and `PD2_EXT.dll` when at most 8 MiB. Larger files receive a bounded hash error; no binaries or saves are exported.
 - `game-logs/` includes the newest two dated D2 logs plus `d2dx_log.txt`/`d2gl.log` when present, each capped at 256 KiB with head/tail preservation. Symlinks are excluded.
@@ -136,26 +148,35 @@ The completed local 0.1.4 checks are:
 - The ARM64 APK build passed in 28 seconds. Version 0.1.4/code 5 retains `com.pd2.thor`, min SDK 26, target SDK 28, and the same preview certificate.
 - APK size: 171,268,551 bytes. SHA-256: `c1eeb0e0968cfa852f736b62ed4d045d57abeaa336f0973ae768656fdd61e413`.
 
-Published 0.1.4 CI remains pending until inspected. These local checks do not run PD2 on the Thor or establish the Wine compatibility hypothesis.
+Published 0.1.4 CI run 37153029246 succeeded. The user subsequently accepted title startup on the Thor; these automated checks do not qualify controller input or identify the exact earlier Fog failure mechanism.
 
-Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user has now accepted launcher startup, runtime preparation, and import on 0.1.1; the original 0.1.0 startup-crash cause and the current Windows-client stack-overflow cause remain unconfirmed.
+The completed local 0.1.5 checks are:
 
-The next physical step compares Wine 9.2 using the same fifth-profile arguments and Stability. Preparing the changed runtime is required; the accepted installation does not need another import:
+- All 49 Android 13/API 33 Robolectric tests passed with no failures, errors, or skips, including pre-INIT controller replies, capability discovery, bounded diagnostics, and launch-matched saving/export.
+- The 47 import checks, 11 crash-recovery checks, 26 session-log checks, and input-router checks passed.
+- The ARM64 APK build passed in 18 seconds. Version 0.1.5/code 6 retains the same application/signing identity and SDK levels; all 35 packaged native libraries and 25 runtime archives match 0.1.4, with no temporary files packaged.
+- APK size: 171,401,972 bytes. SHA-256: `cd9f9ed746cd1c67e4417172034aa89c8b993253be1d48b92dc36dbb3639e02a`.
+
+Published 0.1.5 CI remains pending until inspected. Neither framework tests nor payload comparison qualify physical PD2 controller activation.
+
+Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import and subsequently title startup on 0.1.4. The original Android crash, earlier Wine 10/Fog failure mechanism, and current controller-detection cause remain unconfirmed.
+
+The next physical step tests controller discovery/activation on the accepted Wine 9.2 setup. Runtime preparation and import are not repeated:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
 | Launcher startup | Accepted on 0.1.1 | User opened the launcher and completed setup/import |
 | Runtime preparation | Accepted on 0.1.1 | User report and `runtimePrepared: true` in support ZIP |
 | Installation import | Accepted on 0.1.1 | User report, import-completed log, and structural validation details |
-| Client launch | Failed through 0.1.3 | Native Fog stack write and 10019 call interval captured; Wine 9.2 comparison pending |
+| Client launch | Title startup accepted on 0.1.4 | User report; Wine 9.2/current prefix confirmed and Fog 10019 returns |
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
-| Native controller | Pending | Left-stick movement, independent right-stick aiming, triggers/buttons, and controller UI on the Thor |
+| Native controller | Not detected in 0.1.4 report; retest pending | Test an offline character and capture discovery/input/reply diagnostics |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
 | Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
 | Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |
 | Online play | Pending | User authenticates and enters a normal PD2 online game |
 
-Reaching the PD2 menu is the immediate qualification step. Native controller forwarding follows once gameplay is accessible. Keyboard emulation working is not evidence that native movement/aiming works. All original rendering, controller, lifecycle, save, and online gates remain pending.
+The immediate qualification step is native controller activation inside an offline game. Keyboard emulation working is not evidence that native movement/aiming works. Rendering/audio, controller, lifecycle, save, and online gates remain pending beyond accepted title startup.
 
 ## Next work after the first device test
 

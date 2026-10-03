@@ -1,17 +1,17 @@
-# 0.1.4 Wine baseline comparison test
+# 0.1.5 controller detection test
 
-Launcher startup, runtime preparation, and import remain accepted. Both 0.1.2 CPU modes and the 0.1.3 matching-arguments attempt failed at the same native Fog stack write. The 0.1.4 preview changes Wine 10.10 to Wine 9.2 (Custom) with matched prefix assets, retaining Box64 0.4.4 and graphics components. This tests a runtime compatibility hypothesis; it does not claim a confirmed fix or reproduce GameNative's Bionic Proton runtime.
+The user reached the PD2 title screen with 0.1.4, but the controller was not detected. Launcher startup, runtime preparation, import, and client appearance remain accepted. The 0.1.5 preview changes Java controller discovery/response handling and diagnostics; its device result remains unqualified. It preserves Wine 9.2/rootfs 24 and the accepted prefix.
 
-## Next launch test
+## Controller retest
 
-1. Install **0.1.4 over the existing app** without uninstalling or clearing storage. **Reuse the accepted imported game files; do not re-import.**
-2. Press **Prepare runtime once after upgrading** and wait for completion. This installs the replacement Wine runtime. The first Play creates a fresh Wine 9.2 prefix; previous prefixes and private game files/saves are retained.
-3. In **Launch settings**, select **Turnip + Zink · Glide (GameNative arguments)** and **CPU mode → Stability (default)**. Do not repeat Interpreter or cycle through the other choices.
-4. Press **Play once** and allow at most **60 seconds** for the title/menu. Record whether it returns to the launcher, displays the title/menu, or remains unfinished at the limit.
-5. If it returns, export immediately. If it remains unfinished, use the quick menu to return to the launcher and press **Stop client**. If the menu appears, record that success, then stop the client without starting a gameplay test.
-6. Use **Export support logs**, save/share the new ZIP, and upload it to the chat whether the menu appeared or the attempt failed. Keep Stability selected.
+1. Install **0.1.5 over 0.1.4** without uninstalling or clearing storage. **Reuse the accepted runtime/prefix/game files. Do not Prepare runtime or re-import.**
+2. Keep **Turnip + Zink · Glide (GameNative arguments)** and **CPU mode → Stability (default)**, then press Play. Do not cycle through renderers or repeat Interpreter.
+3. Use **Mouse / keyboard layout** only as needed to enter a temporary offline character. Title/menu controller navigation is unverified; check native input inside the game.
+4. Select **Native controller**, close the quick menu, and press a controller button. Check left-stick movement and independent right-stick aiming, then buttons/triggers. Avoid mouse movement/clicks while checking native input: PD2 can switch back to mouse/keyboard on mouse input.
+5. Open **Controller status** after the attempt. Record the accepted pad count and input/discovery/state-reply counters. Gameplay input is paused while the menu is open; close it before testing the sticks again.
+6. Return to the launcher and **Export support logs**, then upload the ZIP whether native input worked or failed. Report whether the title appeared, whether the offline character opened, and which button/stick actions worked.
 
-The 60-second interval bounds this diagnostic attempt; it does not establish how long every valid load should take. Do not cycle through the other graphics choices for this test.
+If the client unexpectedly stops reaching the title, stop the attempt and export its logs. Preserve the working runtime and import while that regression is investigated.
 
 If the whole Android app closes:
 
@@ -22,25 +22,26 @@ If the whole Android app closes:
 
 Support export retains the current runtime log and up to four archived attempts, and adds:
 
-- Filtered Fog native-export call details in the runtime trace; these are not a complete stack or a trace of every internal recursive call.
+- XInput/raw-input traces for the controller path; traces and replies do not establish that PD2 accepted input.
+- `controller.json` (at most 64 KiB) with Android device/bridge diagnostics for the matching launch, plus `inputMode` in `support.json`. Stale/invalid controller reports are skipped.
 - Wine/rootfs/runtime-revision identity for the replacement baseline in support and launch records.
 - Selected installation/version/trace registry settings in `launch.json`.
 - PE stack reserve/commit sizes and bounded core-file hashes in `installation-files.json`.
 - The newest two dated D2 logs and available D2DX/D2GL logs under `game-logs/`, each capped at 256 KiB. Binaries and saves are not included.
 
-The fifth choice uses `-3dfx -dxnocompatmodefix` without `-w` and retains the native wrapper. These arguments already failed on the prior Wine 10.10 runtime; the current comparison changes the Wine baseline. The compatibility flag does not establish a cause for the early Fog fault. The goal remains first client appearance and useful evidence, not controller/gameplay qualification.
+The current runtime trace enables XInput/raw-input diagnostics instead of Fog export snooping. The fifth choice remains `-3dfx -dxnocompatmodefix` without `-w` and retains the native wrapper. Keep this accepted startup configuration for the controller test.
 
 ## After PD2 reaches the menu
 
 Use your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
 
-Report that the menu appeared and export the result before pursuing graphics/controller changes. Do not re-import; runtime preparation is required once for this upgrade's changed baseline. The controls and save checklist below remains the later milestone, after an appropriate PD2/D2GL graphics path is established.
+Title startup is already accepted. The current step is native controller activation inside an offline game, followed by the controls/save checklist below. Do not prepare or re-import for the 0.1.5 upgrade.
 
-Export support information after this fifth-profile result before changing graphics settings. Further comparisons should follow diagnosis of that result.
+Export support information after the controller result before changing graphics settings. Further comparisons should follow diagnosis of that result.
 
 ## Native controller
 
-Use a temporary offline character for the first gameplay test, enabling PD2's controller support/settings where required.
+Use a temporary offline character. PD2's controller mode activates on controller input; after selecting Native and closing the quick menu, press a controller button before checking movement/aiming.
 
 The Wine 9.2 baseline uses its matching legacy controller bridge with one active gamepad. XInput triggers are digital rather than proportional, and rumble is not supported by this donor DLL. Both sticks and normal button/trigger actions still require physical qualification.
 
@@ -99,4 +100,4 @@ An import success is not a gameplay success. APK build/CI success is not physica
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
 
-Local 0.1.4 verification passed all 39 Android 13/API 33 Robolectric tests, the 47 import/11 crash-recovery/26 session-log checks, input-router checks, and 24 runtime tests. All 206 dependency hashes and 49 relocated assets verified; the ARM64 APK build passed. Published 0.1.4 CI remains pending. Automated checks do not run PD2 or confirm the Fog failure's cause on the Thor. Full results and the successful historical 0.1.3 CI run are recorded in [Handoff](HANDOFF.md).
+Local 0.1.5 verification passed all 49 Android 13/API 33 Robolectric tests, the 47 import/11 crash-recovery/26 session-log checks, input-router checks, and the ARM64 APK build. Packaged native libraries/runtime archives match 0.1.4. Published 0.1.5 CI remains pending. Automated checks do not qualify PD2 controller activation on the Thor. Full results and the accepted 0.1.4 title startup are recorded in [Handoff](HANDOFF.md).

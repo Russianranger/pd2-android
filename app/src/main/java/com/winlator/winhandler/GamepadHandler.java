@@ -59,6 +59,7 @@ public class GamepadHandler {
     public void setInputEnabled(boolean enabled) {
         if (inputEnabled != enabled) inputGeneration++;
         inputEnabled = enabled;
+        winHandler.controllerDiagnostics.setNativeInputEnabled(enabled);
         if (!enabled) neutralizeAll();
     }
 
@@ -70,7 +71,7 @@ public class GamepadHandler {
         for (byte i = 0; i < GAMEPAD_MAX_COUNT; i++) {
             final byte slot = i;
             if (gamepadSlots[i] != null) gamepadSlots[i].getGamepadState().copy(neutral);
-            for (final int port : gamepadClients) winHandler.addAction(() -> {
+            for (final int port : gamepadClients) winHandler.addControllerAction(() -> {
                 ByteBuffer buffer = winHandler.sendData;
                 buffer.rewind();
                 buffer.put(RequestCodes.GET_GAMEPAD_STATE);
@@ -187,7 +188,7 @@ public class GamepadHandler {
         }
         else if (clientIndex != -1) gamepadClients.remove(clientIndex);
 
-        winHandler.addAction(() -> {
+        winHandler.addControllerAction(() -> {
             final ByteBuffer buffer = winHandler.sendData;
             buffer.rewind();
             buffer.put(RequestCodes.GET_GAMEPAD);
@@ -252,6 +253,7 @@ public class GamepadHandler {
         boolean xinput = request.get() == 1;
         boolean notify = request.get() == 1;
         int processId = request.getInt();
+        winHandler.controllerDiagnostics.recordLegacyDiscovery(xinput, notify);
         if (xinput) legacyXInputProcesses.add(processId);
         GamepadSlot selected = null;
         // Match upstream AUTO: avoid a duplicate DInput device for an XInput process.
@@ -264,11 +266,12 @@ public class GamepadHandler {
             if (!legacyGamepadClients.contains(port)) legacyGamepadClients.add(port);
         }
         else legacyGamepadClients.remove(Integer.valueOf(port));
+        winHandler.controllerDiagnostics.setSelectedDevice(legacyGamepad != null ? legacyGamepad.getName() : null);
         final GamepadSlot device = selected;
         final GamepadState state = device != null ? snapshot(device) : new GamepadState();
         final long generation = inputGeneration;
         final byte mapper = dinputMapperType;
-        winHandler.addAction(() -> {
+        winHandler.addControllerAction(() -> {
             int id = device != null ? LegacyGamepadProtocol.GAMEPAD_ID : 0;
             winHandler.sendPacket(port, LegacyGamepadProtocol.device(id, mapper, device != null ? device.getName() : ""));
             if (device != null) winHandler.sendPacket(port, LegacyGamepadProtocol.state(id, true,
@@ -284,7 +287,7 @@ public class GamepadHandler {
         final boolean connected = device != null && requestedId == LegacyGamepadProtocol.GAMEPAD_ID;
         final GamepadState state = connected ? snapshot(device) : new GamepadState();
         final long generation = inputGeneration;
-        winHandler.addAction(() -> winHandler.sendPacket(port, LegacyGamepadProtocol.state(requestedId, connected,
+        winHandler.addControllerAction(() -> winHandler.sendPacket(port, LegacyGamepadProtocol.state(requestedId, connected,
                 inputEnabled && generation == inputGeneration ? state : new GamepadState())));
     }
 
@@ -301,7 +304,7 @@ public class GamepadHandler {
     private void sendLegacyState(GamepadState state) {
         final GamepadSlot device = legacyGamepad;
         final long generation = inputGeneration;
-        for (final int port : legacyGamepadClients) winHandler.addAction(() ->
+        for (final int port : legacyGamepadClients) winHandler.addControllerAction(() ->
                 winHandler.sendPacket(port, LegacyGamepadProtocol.state(LegacyGamepadProtocol.GAMEPAD_ID, device != null,
                         inputEnabled && generation == inputGeneration ? state : new GamepadState())));
     }
@@ -332,7 +335,7 @@ public class GamepadHandler {
 
     public void sendGamepadState(final GamepadSlot gamepadSlot) {
         // Preserve release edges, even if a previous packet is still queued.
-        if (!inputEnabled || !winHandler.initReceived || (gamepadClients.isEmpty() && legacyGamepadClients.isEmpty())) return;
+        if (!inputEnabled || (gamepadClients.isEmpty() && legacyGamepadClients.isEmpty())) return;
         final byte slot = (byte)ArrayUtils.indexOf(gamepadSlots, gamepadSlot);
         if (slot == ArrayUtils.INDEX_NOT_FOUND) return;
         final GamepadState state = snapshot(gamepadSlot);
@@ -341,7 +344,7 @@ public class GamepadHandler {
         final ByteBuffer buffer = winHandler.sendData;
 
         for (final int port : gamepadClients) {
-            winHandler.addAction(() -> {
+            winHandler.addControllerAction(() -> {
                 buffer.rewind();
                 buffer.put(RequestCodes.GET_GAMEPAD_STATE);
                 buffer.put(slot);
@@ -356,6 +359,7 @@ public class GamepadHandler {
             legacyGamepadClients.remove(Integer.valueOf(port));
             if (legacyGamepadClients.isEmpty()) {
                 legacyGamepad = null;
+                winHandler.controllerDiagnostics.setSelectedDevice(null);
                 legacyXInputProcesses.clear();
             }
             return;
@@ -390,17 +394,19 @@ public class GamepadHandler {
     }
 
     protected boolean onGenericMotionEvent(MotionEvent event) {
+        winHandler.controllerDiagnostics.recordMotion(false);
         if (!inputEnabled) return false;
         boolean handled = false;
         ExternalController controller = getConnectedControllerById(event.getDeviceId());
         if (controller != null) {
             handled = controller.updateStateFromMotionEvent(event);
-            if (handled) sendGamepadState(controller);
+            if (handled) { winHandler.controllerDiagnostics.recordMotion(true); sendGamepadState(controller); }
         }
         return handled;
     }
 
     protected boolean onKeyEvent(KeyEvent event) {
+        winHandler.controllerDiagnostics.recordKey(false);
         if (!inputEnabled) return false;
         boolean handled = false;
         ExternalController controller = getConnectedControllerById(event.getDeviceId());
@@ -414,7 +420,7 @@ public class GamepadHandler {
                 handled = controller.updateStateFromKeyEvent(event);
             }
 
-            if (handled) sendGamepadState(controller);
+            if (handled) { winHandler.controllerDiagnostics.recordKey(true); sendGamepadState(controller); }
         }
         return handled;
     }
