@@ -6,11 +6,26 @@
       "upstream_git_blob": "c505bc89a765f1e259491730f3064772bfb5e00f",
       "upstream_sha256": "e1a34fed50bb38ef7fbf51ad5e5b9a76ec4c8178f9cfb4b9f6def0497f2f446c"
     },
+    "app/src/main/assets/common_dlls.json": {
+      "apk_member": "assets/common_dlls.json",
+      "installed_sha256": "0b09a3b4bdb5e828a5355678d6cc54e3a6271c0f9d9ab25163d5575048c878d6",
+      "source": "winlator10.1-apk",
+      "superseded_sha256": [
+        "0aca152f418db3bdeae5171d283b5cfa8e903d1c8ccf6cea8b44b03a104b80de"
+      ],
+      "upstream_bytes": 20077,
+      "upstream_sha256": "0b09a3b4bdb5e828a5355678d6cc54e3a6271c0f9d9ab25163d5575048c878d6"
+    },
     "app/src/main/assets/container_pattern.tzst": {
-      "installed_sha256": "482c56e22a4fa37c2a851f6d4d8f258f6480167a9fc6b636bbe4c517c367e2fa",
-      "upstream_bytes": 7399363,
-      "upstream_git_blob": "fd17803aee16fc4ef6a1d973e4428a7da5ca6b2a",
-      "upstream_sha256": "8ae3a4fee33e86da26826395650bb07c6f49ce94629ea4b9442bc633b6b8ca33"
+      "apk_member": "assets/container_pattern.tzst",
+      "installed_sha256": "84affc05eded3603ca8eb4f6504790e4c1f4ba1f178e8c422fc2be4f31bb2631",
+      "source": "winlator10.1-apk",
+      "superseded_sha256": [
+        "482c56e22a4fa37c2a851f6d4d8f258f6480167a9fc6b636bbe4c517c367e2fa",
+        "8ae3a4fee33e86da26826395650bb07c6f49ce94629ea4b9442bc633b6b8ca33"
+      ],
+      "upstream_bytes": 8412021,
+      "upstream_sha256": "84affc05eded3603ca8eb4f6504790e4c1f4ba1f178e8c422fc2be4f31bb2631"
     },
     "app/src/main/assets/dxwrapper/cnc-ddraw-6.6/ddraw.tzst": {
       "installed_sha256": "eabb2d59ce7060767996d0c9597ee8772059126a3af01698e59a5e7905e49867",
@@ -193,10 +208,14 @@
       "upstream_sha256": "a31d331e1f1ec514d8287b830c1668c1d65a9b34c21010bd918eca43d2f4947f"
     },
     "app/src/main/assets/rootfs.tzst": {
-      "installed_sha256": "e370bf627611c4d2cce1f20cf3155c7ef8c0a10e0569b366af787eec2d278dbc",
-      "upstream_bytes": 65254618,
-      "upstream_git_blob": "3276da2f280707ccfded5dd76181e7bf7a53ec6e",
-      "upstream_sha256": "aeea2938cc63b0708cb2da999b5a0e3915229b6ab4eac13de061c87f34ffc1dc"
+      "installed_sha256": "ea4cc44e353ec48a4669019a6248850c0030020ea3753e5da6e62a32fdedcae4",
+      "source": "wine9-rootfs",
+      "superseded_sha256": [
+        "aeea2938cc63b0708cb2da999b5a0e3915229b6ab4eac13de061c87f34ffc1dc",
+        "e370bf627611c4d2cce1f20cf3155c7ef8c0a10e0569b366af787eec2d278dbc"
+      ],
+      "upstream_bytes": 75101055,
+      "upstream_sha256": "8acebc929a1ad185311593daf94b91a6f6cedc03c844dd615f91fab3bec334f2"
     },
     "app/src/main/assets/rootfs_patches.tzst": {
       "installed_sha256": "5ab6900f76b9cde509dca5db9b95f628d173fa56d293f79e00aac28c38e90a70",
@@ -1233,5 +1252,47 @@
   },
   "format": 1,
   "upstream_commit": "a030f552f452158a2db64fdb32b490fa19c0b48d",
-  "upstream_repository": "brunodev85/winlator-app"
+  "upstream_repository": "brunodev85/winlator-app",
+  "wine_baseline": {
+    "apk": {
+      "bytes": 147778434,
+      "sha256": "c46ec3fc96548cecb3716ada8733ebdea4fb25c3c945e0695f2c992c8d3ecf4e",
+      "url": "https://github.com/brunodev85/winlator/releases/download/v10.1.0/Winlator_10.1.apk"
+    },
+    "composition": {
+      "added_wine_members": 1634,
+      "apk_sha256": "c46ec3fc96548cecb3716ada8733ebdea4fb25c3c945e0695f2c992c8d3ecf4e",
+      "base_sha256": "aeea2938cc63b0708cb2da999b5a0e3915229b6ab4eac13de061c87f34ffc1dc",
+      "bytes": 75101055,
+      "preserved_members": 1622,
+      "removed_wine_members": 1687,
+      "sha256": "8acebc929a1ad185311593daf94b91a6f6cedc03c844dd615f91fab3bec334f2",
+      "wine_bytes": 301014512,
+      "wine_rootfs_sha256": "60ba2f16340846d314d1512269a7c722522e71f0d7c1679d86d0542fa9f7a38c"
+    },
+    "members": {
+      "assets/common_dlls.json": {
+        "bytes": 20077,
+        "sha256": "0b09a3b4bdb5e828a5355678d6cc54e3a6271c0f9d9ab25163d5575048c878d6"
+      },
+      "assets/container_pattern.tzst": {
+        "bytes": 8412021,
+        "sha256": "84affc05eded3603ca8eb4f6504790e4c1f4ba1f178e8c422fc2be4f31bb2631"
+      },
+      "assets/rootfs.txz": {
+        "bytes": 55181252,
+        "sha256": "60ba2f16340846d314d1512269a7c722522e71f0d7c1679d86d0542fa9f7a38c"
+      }
+    },
+    "recipe": "Replace complete opt/wine in the pinned original rootfs with opt/wine from the verified release APK; preserve every non-Wine member; GNU tar, zstd level19/checksum/no content size; then equal-length package relocation.",
+    "release_asset_id": 275027589,
+    "rootfs_base": {
+      "bytes": 65254618,
+      "git_blob": "3276da2f280707ccfded5dd76181e7bf7a53ec6e",
+      "path": "app/src/main/assets/rootfs.tzst",
+      "sha256": "aeea2938cc63b0708cb2da999b5a0e3915229b6ab4eac13de061c87f34ffc1dc"
+    },
+    "upstream_release": "v10.1.0",
+    "version": "Wine 9.2 (Custom), new WoW64"
+  }
 }

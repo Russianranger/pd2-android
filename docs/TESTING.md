@@ -1,12 +1,12 @@
-# 0.1.3 Fog startup diagnostic test
+# 0.1.4 Wine baseline comparison test
 
-Launcher startup, runtime preparation, and import remain accepted. Both 0.1.2 Stability and Interpreter attempts failed at the same native Fog stack write. The exact source folder works in GameNative with a different runtime. The 0.1.3 preview adds a matching-arguments comparison and better evidence collection; it does not claim a confirmed fix.
+Launcher startup, runtime preparation, and import remain accepted. Both 0.1.2 CPU modes and the 0.1.3 matching-arguments attempt failed at the same native Fog stack write. The 0.1.4 preview changes Wine 10.10 to Wine 9.2 (Custom) with matched prefix assets, retaining Box64 0.4.4 and graphics components. This tests a runtime compatibility hypothesis; it does not claim a confirmed fix or reproduce GameNative's Bionic Proton runtime.
 
 ## Next launch test
 
-1. Install **0.1.3 over 0.1.2** without uninstalling or clearing storage. **Reuse the accepted runtime/game files; do not Prepare runtime or import again.**
-2. In **Launch settings**, select the fifth choice: **Turnip + Zink · Glide (GameNative arguments)**.
-3. Select **CPU mode → Stability (default)**. Do not repeat the completed Interpreter test.
+1. Install **0.1.4 over the existing app** without uninstalling or clearing storage. **Reuse the accepted imported game files; do not re-import.**
+2. Press **Prepare runtime once after upgrading** and wait for completion. This installs the replacement Wine runtime. The first Play creates a fresh Wine 9.2 prefix; previous prefixes and private game files/saves are retained.
+3. In **Launch settings**, select **Turnip + Zink · Glide (GameNative arguments)** and **CPU mode → Stability (default)**. Do not repeat Interpreter or cycle through the other choices.
 4. Press **Play once** and allow at most **60 seconds** for the title/menu. Record whether it returns to the launcher, displays the title/menu, or remains unfinished at the limit.
 5. If it returns, export immediately. If it remains unfinished, use the quick menu to return to the launcher and press **Stop client**. If the menu appears, record that success, then stop the client without starting a gameplay test.
 6. Use **Export support logs**, save/share the new ZIP, and upload it to the chat whether the menu appeared or the attempt failed. Keep Stability selected.
@@ -23,23 +23,26 @@ If the whole Android app closes:
 Support export retains the current runtime log and up to four archived attempts, and adds:
 
 - Filtered Fog native-export call details in the runtime trace; these are not a complete stack or a trace of every internal recursive call.
+- Wine/rootfs/runtime-revision identity for the replacement baseline in support and launch records.
 - Selected installation/version/trace registry settings in `launch.json`.
 - PE stack reserve/commit sizes and bounded core-file hashes in `installation-files.json`.
 - The newest two dated D2 logs and available D2DX/D2GL logs under `game-logs/`, each capped at 256 KiB. Binaries and saves are not included.
 
-The fifth choice uses `-3dfx -dxnocompatmodefix` without `-w` and retains the native wrapper. It matches the provided GameNative arguments, not GameNative's Bionic Proton/Box64 runtime. The compatibility flag does not establish a cause for the early Fog fault. The goal remains first client appearance and useful evidence, not controller/gameplay qualification.
+The fifth choice uses `-3dfx -dxnocompatmodefix` without `-w` and retains the native wrapper. These arguments already failed on the prior Wine 10.10 runtime; the current comparison changes the Wine baseline. The compatibility flag does not establish a cause for the early Fog fault. The goal remains first client appearance and useful evidence, not controller/gameplay qualification.
 
 ## After PD2 reaches the menu
 
 Use your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
 
-Report that the menu appeared and export the result before pursuing graphics/controller changes. Runtime preparation and import have already passed; this launch qualification does not require repeating them. The controls and save checklist below remains the later milestone, after an appropriate PD2/D2GL graphics path is established.
+Report that the menu appeared and export the result before pursuing graphics/controller changes. Do not re-import; runtime preparation is required once for this upgrade's changed baseline. The controls and save checklist below remains the later milestone, after an appropriate PD2/D2GL graphics path is established.
 
 Export support information after this fifth-profile result before changing graphics settings. Further comparisons should follow diagnosis of that result.
 
 ## Native controller
 
 Use a temporary offline character for the first gameplay test, enabling PD2's controller support/settings where required.
+
+The Wine 9.2 baseline uses its matching legacy controller bridge with one active gamepad. XInput triggers are digital rather than proportional, and rumble is not supported by this donor DLL. Both sticks and normal button/trigger actions still require physical qualification.
 
 1. Move using the left stick, then aim independently using the right stick.
 2. Check face buttons, shoulders, triggers, D-pad, inventory navigation, and a skill assigned through PD2's normal controller settings.
@@ -96,4 +99,4 @@ An import success is not a gameplay success. APK build/CI success is not physica
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
 
-Local 0.1.3 verification passed all 20 Android 13/API 33 Robolectric tests, the 47 import/11 crash-recovery/26 session-log checks, input-router checks, and the ARM64 APK build. Published CI remains pending until inspected. These checks do not run PD2 or confirm the Fog failure's cause on the Thor.
+Local 0.1.4 verification passed all 39 Android 13/API 33 Robolectric tests, the 47 import/11 crash-recovery/26 session-log checks, input-router checks, and 24 runtime tests. All 206 dependency hashes and 49 relocated assets verified; the ARM64 APK build passed. Published 0.1.4 CI remains pending. Automated checks do not run PD2 or confirm the Fog failure's cause on the Thor. Full results and the successful historical 0.1.3 CI run are recorded in [Handoff](HANDOFF.md).

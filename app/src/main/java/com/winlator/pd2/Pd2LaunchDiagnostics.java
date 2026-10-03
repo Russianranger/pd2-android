@@ -3,6 +3,7 @@ package com.winlator.pd2;
 import android.content.Context;
 import androidx.preference.PreferenceManager;
 import com.winlator.container.Container;
+import com.winlator.xenvironment.RootFS;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -42,6 +43,10 @@ public final class Pd2LaunchDiagnostics {
         JSONObject report = new JSONObject().put("launchId", id).put("startedAt", System.currentTimeMillis())
                 .put("renderer", container.getGraphicsDriver()).put("arguments", arguments)
                 .put("cpuPreset", container.getBox64Preset()).put("environment", container.getEnvVars())
+                .put("wineVersion", container.getWineVersion()).put("winePath", "/opt/wine")
+                .put("runtimeRevision", Pd2Runtime.RUNTIME_REVISION)
+                .put("prefixRevision", container.getExtra("pd2RuntimeRevision"))
+                .put("rootfsVersion", RootFS.find(context).getVersion())
                 .put("registry", Pd2Runtime.registrySnapshot(container))
                 .put("interpreter", PreferenceManager.getDefaultSharedPreferences(context)
                         .getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false));

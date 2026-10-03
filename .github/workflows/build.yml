@@ -42,6 +42,7 @@ jobs:
         run: |
           python3 -m pip install zstandard==0.25.0
           python3 -m unittest discover -s tests -p 'test_runtime_fetch.py' -v
+          python3 -m unittest discover -s tests -p 'test_runtime_baseline.py' -v
           python3 scripts/fetch-runtime.py
           python3 scripts/relocate-runtime.py
           python3 scripts/relocate-runtime.py --check

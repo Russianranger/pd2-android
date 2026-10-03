@@ -14,12 +14,24 @@ The upstream GNU Lesser General Public License 2.1 is retained in [LICENSE](LICE
 This repository publishes the imported application source and launcher changes.
 Original source copyright and license headers remain in place.
 
-The repository records 205 inherited binary dependencies in
-`docs/RUNTIME-DEPENDENCIES.json` rather than storing their large binary payloads.
-`scripts/fetch-runtime.py` fetches only those exact files from the immutable
-upstream commit and verifies the recorded original SHA-256 and size. Their
-post-relocation SHA-256 values are also recorded; the APK still bundles the
+The repository records binary dependencies in `docs/RUNTIME-DEPENDENCIES.json`
+rather than storing their large payloads. Most retain that immutable upstream
+commit. For 0.1.4, the complete Wine tree and matching prefix/common-DLL assets
+instead come from the [official Winlator 10.1 release APK](https://github.com/brunodev85/winlator/releases/tag/v10.1.0),
+containing Wine 9.2 (Custom). The pinned source is
+`https://github.com/brunodev85/winlator/releases/download/v10.1.0/Winlator_10.1.apk`,
+147,778,434 bytes, SHA-256
+`c46ec3fc96548cecb3716ada8733ebdea4fb25c3c945e0695f2c992c8d3ecf4e`.
+
+`scripts/fetch-runtime.py` verifies source/member hashes and sizes, then uses
+`scripts/runtime_baseline.py` to replace only `opt/wine` in the original rootfs;
+other rootfs members, Box64 0.4.4, and graphics components retain their sources.
+The prefix template and common-DLL list are taken from the same release APK.
+Composed and post-relocation hashes are recorded as well. This is a Wine baseline
+comparison, not GameNative's Bionic Proton runtime. The APK bundles the resulting
 runtime and does not delegate launching to another Android app.
+The Java controller bridge includes a protocol adapter for the donor Wine 9.2
+XInput/DirectInput DLLs; those Wine binaries remain imported from the pinned APK.
 
 Native Java packages remain `com.winlator` because the JNI symbols use that
 package. The installation identity is separate: `com.pd2.thor`.
@@ -33,7 +45,8 @@ revision was established.
 
 | Component | Location in this repository | Upstream source / licensing information |
 |---|---|---|
-| Wine and Linux/glibc runtime | `app/src/main/assets/rootfs.tzst`, `rootfs_patches.tzst`, `container_pattern.tzst` | [Wine](https://gitlab.winehq.org/wine/wine), [Winlator runtime](https://github.com/brunodev85/winlator), [Termux Pacman glibc packages](https://github.com/termux-pacman/glibc-packages) |
+| Wine 9.2 (Custom), matching prefix/common DLLs | Composed `app/src/main/assets/rootfs.tzst`, `container_pattern.tzst`, `common_dlls.json` | [Wine](https://gitlab.winehq.org/wine/wine), pinned [Winlator 10.1 APK](https://github.com/brunodev85/winlator/releases/tag/v10.1.0); exact Wine source/build revision remains to be mapped |
+| Linux/glibc runtime | Non-Wine members of `app/src/main/assets/rootfs.tzst`, `rootfs_patches.tzst` | [Winlator runtime](https://github.com/brunodev85/winlator), [Termux Pacman glibc packages](https://github.com/termux-pacman/glibc-packages) |
 | Box64 0.4.4 | `app/src/main/assets/box64/` | [Box64](https://github.com/ptitSeb/box64) |
 | Mesa Turnip, Zink, VirGL | `app/src/main/assets/graphics_driver/`, `app/src/main/cpp/virglrenderer/` | [Mesa](https://gitlab.freedesktop.org/mesa/mesa), [VirGL renderer](https://gitlab.freedesktop.org/virgl/virglrenderer) |
 | Winlator Vortek and Gladio renderers | `app/src/main/cpp/vortekrenderer/`, `gladiorenderer/`, matching driver assets | [Winlator source](https://github.com/brunodev85/winlator-app) |
@@ -50,7 +63,7 @@ revision was established.
 | SONiVOX soundfont | `app/src/main/assets/soundfont/` | Inherited from the Winlator asset baseline; provenance requires further verification before a production redistribution |
 | Windows components | `app/src/main/assets/wincomponents/` | Inherited archives include DirectX/media components and `vcrun2005`/`vcrun2010` DLLs; exact licenses and redistribution conditions require review rather than assuming the app LGPL covers these binaries |
 | AndroidX and Material libraries | Gradle dependencies in `app/build.gradle` | [AndroidX](https://android.googlesource.com/platform/frameworks/support/), [Material Components](https://github.com/material-components/material-components-android) |
-| Python zstandard (build-time relocation) | `scripts/relocate-runtime.py` | [python-zstandard](https://github.com/indygreg/python-zstandard) |
+| Python zstandard (build-time composition/relocation) | `scripts/runtime_baseline.py`, `scripts/relocate-runtime.py` | [python-zstandard](https://github.com/indygreg/python-zstandard) |
 | zstd-jni, XZ, Commons Compress | Gradle dependencies in `app/build.gradle` | [zstd-jni](https://github.com/luben/zstd-jni), [XZ Java](https://tukaani.org/xz/java.html), [Commons Compress](https://commons.apache.org/proper/commons-compress/) |
 
 A complete production redistribution review must map each prebuilt archive to
@@ -59,7 +72,8 @@ corresponding source or offer, and replace/remove components whose redistributio
 permission is not established. The preview retains the upstream baseline for
 initial device qualification; this document does not label that audit complete.
 
-`docs/UPSTREAM-RUNTIME-ASSET-SHA256.txt` records the inherited asset and prebuilt
+`docs/RUNTIME-DEPENDENCIES.json` records the source provenance and build inputs;
+`docs/UPSTREAM-RUNTIME-ASSET-SHA256.txt` records pre-relocation asset and prebuilt
 library hashes. `docs/RUNTIME-ASSET-SHA256.txt` records the relocated runtime
 shipped here. Runtime archives receive a deterministic equal-length replacement
 of the original package path `com.winlator` with `com.pd2.thor` in tar member

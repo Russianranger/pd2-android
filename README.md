@@ -2,17 +2,17 @@
 
 A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruction installation with Project Diablo 2. The first preview targets the AYN Thor's ARM64/Adreno hardware and imports an existing working installation into the app's private storage.
 
-The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 10.10 and Box64 0.4.4 from Winlator 11.2, with an Android X server and controller bridge. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
+The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. The 0.1.4 comparison uses Wine 9.2 (Custom) from official Winlator 10.1, retaining Box64 0.4.4 and the current Android display/input and graphics components. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.3 Fog startup diagnostics preview.** Launcher startup, runtime preparation, and installation import were accepted on the Thor. Both 0.1.2 Stability and Interpreter attempts failed at the same native Fog stack write. The exact source folder works in GameNative, whose reported Bionic Proton 9.0/Box64 0.3.7 runtime differs from this app's Wine 10.10/Box64 0.4.4. The underlying failure cause remains unconfirmed.
+**Status: 0.1.4 Wine baseline comparison preview.** Launcher startup, runtime preparation, and installation import were accepted on the Thor. Both 0.1.2 CPU modes and the 0.1.3 GameNative-arguments test failed at the same native Fog stack write. The new trace records Fog export 10021 returning 23, then export 10019 not returning before the fault. The exact source folder works in GameNative's reported Bionic Proton 9.0/Box64 0.3.7 setup. The underlying failure cause remains unconfirmed.
 
-This preview adds a fifth launch choice matching the user's GameNative arguments and captures filtered Fog export calls, selected registry values, PE stack sizes/core-file hashes, and bounded game logs. It preserves the runtime and imported files. It is a diagnostic comparison, not a confirmed fix or a recreation of GameNative's runtime.
+This preview replaces Wine 10.10 and its matching prefix template/common DLLs with Wine 9.2 for a controlled compatibility comparison. It preserves imported game files and saves, retains the previous prefixes, and creates a fresh managed prefix for the new runtime. A Wine 10 compatibility issue is a hypothesis awaiting device validation; this is not a confirmed fix or a recreation of GameNative's runtime.
 
 Building the APK and passing automated checks do not establish that PD2 launches, renders, accepts both sticks, or connects online on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
 
-## Next 0.1.3 check
+## Next 0.1.4 check
 
-Install 0.1.3 over 0.1.2 without uninstalling or clearing storage; the application ID and preview signing identity are unchanged. **Reuse the accepted runtime and installation. Do not prepare or import again.**
+Install 0.1.4 over the existing app without uninstalling or clearing storage; the application ID and preview signing identity are unchanged. **Press Prepare runtime once after upgrading** to install the replacement runtime. Reuse the accepted installation; **do not re-import**. The first Play creates the new Wine 9.2 prefix.
 
 In **Launch settings**, select the fifth choice, **Turnip + Zink · Glide (GameNative arguments)**, and set **CPU mode → Stability (default)**. Press **Play once**, allow up to **60 seconds** for the title/menu, then export support logs whether it succeeds or fails. If unfinished, return to the launcher and stop the client before exporting. Report the last visible screen; see [Testing](docs/TESTING.md).
 
@@ -44,7 +44,7 @@ Private game files and saves survive APK updates using the same signing identity
 
 ## Controls and display
 
-**Native controller** forwards the physical controller to Wine's Windows gamepad interface. PD2 remains responsible for movement, aiming, and its controller bindings. Both sticks and triggers must be confirmed on the physical Thor.
+**Native controller** forwards the physical controller through the Wine 9.2-compatible bridge. This baseline exposes one active gamepad; its XInput triggers are digital and its Wine DLL does not support rumble. PD2 remains responsible for movement, aiming, and its controller bindings. Both sticks and triggers must be confirmed on the physical Thor.
 
 **Mouse / keyboard layout** turns the controller into mouse and keyboard input. Its left stick sends WASD, so enable PD2's WASD movement if you want to move using that fallback layout. The right stick moves the pointer; A and B provide left and right click. The quick menu also provides the Android keyboard and cursor-speed adjustment. Full bindings and switch tests are in [Testing](docs/TESTING.md).
 
@@ -54,11 +54,13 @@ Under **Launch settings → CPU mode**, **Stability (default)** remains the CPU 
 
 ## Development
 
-Source builds fetch 205 binary runtime dependencies from a pinned Winlator commit,
-verify their SHA-256 values, and relocate their package paths before compiling.
+Source builds fetch pinned binary runtime dependencies, verify their SHA-256
+values, and relocate their package paths before compiling. The Wine 9.2 baseline
+uses matched assets from the official Winlator 10.1 APK; other runtime components
+retain their existing pinned sources.
 The APK includes these dependencies and launches independently of Winlator or
 GameNative once your game files are imported.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the next launch test and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.3 release notes](docs/RELEASE-0.1.3.md) describe the new comparison and diagnostics. Earlier release notes retain the preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the next launch test and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.4 release notes](docs/RELEASE-0.1.4.md) describe the runtime comparison. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

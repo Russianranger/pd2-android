@@ -9,6 +9,7 @@ import com.winlator.core.DefaultVersion;
 import com.winlator.core.FileUtils;
 import com.winlator.core.GeneralComponents;
 import com.winlator.core.StringUtils;
+import com.winlator.core.WineInfo;
 import com.winlator.xserver.XServer;
 
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
@@ -45,6 +47,11 @@ public class WinHandler {
 
     public WinHandler(XServerDisplayActivity activity) {
         this.activity = activity;
+    }
+
+    String getWineIdentifier() {
+        return activity.getContainer() != null
+                ? activity.getContainer().getWineVersion() : WineInfo.MAIN_WINE_INFO.identifier();
     }
 
     protected boolean sendPacket(int port) {
@@ -341,6 +348,10 @@ public class WinHandler {
                 gamepadHandler.handleGetGamepadRequest(port);
                 break;
             }
+            case RequestCodes.GET_GAMEPAD_STATE: {
+                gamepadHandler.handleGetGamepadStateRequest(port);
+                break;
+            }
             case RequestCodes.RELEASE_GAMEPAD: {
                 gamepadHandler.handleReleaseGamepadRequest(port);
                 break;
@@ -420,6 +431,21 @@ public class WinHandler {
         }
     }
 
+    /** Drop an incomplete datagram without terminating the receive loop. */
+    boolean dispatchPacket(int packetBytes, int port) throws IOException {
+        if (packetBytes < 1 || packetBytes > receiveData.capacity()) return false;
+        receiveData.position(0);
+        receiveData.limit(packetBytes);
+        try {
+            byte requestCode = receiveData.get();
+            handleRequest(requestCode, port);
+            return true;
+        }
+        catch (BufferUnderflowException | IllegalArgumentException invalidPacket) {
+            return false;
+        }
+    }
+
     public void start() {
         try {
             localhost = InetAddress.getByName("127.0.0.1");
@@ -440,12 +466,12 @@ public class WinHandler {
                 socket.bind(new InetSocketAddress(localhost, SERVER_PORT));
 
                 while (running) {
+                    receivePacket.setLength(receiveData.capacity());
                     socket.receive(receivePacket);
+                    if (!receivePacket.getAddress().equals(localhost) || receivePacket.getLength() == 0) continue;
 
                     synchronized (actions) {
-                        receiveData.rewind();
-                        byte requestCode = receiveData.get();
-                        handleRequest(requestCode, receivePacket.getPort());
+                        dispatchPacket(receivePacket.getLength(), receivePacket.getPort());
                     }
                 }
             }

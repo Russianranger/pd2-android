@@ -13,6 +13,8 @@ import com.winlator.container.Container;
 import com.winlator.container.ContainerManager;
 import com.winlator.container.DXWrappers;
 import com.winlator.core.Callback;
+import com.winlator.core.FileUtils;
+import com.winlator.core.WineInfo;
 import com.winlator.core.WineRegistryEditor;
 import com.winlator.core.WineThemeManager;
 import com.winlator.xenvironment.RootFS;
@@ -30,8 +32,10 @@ public final class Pd2Runtime {
     public static final String TURNIP_VIRGL = "turnip,virgl";
     public static final String DEFAULT_RENDERER = TURNIP_ZINK;
     public static final String CONTAINER_NAME = "Project Diablo 2";
+    public static final String RUNTIME_REVISION = "wine-9.2-pd2-1";
     private static final String CONTAINER_ID = "pd2_container_id";
     private static final String MANAGED = "pd2Managed";
+    private static final String REVISION = "pd2RuntimeRevision";
     private static final String WIN_COMPONENTS =
             "direct3d=0,directsound=0,directmusic=0,directshow=0,directplay=0,"+
             "xaudio=0,vcrun2005=0,vcrun2010=1,wmdecoder=0";
@@ -105,7 +109,10 @@ public final class Pd2Runtime {
                 manager.createContainerAsync(defaults(activity), container -> {
                     Container ready = container;
                     try {
-                        if (ready != null) configure(activity, ready, DEFAULT_RENDERER);
+                        if (ready != null) {
+                            if (!hasPrefixFiles(ready)) throw new IllegalStateException("The fresh Wine prefix is incomplete");
+                            configure(activity, ready, DEFAULT_RENDERER);
+                        }
                     }
                     catch (RuntimeException error) {
                         ready = null;
@@ -143,7 +150,18 @@ public final class Pd2Runtime {
         container.setEnvVars(environment(context));
         container.setDrives("P:" + installed.getAbsolutePath());
         container.putExtra(MANAGED, "1");
+        container.putExtra(REVISION, RUNTIME_REVISION);
         container.saveData();
+        // Do not publish a new container ID until its complete configuration
+        // has been persisted. A failed migration leaves the old prefix intact.
+        try {
+            JSONObject persisted = new JSONObject(FileUtils.readString(container.getConfigFile()));
+            if (!RUNTIME_REVISION.equals(persisted.getJSONObject("extraData").optString(REVISION)))
+                throw new IllegalStateException("Cannot save the private Wine container");
+        }
+        catch (JSONException | RuntimeException error) {
+            throw new IllegalStateException("Cannot save the private Wine container", error);
+        }
 
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = preferences.edit().putInt(CONTAINER_ID, container.id);
@@ -264,18 +282,28 @@ public final class Pd2Runtime {
         return TURNIP_ZINK.equals(renderer) || TURNIP_VIRGL.equals(renderer);
     }
 
-    private static boolean isManagedAndReady(Container container) {
-        if (container == null || !"1".equals(container.getExtra(MANAGED))) return false;
+    static boolean isManagedAndReady(Container container) {
+        if (container == null || !"1".equals(container.getExtra(MANAGED))
+                || !RUNTIME_REVISION.equals(container.getExtra(REVISION))
+                || !WineInfo.MAIN_WINE_INFO.identifier().equals(container.getWineVersion())) return false;
+        return hasPrefixFiles(container);
+    }
+
+    private static boolean hasPrefixFiles(Container container) {
         File root = container.getRootDir();
         return root != null && container.getConfigFile().isFile()
                 && new File(root, ".wine/user.reg").isFile()
+                && new File(root, ".wine/system.reg").isFile()
                 && new File(root, ".wine/drive_c/windows/system32/kernel32.dll").isFile()
-                && new File(root, ".wine/drive_c/windows/syswow64/ntdll.dll").isFile();
+                && new File(root, ".wine/drive_c/windows/syswow64/ntdll.dll").isFile()
+                && new File(root, ".wine/drive_c/windows/syswow64/xinput1_3.dll").isFile()
+                && new File(root, ".wine/drive_c/windows/system32/drivers/winexinput.sys").isFile();
     }
 
     private static JSONObject defaults(Context context) throws JSONException {
         return new JSONObject()
                 .put("name", CONTAINER_NAME)
+                .put("wineVersion", WineInfo.MAIN_WINE_INFO.identifier())
                 .put("screenSize", "1280x720")
                 .put("envVars", environment(context))
                 .put("graphicsDriver", DEFAULT_RENDERER)

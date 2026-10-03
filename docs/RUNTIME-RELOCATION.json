@@ -14,17 +14,11 @@
       "sha256": "8fa7ed6c92cfd93799e2f632397acaacb679365a5b6b5f59c137a85e6f970de4"
     },
     "app/src/main/assets/container_pattern.tzst": {
-      "changed_members": [
-        {
-          "bytes": 0,
-          "name": ".wine/dosdevices/z:",
-          "replacements": 1
-        }
-      ],
+      "changed_members": [],
       "members": 447,
-      "original_sha256": "8ae3a4fee33e86da26826395650bb07c6f49ce94629ea4b9442bc633b6b8ca33",
-      "replacements": 1,
-      "sha256": "482c56e22a4fa37c2a851f6d4d8f258f6480167a9fc6b636bbe4c517c367e2fa"
+      "original_sha256": "84affc05eded3603ca8eb4f6504790e4c1f4ba1f178e8c422fc2be4f31bb2631",
+      "replacements": 0,
+      "sha256": "84affc05eded3603ca8eb4f6504790e4c1f4ba1f178e8c422fc2be4f31bb2631"
     },
     "app/src/main/assets/dxwrapper/cnc-ddraw-6.6/ddraw.tzst": {
       "changed_members": [],
@@ -165,21 +159,6 @@
           "bytes": 5975,
           "name": "./var/db/Makefile",
           "replacements": 19
-        },
-        {
-          "bytes": 781200,
-          "name": "./opt/wine/bin/wineserver",
-          "replacements": 3
-        },
-        {
-          "bytes": 56880,
-          "name": "./opt/wine/lib/wine/x86_64-unix/nsiproxy.so",
-          "replacements": 1
-        },
-        {
-          "bytes": 600976,
-          "name": "./opt/wine/lib/wine/x86_64-unix/ntdll.so",
-          "replacements": 2
         },
         {
           "bytes": 360720,
@@ -965,12 +944,27 @@
           "bytes": 67752,
           "name": "./usr/lib/libcom_err.so.3.0",
           "replacements": 1
+        },
+        {
+          "bytes": 739920,
+          "name": "./opt/wine/bin/wineserver",
+          "replacements": 3
+        },
+        {
+          "bytes": 56880,
+          "name": "./opt/wine/lib/wine/x86_64-unix/nsiproxy.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 558048,
+          "name": "./opt/wine/lib/wine/x86_64-unix/ntdll.so",
+          "replacements": 2
         }
       ],
-      "members": 3309,
-      "original_sha256": "aeea2938cc63b0708cb2da999b5a0e3915229b6ab4eac13de061c87f34ffc1dc",
+      "members": 3256,
+      "original_sha256": "8acebc929a1ad185311593daf94b91a6f6cedc03c844dd615f91fab3bec334f2",
       "replacements": 447,
-      "sha256": "e370bf627611c4d2cce1f20cf3155c7ef8c0a10e0569b366af787eec2d278dbc"
+      "sha256": "ea4cc44e353ec48a4669019a6248850c0030020ea3753e5da6e62a32fdedcae4"
     },
     "app/src/main/assets/rootfs_patches.tzst": {
       "changed_members": [

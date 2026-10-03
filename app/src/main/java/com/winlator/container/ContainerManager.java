@@ -43,25 +43,49 @@ public class ContainerManager {
     private void loadContainers() {
         containers.clear();
         maxContainerId = 0;
-
-        try {
-            File[] files = homeDir.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isDirectory()) {
-                        if (file.getName().startsWith(RootFS.USER+"-")) {
-                            Container container = new Container(Integer.parseInt(file.getName().replace(RootFS.USER+"-", "")));
-                            container.setRootDir(new File(homeDir, RootFS.USER+"-"+container.id));
-                            JSONObject data = new JSONObject(FileUtils.readString(container.getConfigFile()));
-                            container.loadData(data);
-                            containers.add(container);
-                            maxContainerId = Math.max(maxContainerId, container.id);
-                        }
-                    }
-                }
+        File[] files = homeDir.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            int id = containerId(file.getName());
+            if (id == 0) continue;
+            // Reserve even incomplete prefixes and occupied files. Recovery must
+            // never reuse or remove a directory left by an interrupted install.
+            maxContainerId = Math.max(maxContainerId, id);
+            if (!file.isDirectory() || FileUtils.isSymlink(file)) continue;
+            Container container = new Container(id);
+            container.setRootDir(file);
+            File config = container.getConfigFile();
+            if (!config.isFile() || FileUtils.isSymlink(config)) continue;
+            try {
+                container.loadData(new JSONObject(FileUtils.readString(config)));
+                containers.add(container);
+            }
+            catch (JSONException | RuntimeException error) {
+                // A damaged prefix is retained, and other valid prefixes can
+                // still be used. It is not an eligible launch target.
             }
         }
-        catch (JSONException e) {}
+    }
+
+    private static int containerId(String name) {
+        String prefix = RootFS.USER + "-";
+        if (!name.startsWith(prefix)) return 0;
+        String value = name.substring(prefix.length());
+        if (value.isEmpty() || value.charAt(0) == '0') return 0;
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) < '0' || value.charAt(i) > '9') return 0;
+        }
+        try { return Integer.parseInt(value); }
+        catch (NumberFormatException error) { return 0; }
+    }
+
+    private int nextContainerId() {
+        // Another manager or a previous failed create may have reserved a path
+        // after this instance was loaded. Check the filesystem again each time.
+        File[] entries = homeDir.listFiles();
+        if (entries != null) for (File entry : entries)
+            maxContainerId = Math.max(maxContainerId, containerId(entry.getName()));
+        return maxContainerId == Integer.MAX_VALUE ? 0 : maxContainerId + 1;
     }
 
     public void activateContainer(Container container) {
@@ -95,13 +119,15 @@ public class ContainerManager {
         });
     }
 
-    private Container createContainer(JSONObject data) {
+    synchronized Container createContainer(JSONObject data) {
         try {
-            int id = maxContainerId + 1;
+            int id = nextContainerId();
+            if (id == 0) return null;
             data.put("id", id);
 
             File containerDir = new File(homeDir, RootFS.USER+"-"+id);
             if (!containerDir.mkdirs()) return null;
+            maxContainerId = id;
 
             Container container = new Container(id);
             container.setRootDir(containerDir);
@@ -111,21 +137,21 @@ public class ContainerManager {
             if (!isMainWineVersion) container.setWineVersion(data.getString("wineVersion"));
 
             if (!extractContainerPatternFile(container.getWineVersion(), containerDir)) {
-                FileUtils.delete(containerDir);
                 return null;
             }
 
             container.saveData();
-            maxContainerId++;
+            if (!container.getConfigFile().isFile()) return null;
             containers.add(container);
             return container;
         }
-        catch (JSONException e) {}
+        catch (JSONException | RuntimeException error) {}
         return null;
     }
 
     private void duplicateContainer(Container srcContainer) {
-        int id = maxContainerId + 1;
+        int id = nextContainerId();
+        if (id == 0) return;
 
         File dstDir = new File(homeDir, RootFS.USER+"-"+id);
         if (!dstDir.mkdirs()) return;
@@ -156,7 +182,7 @@ public class ContainerManager {
         dstContainer.setDesktopTheme(srcContainer.getDesktopTheme());
         dstContainer.saveData();
 
-        maxContainerId++;
+        maxContainerId = Math.max(maxContainerId, id);
         containers.add(dstContainer);
     }
 
@@ -225,7 +251,7 @@ public class ContainerManager {
     }
 
     public int getNextContainerId() {
-        return maxContainerId + 1;
+        return nextContainerId();
     }
 
     public Container getContainerById(int id) {
@@ -244,7 +270,7 @@ public class ContainerManager {
         }
     }
 
-    private boolean extractContainerPatternFile(String wineVersion, File containerDir) {
+    boolean extractContainerPatternFile(String wineVersion, File containerDir) {
         if (WineInfo.isMainWineVersion(wineVersion)) {
             boolean result = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, "container_pattern.tzst", containerDir);
 

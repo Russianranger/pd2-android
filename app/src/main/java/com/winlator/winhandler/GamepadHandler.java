@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class GamepadHandler {
@@ -34,6 +35,9 @@ public class GamepadHandler {
     private static final byte GAMEPAD_MAX_COUNT = 4;
     private final WinHandler winHandler;
     private final List<Integer> gamepadClients = new CopyOnWriteArrayList<>();
+    private final List<Integer> legacyGamepadClients = new CopyOnWriteArrayList<>();
+    private final HashSet<Integer> legacyXInputProcesses = new HashSet<>();
+    private volatile GamepadSlot legacyGamepad;
     private byte dinputMapperType = DINPUT_MAPPER_TYPE_XINPUT;
     private final GamepadSlot[] gamepadSlots = new GamepadSlot[GAMEPAD_MAX_COUNT];
     private final ArrayList<ExternalController> connectedControllers = new ArrayList<>(GAMEPAD_MAX_COUNT);
@@ -75,6 +79,7 @@ public class GamepadHandler {
                 winHandler.sendPacket(port);
             });
         }
+        sendLegacyState(neutral);
     }
 
     public static class GamepadModel {
@@ -169,7 +174,12 @@ public class GamepadHandler {
     }
 
     public void handleGetGamepadRequest(int port) {
+        if (isLegacyClient(port) && winHandler.receiveData.remaining() < 6) return;
         updateGamepadSlots();
+        if (isLegacyClient(port)) {
+            handleLegacyGetGamepadRequest(port);
+            return;
+        }
 
         int clientIndex = gamepadClients.indexOf(port);
         if (isAnyGamepadConnected()) {
@@ -232,6 +242,70 @@ public class GamepadHandler {
         });
     }
 
+    private boolean isLegacyClient(int port) {
+        return LegacyGamepadProtocol.usesLegacyProtocol(winHandler.getWineIdentifier(), port);
+    }
+
+    private void handleLegacyGetGamepadRequest(int port) {
+        ByteBuffer request = winHandler.receiveData;
+        if (request.remaining() < 6) return;
+        boolean xinput = request.get() == 1;
+        boolean notify = request.get() == 1;
+        int processId = request.getInt();
+        if (xinput) legacyXInputProcesses.add(processId);
+        GamepadSlot selected = null;
+        // Match upstream AUTO: avoid a duplicate DInput device for an XInput process.
+        if (xinput || !legacyXInputProcesses.contains(processId)) {
+            for (GamepadSlot slot : gamepadSlots) if (slot != null) { selected = slot; break; }
+        }
+        if (selected != null) legacyGamepad = selected;
+        else if (!isAnyGamepadConnected()) legacyGamepad = null;
+        if (selected != null && notify) {
+            if (!legacyGamepadClients.contains(port)) legacyGamepadClients.add(port);
+        }
+        else legacyGamepadClients.remove(Integer.valueOf(port));
+        final GamepadSlot device = selected;
+        final GamepadState state = device != null ? snapshot(device) : new GamepadState();
+        final long generation = inputGeneration;
+        final byte mapper = dinputMapperType;
+        winHandler.addAction(() -> {
+            int id = device != null ? LegacyGamepadProtocol.GAMEPAD_ID : 0;
+            winHandler.sendPacket(port, LegacyGamepadProtocol.device(id, mapper, device != null ? device.getName() : ""));
+            if (device != null) winHandler.sendPacket(port, LegacyGamepadProtocol.state(id, true,
+                    inputEnabled && generation == inputGeneration ? state : new GamepadState()));
+        });
+    }
+
+    /** Legacy DLLs normally subscribe to pushes; retain their optional state poll. */
+    public void handleGetGamepadStateRequest(int port) {
+        if (!isLegacyClient(port) || winHandler.receiveData.remaining() < 4) return;
+        int requestedId = winHandler.receiveData.getInt();
+        final GamepadSlot device = legacyGamepad;
+        final boolean connected = device != null && requestedId == LegacyGamepadProtocol.GAMEPAD_ID;
+        final GamepadState state = connected ? snapshot(device) : new GamepadState();
+        final long generation = inputGeneration;
+        winHandler.addAction(() -> winHandler.sendPacket(port, LegacyGamepadProtocol.state(requestedId, connected,
+                inputEnabled && generation == inputGeneration ? state : new GamepadState())));
+    }
+
+    private GamepadState snapshot(GamepadSlot device) {
+        GamepadState state = new GamepadState();
+        state.copy(device.getGamepadState());
+        state.thumbLX = filterStick(state.thumbLX);
+        state.thumbLY = filterStick(state.thumbLY);
+        state.thumbRX = filterStick(state.thumbRX);
+        state.thumbRY = filterStick(state.thumbRY);
+        return state;
+    }
+
+    private void sendLegacyState(GamepadState state) {
+        final GamepadSlot device = legacyGamepad;
+        final long generation = inputGeneration;
+        for (final int port : legacyGamepadClients) winHandler.addAction(() ->
+                winHandler.sendPacket(port, LegacyGamepadProtocol.state(LegacyGamepadProtocol.GAMEPAD_ID, device != null,
+                        inputEnabled && generation == inputGeneration ? state : new GamepadState())));
+    }
+
     private void writeStateToBuffer(ByteBuffer buffer, GamepadState state) {
         if (dinputMapperType == DINPUT_MAPPER_TYPE_XINPUT) {
             buffer.putShort(state.buttons);
@@ -258,15 +332,11 @@ public class GamepadHandler {
 
     public void sendGamepadState(final GamepadSlot gamepadSlot) {
         // Preserve release edges, even if a previous packet is still queued.
-        if (!inputEnabled || !winHandler.initReceived || gamepadClients.isEmpty()) return;
+        if (!inputEnabled || !winHandler.initReceived || (gamepadClients.isEmpty() && legacyGamepadClients.isEmpty())) return;
         final byte slot = (byte)ArrayUtils.indexOf(gamepadSlots, gamepadSlot);
         if (slot == ArrayUtils.INDEX_NOT_FOUND) return;
-        final GamepadState state = new GamepadState();
-        state.copy(gamepadSlot.getGamepadState());
-        state.thumbLX = filterStick(state.thumbLX);
-        state.thumbLY = filterStick(state.thumbLY);
-        state.thumbRX = filterStick(state.thumbRX);
-        state.thumbRY = filterStick(state.thumbRY);
+        final GamepadState state = snapshot(gamepadSlot);
+        if (gamepadSlot == legacyGamepad) sendLegacyState(state);
         final long generation = inputGeneration;
         final ByteBuffer buffer = winHandler.sendData;
 
@@ -282,6 +352,14 @@ public class GamepadHandler {
     }
 
     public void handleReleaseGamepadRequest(int port) {
+        if (isLegacyClient(port)) {
+            legacyGamepadClients.remove(Integer.valueOf(port));
+            if (legacyGamepadClients.isEmpty()) {
+                legacyGamepad = null;
+                legacyXInputProcesses.clear();
+            }
+            return;
+        }
         int index = gamepadClients.indexOf(port);
         if (index != -1) gamepadClients.remove(index);
     }

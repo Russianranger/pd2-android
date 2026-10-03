@@ -30,6 +30,7 @@ import com.winlator.R;
 import com.winlator.XServerDisplayActivity;
 import com.winlator.container.Container;
 import com.winlator.core.FileUtils;
+import com.winlator.core.WineInfo;
 import com.winlator.xenvironment.RootFS;
 import com.winlator.xenvironment.RootFSInstaller;
 
@@ -311,6 +312,9 @@ public final class Pd2Activity extends AppCompatActivity {
             JSONObject report = new JSONObject().put("appVersion", appVersion()).put("android", Build.VERSION.RELEASE)
                 .put("device", Build.MANUFACTURER + " " + Build.MODEL).put("supportedAbis", new JSONArray(Build.SUPPORTED_ABIS))
                 .put("runtimePrepared", Pd2Runtime.hasRuntime(this)).put("sessionRunning", XServerDisplayActivity.hasPd2Session())
+                .put("wineVersion", WineInfo.MAIN_WINE_INFO.identifier())
+                .put("runtimeRevision", Pd2Runtime.RUNTIME_REVISION)
+                .put("rootfsVersion", RootFS.find(this).getVersion())
                 .put("renderer", preferences.getString("pd2_renderer", "turnip,zink"))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
                 .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")
