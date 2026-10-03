@@ -8,9 +8,19 @@ The initial implementation uses Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current APK remains **0.1.2, a diagnostics and stability preview**. The user confirmed that 0.1.1 opens, prepares the runtime, and imports their installation on the Thor. Preserve those accepted steps. The 0.1.2 Stability/Wine DirectDraw compatibility attempt also failed. Its new diagnostics locate the first captured game fault in native `Fog.dll`, but the underlying cause remains unconfirmed; gameplay is not qualified. This update records evidence and next steps only, with no new APK, code, version, or CI result.
+The current implementation is **0.1.3, a Fog startup diagnostics preview**, version code 4. Launcher startup, runtime preparation, and import were accepted on the Thor; preserve those steps. Both 0.1.2 Stability and Interpreter failed at the same native Fog stack write. The user confirms that the exact source folder works in GameNative, but its reported Bionic Proton 9.0/Box64 0.3.7 Performance runtime differs from the app's Wine 10.10/Box64 0.4.4. Gameplay and the underlying failure cause remain unqualified.
 
-The next test uses the existing 0.1.2 app: keep **Turnip + Zink · Wine DirectDraw (compatibility)** and select **Launch settings → CPU mode → Interpreter (diagnostic; very slow)**. Press Play once, allow at most 60 seconds for the title, then stop/export the result and restore Stability. Do not uninstall, clear storage, prepare the accepted runtime again, re-import the accepted game files, or repeat the failed Stability attempt.
+The next test installs 0.1.3 over 0.1.2, selects the fifth **Launch settings** choice, **Turnip + Zink · Glide (GameNative arguments)**, and explicitly sets **CPU mode → Stability (default)**. Press Play once, allow at most 60 seconds for the title/menu, then stop/export whether it succeeds or fails. Keep the accepted runtime/import; do not uninstall, clear storage, prepare again, re-import, or repeat Interpreter.
+
+## 0.1.3 diagnostic scope
+
+- The fifth choice uses `-3dfx -dxnocompatmodefix` without `-w`, with the imported native wrapper and Stability. This matches arguments only; the app does not replace its runtime with GameNative's Bionic Proton. The D2DX compatibility flag is a later wrapper option, not an explanation for the early Fog stack fault.
+- Wine `+snoop` is enabled with a written-and-verified `Fog.*` registry filter. It records native export ordinals/arguments and caller return addresses where calls traverse those exports. It does not establish internal recursion or provide a complete stack. Box64 0.4.4's x64-only `SHOWBT` is not used as an x86-game trace.
+- `launch.json` includes selected persisted `InstallPath`, `GamePath`, Wine version settings, and `SnoopInclude`; full registry hives are not exported.
+- `installation-files.json` adds PE stack reserve/commit sizes and SHA-256 for `Game.exe`, `Fog.dll`, and `PD2_EXT.dll` when at most 8 MiB. Larger files receive a bounded hash error; no binaries or saves are exported.
+- `game-logs/` includes the newest two dated D2 logs plus `d2dx_log.txt`/`d2gl.log` when present, each capped at 256 KiB with head/tail preservation. Symlinks are excluded.
+
+The application ID, signing identity, SDK levels, runtime archives, and imported installation are preserved. This pass adds diagnostics and one launch comparison; it adds no unrelated feature, performance claim, or native-controller qualification. The local 0.1.3 tests and APK build passed; published CI remains pending until inspected.
 
 ## 0.1.2 device failure: native Fog stack overflow
 
@@ -21,6 +31,8 @@ The game thread loaded native `Fog.dll` at `0x6FF50000`. Its first captured faul
 The fault location and stack-overflow classification are established for this captured attempt. The exact Fog function and whether the failure reflects recursion, legitimate stack consumption, or CPU-translation behavior are not established. Earlier RPC exceptions on other threads and directory/status warnings have not been shown to cause this game-thread failure. Do not delete imported files, increase the game stack, replace DLLs, or claim a renderer/translator fix from these observations.
 
 `launch.json` records runtime exit status 0 despite the captured game fault. That outer runtime result does not mean the Windows game started successfully. See the summary-only [device evidence note](evidence/2026-10-03-fog-startup.md).
+
+The subsequent Interpreter bundle confirms `interpreter: true` and `BOX64_DYNAREC=0`, yet fails at `Fog.dll + 0x1879B` with the same write to `0x00121FFC` and 1 MiB stack. It returned in about nine seconds with outer status 0. This does not support attributing the fault solely to the dynamic recompiler. The working GameNative screenshots show Bionic Proton 9.0 x86_64, Box64 0.3.7 Performance, Turnip `25.3.0_R3_Gmem`, WineD3D Vulkan, and `-3dfx -dxnocompatmodefix`. Windows version and environment settings are not visible; do not infer them or an unseen FEX setup.
 
 ## 0.1.1 device evidence and 0.1.2 response
 
@@ -46,7 +58,7 @@ The 0.1.2 response:
 
 These changes make failures distinguishable without repeating import/setup or cycling through all renderers before collecting evidence. The first compatibility test qualifies client appearance only; using Wine's built-in DirectDraw may bypass D2GL/controller features, which need their own later test. CPU profiles and wrapper selection are compatibility candidates, not proven remedies or performance optimizations.
 
-Interpreter is now the next diagnostic attempt because the Stability compatibility test failed. Allow up to 60 seconds for the title screen. If it remains unfinished, return to the launcher, stop the client, export that result, and restore Stability. If the menu appears, record that observation, then stop/export before pursuing gameplay. This is a bounded diagnostic interval, not proof that a valid interpreter launch must complete within 60 seconds.
+The Interpreter comparison was subsequently completed and failed as recorded above. Preserve its result rather than repeating it; the next 0.1.3 comparison is the fifth Glide choice with Stability.
 
 ## Startup correction and diagnostics
 
@@ -93,18 +105,25 @@ The completed local 0.1.2 checks are:
 - `python3 tests/test_session_logs.py`: 26 host checks passed for attempt-log retention, size bounds, preservation, and cleanup behavior.
 - The ARM64 APK build passed in 22 seconds as version 0.1.2/code 3. Application ID, signing certificate, minimum SDK 26, and target SDK 28 are unchanged. Runtime dependency sources/archives and the native libraries are unchanged from 0.1.1.
 
-These record the completed local 0.1.2 results. This evidence-only documentation update does not rebuild the APK or report a new CI result; local checks do not establish a published GitHub Actions result.
+The completed local 0.1.3 checks are:
+
+- All 20 Android 13/API 33 Robolectric tests passed with no failures, errors, or skips. They include PE stack fields, hash bounds, allowed game-log exports and symlink exclusion, and persistence of the fifth launch choice.
+- The 47 import checks, 11 crash-recovery checks, 26 session-log checks, and input-router checks passed again.
+- The ARM64 APK build passed in 1 minute 51 seconds; all 205 final runtime dependency hashes and 49 relocated assets passed verification. Version 0.1.3/code 4 retains `com.pd2.thor`, min SDK 26, target SDK 28, and the same preview signing certificate.
+- APK size: 172,992,519 bytes. SHA-256: `5124f9b7a5560875b2ab5d19d33985da743b26448ccd1ef4005c77fbdd76b03f`.
+
+These local results do not establish a published GitHub Actions result or a physical PD2 startup fix.
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user has now accepted launcher startup, runtime preparation, and import on 0.1.1; the original 0.1.0 startup-crash cause and the current Windows-client stack-overflow cause remain unconfirmed.
 
-The existing 0.1.2 APK contains the next Interpreter diagnostic option. Preserve the accepted steps and continue from the failing client launch:
+The next physical step uses the built 0.1.3 APK for the fifth-profile comparison. Preserve the accepted steps and continue from the failing client launch:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
 | Launcher startup | Accepted on 0.1.1 | User opened the launcher and completed setup/import |
 | Runtime preparation | Accepted on 0.1.1 | User report and `runtimePrepared: true` in support ZIP |
 | Installation import | Accepted on 0.1.1 | User report, import-completed log, and structural validation details |
-| Client launch | Failed on 0.1.1 and 0.1.2 Stability compatibility | New trace locates the first game-thread stack overflow in native Fog; Interpreter comparison pending |
+| Client launch | Failed on 0.1.1 and both 0.1.2 CPU comparisons | Native Fog stack write captured; 0.1.3 argument/trace comparison pending |
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
 | Native controller | Pending | Left-stick movement, independent right-stick aiming, triggers/buttons, and controller UI on the Thor |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |

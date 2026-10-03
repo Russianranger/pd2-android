@@ -4,17 +4,17 @@ A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruc
 
 The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 10.10 and Box64 0.4.4 from Winlator 11.2, with an Android X server and controller bridge. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.2 diagnostics and stability preview.** The user confirmed that 0.1.1 opens, prepares its runtime, and imports the installation on the Thor. Launching PD2 with each of the four graphics profiles returned to the launcher. The last surviving runtime log reaches `Game.exe` and ends with a Wine stack overflow at `6FF6879A`; the underlying cause is not yet confirmed.
+**Status: 0.1.3 Fog startup diagnostics preview.** Launcher startup, runtime preparation, and installation import were accepted on the Thor. Both 0.1.2 Stability and Interpreter attempts failed at the same native Fog stack write. The exact source folder works in GameNative, whose reported Bionic Proton 9.0/Box64 0.3.7 runtime differs from this app's Wine 10.10/Box64 0.4.4. The underlying failure cause remains unconfirmed.
 
-This preview changes the default Box64 CPU profile from Conservative to Stability, adds a genuine Wine DirectDraw compatibility path, and captures exception/module-load diagnostics with separate launch logs. These changes support the next diagnosis; they are not a confirmed gameplay fix.
+This preview adds a fifth launch choice matching the user's GameNative arguments and captures filtered Fog export calls, selected registry values, PE stack sizes/core-file hashes, and bounded game logs. It preserves the runtime and imported files. It is a diagnostic comparison, not a confirmed fix or a recreation of GameNative's runtime.
 
 Building the APK and passing automated checks do not establish that PD2 launches, renders, accepts both sticks, or connects online on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
 
-## Next 0.1.2 check
+## Next 0.1.3 check
 
-Install 0.1.2 over the existing app without uninstalling or clearing storage; the application ID and preview signing identity are unchanged, preserving private files. Keep the accepted runtime and imported installation. **Do not prepare or import them again for this test.**
+Install 0.1.3 over 0.1.2 without uninstalling or clearing storage; the application ID and preview signing identity are unchanged. **Reuse the accepted runtime and installation. Do not prepare or import again.**
 
-In **Launch settings**, select **Turnip + Zink · Wine DirectDraw (compatibility)**, then press **Play once**. If it returns to the launcher, immediately choose **Export support logs** and upload the ZIP to the chat. Report the last screen visible and whether a game window appeared. This path uses Wine's built-in DirectDraw rather than the imported D2GL DirectDraw wrapper; it tests whether the client can display before qualifying D2GL/controller features. See [Testing](docs/TESTING.md) for the optional second Interpreter attempt.
+In **Launch settings**, select the fifth choice, **Turnip + Zink · Glide (GameNative arguments)**, and set **CPU mode → Stability (default)**. Press **Play once**, allow up to **60 seconds** for the title/menu, then export support logs whether it succeeds or fails. If unfinished, return to the launcher and stop the client before exporting. Report the last visible screen; see [Testing](docs/TESTING.md).
 
 If the whole Android app closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Java crash capture does not cover every possible process exit.
 
@@ -48,9 +48,9 @@ Private game files and saves survive APK updates using the same signing identity
 
 **Mouse / keyboard layout** turns the controller into mouse and keyboard input. Its left stick sends WASD, so enable PD2's WASD movement if you want to move using that fallback layout. The right stick moves the pointer; A and B provide left and right click. The quick menu also provides the Android keyboard and cursor-speed adjustment. Full bindings and switch tests are in [Testing](docs/TESTING.md).
 
-The screen size is 1280×720. Glide (`-3dfx -w`) retains the imported native wrapper; the Wine DirectDraw compatibility choices (`-ddraw -w`) explicitly select Wine's built-in `ddraw`. The 0.1.1 DirectDraw choices still preferred the native wrapper, so those failed attempts were not a built-in Wine baseline. Native controller support may depend on D2GL and remains a separate qualification gate after the first client display.
+The screen size is 1280×720. Standard Glide uses `-3dfx -w`; the fifth Glide choice uses `-3dfx -dxnocompatmodefix` without `-w`, matching the supplied GameNative arguments. Both preserve the imported native wrapper. `-dxnocompatmodefix` is a D2DX wrapper option and does not explain the already captured early Fog fault. Wine DirectDraw compatibility (`-ddraw -w`) explicitly uses built-in `ddraw`. Native controller support remains a separate qualification gate after the first client display.
 
-Under **Launch settings → CPU mode**, **Stability (default)** is the CPU default. **Interpreter (diagnostic; very slow)** is available for one diagnostic comparison after a captured Stability failure. These profiles and the Turnip/Zink or Turnip/VirGL choices are candidates for qualification, not proven fastest settings.
+Under **Launch settings → CPU mode**, **Stability (default)** remains the CPU default. The completed **Interpreter (diagnostic; very slow)** comparison failed at the same Fog stack write; do not repeat it for the next test. These profiles and the Turnip/Zink or Turnip/VirGL choices are candidates for qualification, not proven fastest settings.
 
 ## Development
 
@@ -59,6 +59,6 @@ verify their SHA-256 values, and relocate their package paths before compiling.
 The APK includes these dependencies and launches independently of Winlator or
 GameNative once your game files are imported.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the next launch test and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.2 release notes](docs/RELEASE-0.1.2.md) describe the diagnostics and CPU-profile changes; [0.1.1 release notes](docs/RELEASE-0.1.1.md) and [0.1.0 release notes](docs/RELEASE-0.1.0.md) retain the earlier preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the next launch test and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.3 release notes](docs/RELEASE-0.1.3.md) describe the new comparison and diagnostics. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

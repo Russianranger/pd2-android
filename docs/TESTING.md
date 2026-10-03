@@ -1,17 +1,17 @@
-# 0.1.2 launch diagnostics and Thor qualification
+# 0.1.3 Fog startup diagnostic test
 
-Launcher startup, runtime preparation, and installation import were accepted on 0.1.1. The new 0.1.2 Stability/Wine DirectDraw attempt also failed. Its trace locates the first captured game fault in native `Fog.dll + 0x1879A`, with Wine reporting a stack overflow; the underlying cause is unconfirmed. The existing 0.1.2 APK already contains the next Interpreter diagnostic option. This documentation update does not introduce a new APK or claim a fix.
+Launcher startup, runtime preparation, and import remain accepted. Both 0.1.2 Stability and Interpreter attempts failed at the same native Fog stack write. The exact source folder works in GameNative with a different runtime. The 0.1.3 preview adds a matching-arguments comparison and better evidence collection; it does not claim a confirmed fix.
 
 ## Next launch test
 
-1. Keep the installed **0.1.2** app and its accepted runtime/game files. **Do not prepare, import, reinstall, or repeat the failed Stability attempt.**
-2. Keep **Launch settings → Turnip + Zink · Wine DirectDraw (compatibility)** selected.
-3. Select **Launch settings → CPU mode → Interpreter (diagnostic; very slow)**.
-4. Press **Play once** and allow at most **60 seconds** for the title screen. Record whether it returns to the launcher, displays the title/menu, or remains unfinished at the limit.
+1. Install **0.1.3 over 0.1.2** without uninstalling or clearing storage. **Reuse the accepted runtime/game files; do not Prepare runtime or import again.**
+2. In **Launch settings**, select the fifth choice: **Turnip + Zink · Glide (GameNative arguments)**.
+3. Select **CPU mode → Stability (default)**. Do not repeat the completed Interpreter test.
+4. Press **Play once** and allow at most **60 seconds** for the title/menu. Record whether it returns to the launcher, displays the title/menu, or remains unfinished at the limit.
 5. If it returns, export immediately. If it remains unfinished, use the quick menu to return to the launcher and press **Stop client**. If the menu appears, record that success, then stop the client without starting a gameplay test.
-6. Use **Export support logs**, save/share the new ZIP, and upload it to the chat. Restore **CPU mode → Stability (default)** afterward.
+6. Use **Export support logs**, save/share the new ZIP, and upload it to the chat whether the menu appeared or the attempt failed. Keep Stability selected.
 
-Interpreter can take much longer; the 60-second interval bounds this diagnostic comparison and does not establish how long every valid load should take. Do not cycle through the other graphics choices for this test.
+The 60-second interval bounds this diagnostic attempt; it does not establish how long every valid load should take. Do not cycle through the other graphics choices for this test.
 
 If the whole Android app closes:
 
@@ -20,9 +20,14 @@ If the whole Android app closes:
 3. **Retry launcher** lets you try again and retains the report. If the launcher becomes accessible, **Export support logs** provides the full diagnostic ZIP, including that report when present.
 4. If recovery never appears or no report can be shared, report that exact behavior. Some process exits cannot be captured by the Java handler. Do not uninstall or clear storage to retry.
 
-The preview uses the Box64 Stability preset and captures Wine exception/module-load output. Support export includes `launch.json`, `installation-files.json`, the current `runtime.log`, and up to four archived attempts under `attempts/`. These record settings, client-file inventory, and runtime process exit status. The active log is bounded at 8 MiB and each archived attempt at 2 MiB. This is diagnostic evidence, not proof that the stack overflow has been corrected.
+Support export retains the current runtime log and up to four archived attempts, and adds:
 
-The compatibility profile explicitly uses Wine's built-in DirectDraw. The old 0.1.1 DirectDraw profiles could still use the imported D2GL wrapper. This first test is for client display; native controller features may depend on D2GL and are not qualified by a built-in DirectDraw success.
+- Filtered Fog native-export call details in the runtime trace; these are not a complete stack or a trace of every internal recursive call.
+- Selected installation/version/trace registry settings in `launch.json`.
+- PE stack reserve/commit sizes and bounded core-file hashes in `installation-files.json`.
+- The newest two dated D2 logs and available D2DX/D2GL logs under `game-logs/`, each capped at 256 KiB. Binaries and saves are not included.
+
+The fifth choice uses `-3dfx -dxnocompatmodefix` without `-w` and retains the native wrapper. It matches the provided GameNative arguments, not GameNative's Bionic Proton/Box64 runtime. The compatibility flag does not establish a cause for the early Fog fault. The goal remains first client appearance and useful evidence, not controller/gameplay qualification.
 
 ## After PD2 reaches the menu
 
@@ -30,7 +35,7 @@ Use your complete, updated **English classic Diablo II + Lord of Destruction + P
 
 Report that the menu appeared and export the result before pursuing graphics/controller changes. Runtime preparation and import have already passed; this launch qualification does not require repeating them. The controls and save checklist below remains the later milestone, after an appropriate PD2/D2GL graphics path is established.
 
-Export support information after the Interpreter result before changing graphics settings. Further renderer comparisons should follow diagnosis of that result; do not cycle through all four settings before sending the evidence.
+Export support information after this fifth-profile result before changing graphics settings. Further comparisons should follow diagnosis of that result.
 
 ## Native controller
 
@@ -91,4 +96,4 @@ An import success is not a gameplay success. APK build/CI success is not physica
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
 
-The 0.1.2 local verification passed 13 Android 13/API 33 Robolectric tests and 26 session-log host checks. The ARM64 APK build also passed with the same application ID and signing certificate. These existing results cover launcher/service/recovery behavior, diagnostic policy/reporting, PE inventory, and log limits; they do not run PD2 or confirm a fix on the Thor. This evidence-only documentation update introduces no new build or CI result. The next physical test is the Interpreter comparison above.
+Local 0.1.3 verification passed all 20 Android 13/API 33 Robolectric tests, the 47 import/11 crash-recovery/26 session-log checks, input-router checks, and the ARM64 APK build. Published CI remains pending until inspected. These checks do not run PD2 or confirm the Fog failure's cause on the Thor.

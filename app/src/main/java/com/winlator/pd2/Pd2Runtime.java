@@ -128,6 +128,7 @@ public final class Pd2Runtime {
         Pd2InstallValidator.Result installation = Pd2InstallValidator.validate(installed);
         if (!installation.valid) throw new IllegalStateException(installation.message);
         seedInstallationRegistry(container, installed, installation);
+        seedFogDiagnostics(new File(container.getRootDir(), ".wine/user.reg"));
         container.setName(CONTAINER_NAME);
         container.setScreenSize("1280x720");
         container.setGraphicsDriver(renderer);
@@ -178,6 +179,63 @@ public final class Pd2Runtime {
 
     private static String windowsPath(String relative) {
         return "P:\\" + relative.replace('/', '\\');
+    }
+
+    /** Trace only native Fog exports in this app's dedicated prefix. */
+    private static void seedFogDiagnostics(File hive) {
+        if (!hive.isFile()) throw new IllegalStateException("The private Wine registry is missing");
+        String key = "Software\\Wine\\Debug";
+        String[] names = {"SnoopInclude", "SnoopExclude", "SnoopFromInclude", "SnoopFromExclude"};
+        try (WineRegistryEditor registry = new WineRegistryEditor(hive)) {
+            for (String name : names) {
+                String value = name.equals("SnoopInclude") ? "Fog.*" : "";
+                if (!value.equals(registry.getStringValue(key, name))) registry.setStringValue(key, name, value);
+            }
+        }
+        try (WineRegistryEditor registry = new WineRegistryEditor(hive)) {
+            for (String name : names) {
+                String value = name.equals("SnoopInclude") ? "Fog.*" : "";
+                if (!value.equals(registry.getStringValue(key, name)))
+                    throw new IllegalStateException("Cannot prepare the Fog startup trace");
+            }
+        }
+    }
+
+    /** Selected persisted startup settings only; never export a complete hive. */
+    static JSONObject registrySnapshot(Container container) throws JSONException {
+        JSONObject report = new JSONObject();
+        File root = container.getRootDir();
+        if (root == null) return report.put("available", false);
+        String[] hives = {"user.reg", "system.reg"};
+        for (String hive : hives) {
+            File file = new File(root, ".wine/" + hive);
+            if (!file.isFile()) { report.put(hive, new JSONObject().put("available", false)); continue; }
+            JSONObject values = new JSONObject();
+            try (WineRegistryEditor registry = new WineRegistryEditor(file)) {
+                String[] keys = hive.equals("user.reg")
+                        ? new String[]{"Software\\Blizzard Entertainment\\Diablo II"}
+                        : new String[]{"Software\\Blizzard Entertainment\\Diablo II",
+                                "Software\\Wow6432Node\\Blizzard Entertainment\\Diablo II"};
+                for (String key : keys) {
+                    JSONObject paths = new JSONObject();
+                    for (String name : new String[]{"InstallPath", "GamePath"}) {
+                        String value = registry.getStringValue(key, name);
+                        paths.put(name, value == null ? JSONObject.NULL : value);
+                    }
+                    values.put(key, paths);
+                }
+                if (hive.equals("user.reg")) {
+                    for (String key : new String[]{"Software\\Wine", "Software\\Wine\\AppDefaults\\Game.exe"}) {
+                        String version = registry.getStringValue(key, "Version");
+                        values.put(key, new JSONObject().put("Version", version == null ? JSONObject.NULL : version));
+                    }
+                    String filter = registry.getStringValue("Software\\Wine\\Debug", "SnoopInclude");
+                    values.put("SnoopInclude", filter == null ? JSONObject.NULL : filter);
+                }
+            }
+            report.put(hive, values);
+        }
+        return report;
     }
 
     private static void writeAndVerifyRegistry(File hive, String[] keys, String installPath, String gamePath) {

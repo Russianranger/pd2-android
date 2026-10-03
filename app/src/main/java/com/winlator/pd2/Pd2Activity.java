@@ -221,14 +221,17 @@ public final class Pd2Activity extends AppCompatActivity {
         });
     }
     private void showSettings() {
-        String[] choices = {"Turnip + Zink · D2GL / Glide", "Turnip + Zink · Wine DirectDraw (compatibility)", "Turnip + VirGL · D2GL / Glide", "Turnip + VirGL · Wine DirectDraw (compatibility)"};
+        String[] choices = {"Turnip + Zink · D2GL / Glide", "Turnip + Zink · Wine DirectDraw (compatibility)", "Turnip + VirGL · D2GL / Glide", "Turnip + VirGL · Wine DirectDraw (compatibility)", "Turnip + Zink · Glide (GameNative arguments)"};
         String renderer = preferences.getString("pd2_renderer", "turnip,zink");
         String args = preferences.getString("pd2_arguments", "-3dfx -w");
-        int selected = (renderer.equals("turnip,virgl") ? 2 : 0) + (args.contains("-ddraw") ? 1 : 0);
+        int selected = Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS.equals(args) && renderer.equals("turnip,zink")
+                ? 4 : (renderer.equals("turnip,virgl") ? 2 : 0) + (args.contains("-ddraw") ? 1 : 0);
         Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Launch settings").setSingleChoiceItems(choices, selected, (d, which) -> {
-            preferences.edit().putString("pd2_renderer", which >= 2 ? "turnip,virgl" : "turnip,zink")
-                .putString("pd2_arguments", which % 2 == 0 ? "-3dfx -w" : "-ddraw -w").apply();
-            operation = "Launch profile saved. Imported PD2 files and graphics settings are preserved.";
+            preferences.edit().putString("pd2_renderer", which == 2 || which == 3 ? "turnip,virgl" : "turnip,zink")
+                .putString("pd2_arguments", which == 4 ? Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS
+                        : which % 2 == 0 ? "-3dfx -w" : "-ddraw -w").apply();
+            operation = which == 4 ? "Glide with your GameNative arguments selected."
+                    : "Launch profile saved.";
             d.dismiss(); updateUi();
         }).setNeutralButton("CPU mode", (d, w) -> showCpuSettings()).setNegativeButton("Close", null).show());
     }
@@ -342,8 +345,7 @@ public final class Pd2Activity extends AppCompatActivity {
                     out.write(Pd2LaunchDiagnostics.installationFiles(Pd2Installer.installedDirectory(this), installation)
                             .toString(2).getBytes(StandardCharsets.UTF_8));
                     out.closeEntry();
-                    File game = new File(Pd2Installer.installedDirectory(this), installation.gameExecutableRelativePath).getParentFile();
-                    zipLog(out, "d2gl.log", new File(game, "d2gl.log"));
+                    Pd2LaunchDiagnostics.exportGameLogs(Pd2Installer.installedDirectory(this), installation, out);
                 }
             }
             operation = "Support logs ready.";

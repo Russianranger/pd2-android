@@ -27,8 +27,26 @@ Source support ZIP SHA-256: `3e7670623e83abff3b9e6b40632a32b33323791adce498475a5
 
 The exact Fog function and underlying cause remain unverified. The evidence does not distinguish recursion, legitimate stack use, or CPU-translation behavior. Earlier RPC exceptions on other threads and directory/status warnings have not been established as causes of this failure. No imported-file deletion, DLL replacement, stack increase, or new APK patch is justified by this record alone.
 
-## Next comparison
+## Interpreter comparison: also failed
 
-Use the existing 0.1.2 CPU option **Interpreter (diagnostic; very slow)** with the same Turnip/Zink Wine DirectDraw profile. Press Play once and allow at most 60 seconds for the title/menu. Stop an unfinished attempt, or record a successful menu and then stop. Export the new support ZIP in either case and restore Stability. The time limit bounds the test; it does not prove how long every valid Interpreter load should take.
+The next bundle confirms `interpreter: true` and `BOX64_DYNAREC=0` with the same graphics choice. Native Fog faults at `+0x1879B`, one byte after the translated attempt's recorded block address, at the second PUSH. The write is again to `0x00121FFC`, with `EBP=0x0012301C` and the same 1 MiB 32-bit stack. The runtime returned in about nine seconds with outer status 0; the game still failed.
 
-Preserve the accepted runtime and imported installation. Follow [the testing instructions](../TESTING.md); gameplay, native controller input, rendering/audio, saves, and online play remain pending.
+Source ZIP SHA-256: `2339333ecc9fda774d0baba9d9ed2188935412be040d38030ff8acc5fd7ac76c`.
+
+The paired results do not support attributing this failure solely to the dynamic recompiler. They still do not identify the exact Fog function or distinguish recursion from legitimate stack use or a broader runtime/translation difference.
+
+## Working GameNative comparison supplied by the user
+
+The user confirms that the exact source installation folder runs in GameNative. Their screenshots show:
+
+| Displayed setting | Value |
+| --- | --- |
+| Runtime | Bionic Proton 9.0, x86_64 |
+| Box64 | 0.3.7, Performance preset |
+| Wrapper/driver | Turnip `25.3.0_R3_Gmem` |
+| WineD3D mode | Vulkan |
+| Launch arguments | `-3dfx -dxnocompatmodefix`, without `-w` |
+
+The screenshots are a partial configuration; Windows version and environment settings are not yet recorded. Do not infer another Wine build or FEX configuration from them. This provides a working comparison, not evidence that any single setting explains the failure. No new APK or correction has been selected in this evidence record.
+
+Preserve the accepted launcher/runtime/import. Gameplay, native controller input, rendering/audio, saves, and online play remain pending.
