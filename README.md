@@ -40,6 +40,11 @@ The default screen size is 1280×720, with **Turnip/Zink** and `-3dfx -w`. The f
 
 ## Development
 
+Source builds fetch 205 binary runtime dependencies from a pinned Winlator commit,
+verify their SHA-256 values, and relocate their package paths before compiling.
+The APK includes these dependencies and launches independently of Winlator or
+GameNative once your game files are imported.
+
 [Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the first device checklist; [Handoff](docs/HANDOFF.md) records the implemented scope and remaining gates. [Release notes](docs/RELEASE-0.1.0.md) describe the preview.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

@@ -1,0 +1,1206 @@
+{
+  "files": {
+    "app/src/main/assets/box64/box64-0.4.4.tzst": {
+      "changed_members": [
+        {
+          "bytes": 30725672,
+          "name": "./usr/local/bin/box64",
+          "replacements": 2
+        }
+      ],
+      "members": 5,
+      "original_sha256": "e1a34fed50bb38ef7fbf51ad5e5b9a76ec4c8178f9cfb4b9f6def0497f2f446c",
+      "replacements": 2,
+      "sha256": "8fa7ed6c92cfd93799e2f632397acaacb679365a5b6b5f59c137a85e6f970de4"
+    },
+    "app/src/main/assets/container_pattern.tzst": {
+      "changed_members": [
+        {
+          "bytes": 0,
+          "name": ".wine/dosdevices/z:",
+          "replacements": 1
+        }
+      ],
+      "members": 447,
+      "original_sha256": "8ae3a4fee33e86da26826395650bb07c6f49ce94629ea4b9442bc633b6b8ca33",
+      "replacements": 1,
+      "sha256": "482c56e22a4fa37c2a851f6d4d8f258f6480167a9fc6b636bbe4c517c367e2fa"
+    },
+    "app/src/main/assets/dxwrapper/cnc-ddraw-6.6/ddraw.tzst": {
+      "changed_members": [],
+      "members": 3,
+      "original_sha256": "eabb2d59ce7060767996d0c9597ee8772059126a3af01698e59a5e7905e49867",
+      "replacements": 0,
+      "sha256": "eabb2d59ce7060767996d0c9597ee8772059126a3af01698e59a5e7905e49867"
+    },
+    "app/src/main/assets/dxwrapper/d7vk-1.11.tzst": {
+      "changed_members": [],
+      "members": 3,
+      "original_sha256": "c737c5ec4c6d4bbbad4e9eafdcc22efda34ae4c274713b40246b3a5fb472c05d",
+      "replacements": 0,
+      "sha256": "c737c5ec4c6d4bbbad4e9eafdcc22efda34ae4c274713b40246b3a5fb472c05d"
+    },
+    "app/src/main/assets/dxwrapper/d8vk-1.0.tzst": {
+      "changed_members": [],
+      "members": 5,
+      "original_sha256": "da30a104f83f619214a3bc67c971434837e1a11ca30703d0f79041a93f2be246",
+      "replacements": 0,
+      "sha256": "da30a104f83f619214a3bc67c971434837e1a11ca30703d0f79041a93f2be246"
+    },
+    "app/src/main/assets/dxwrapper/dxvk-1.10.3.tzst": {
+      "changed_members": [],
+      "members": 15,
+      "original_sha256": "18ed7c263e0d52c4bbd0e7345b4f22908c10966f37d7d6d80c639ec45123075a",
+      "replacements": 0,
+      "sha256": "18ed7c263e0d52c4bbd0e7345b4f22908c10966f37d7d6d80c639ec45123075a"
+    },
+    "app/src/main/assets/dxwrapper/dxvk-2.4.1.tzst": {
+      "changed_members": [],
+      "members": 13,
+      "original_sha256": "897cc48500241006c15c62f200e9a6e1ea8a674bd285da25df6f68fdcdbfe42e",
+      "replacements": 0,
+      "sha256": "897cc48500241006c15c62f200e9a6e1ea8a674bd285da25df6f68fdcdbfe42e"
+    },
+    "app/src/main/assets/dxwrapper/vkd3d-2.14.1.tzst": {
+      "changed_members": [],
+      "members": 7,
+      "original_sha256": "354b43b84df136683c7ad9cb80e125b4a357de7459fab9ac8b56d5fe4a617687",
+      "replacements": 0,
+      "sha256": "354b43b84df136683c7ad9cb80e125b4a357de7459fab9ac8b56d5fe4a617687"
+    },
+    "app/src/main/assets/graphics_driver/gladio-1.1.tzst": {
+      "changed_members": [
+        {
+          "bytes": 530432,
+          "name": "./usr/lib/libGL.so.1.7.0",
+          "replacements": 2
+        }
+      ],
+      "members": 4,
+      "original_sha256": "925a492ca58d4670271aabe6c6aaeef0df1e22932955025afb3fe23f26442ac3",
+      "replacements": 2,
+      "sha256": "c15a0ae31b89fa858b1e76ac01e1e1f0fead8556293875704504c63eb4606e53"
+    },
+    "app/src/main/assets/graphics_driver/turnip-26.2.0.tzst": {
+      "changed_members": [
+        {
+          "bytes": 212,
+          "name": "./usr/share/vulkan/icd.d/freedreno_icd.aarch64.json",
+          "replacements": 1
+        }
+      ],
+      "members": 8,
+      "original_sha256": "1e5bd643d64b450960ea3208cc96599a4de577f178e9ba0843b1c37083ce50d2",
+      "replacements": 1,
+      "sha256": "40e599964d0ada2c1444d479e036d087e8209cb7a01906b8e0eba774bb805c77"
+    },
+    "app/src/main/assets/graphics_driver/virgl-23.1.9.tzst": {
+      "changed_members": [
+        {
+          "bytes": 14379544,
+          "name": "./usr/lib/libGL.so.1.7.0",
+          "replacements": 2
+        }
+      ],
+      "members": 4,
+      "original_sha256": "614b1edc8e47c57b2cbb2d96f9c7ab5f5b1a89038de618a58b2faf9c64380e09",
+      "replacements": 2,
+      "sha256": "1e66655da282f99213190c3cdc97e9b0cc151333a4b484abe15bf588ffcdc802"
+    },
+    "app/src/main/assets/graphics_driver/vortek-2.1.tzst": {
+      "changed_members": [
+        {
+          "bytes": 179,
+          "name": "./usr/share/vulkan/icd.d/vortek_icd.aarch64.json",
+          "replacements": 1
+        },
+        {
+          "bytes": 423088,
+          "name": "./usr/lib/libvulkan_vortek.so",
+          "replacements": 2
+        }
+      ],
+      "members": 8,
+      "original_sha256": "505e5089371d8698184a3722d8672628b8ef1aa0a201efa6bf1f8d6163cc08cf",
+      "replacements": 3,
+      "sha256": "6db8c9d8abe84b48a4adecbe891b62f0d1e71b07cb598a6355f1b52e3e04f52e"
+    },
+    "app/src/main/assets/graphics_driver/zink-22.2.5.tzst": {
+      "changed_members": [],
+      "members": 4,
+      "original_sha256": "b9fc365f894a4b837cfd97861972e95c680b5e744691b508f49b9a06d9e3153c",
+      "replacements": 0,
+      "sha256": "b9fc365f894a4b837cfd97861972e95c680b5e744691b508f49b9a06d9e3153c"
+    },
+    "app/src/main/assets/pulseaudio.tzst": {
+      "changed_members": [],
+      "members": 5,
+      "original_sha256": "a31d331e1f1ec514d8287b830c1668c1d65a9b34c21010bd918eca43d2f4947f",
+      "replacements": 0,
+      "sha256": "a31d331e1f1ec514d8287b830c1668c1d65a9b34c21010bd918eca43d2f4947f"
+    },
+    "app/src/main/assets/rootfs.tzst": {
+      "changed_members": [
+        {
+          "bytes": 2763,
+          "name": "./etc/fonts/fonts.conf",
+          "replacements": 2
+        },
+        {
+          "bytes": 1015,
+          "name": "./etc/fonts/conf.d/README",
+          "replacements": 1
+        },
+        {
+          "bytes": 3999,
+          "name": "./etc/ld.so.cache",
+          "replacements": 48
+        },
+        {
+          "bytes": 1233,
+          "name": "./etc/pulse/client.conf",
+          "replacements": 1
+        },
+        {
+          "bytes": 5975,
+          "name": "./var/db/Makefile",
+          "replacements": 19
+        },
+        {
+          "bytes": 781200,
+          "name": "./opt/wine/bin/wineserver",
+          "replacements": 3
+        },
+        {
+          "bytes": 56880,
+          "name": "./opt/wine/lib/wine/x86_64-unix/nsiproxy.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 600976,
+          "name": "./opt/wine/lib/wine/x86_64-unix/ntdll.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 360720,
+          "name": "./usr/bin/localedef",
+          "replacements": 8
+        },
+        {
+          "bytes": 85000,
+          "name": "./usr/bin/locale",
+          "replacements": 6
+        },
+        {
+          "bytes": 88,
+          "name": "./usr/share/X11/locale/ru_RU.UTF-8/Compose",
+          "replacements": 1
+        },
+        {
+          "bytes": 1441,
+          "name": "./usr/share/X11/locale/pt_BR.UTF-8/Compose",
+          "replacements": 1
+        },
+        {
+          "bytes": 136,
+          "name": "./usr/share/alsa/alsa.conf",
+          "replacements": 1
+        },
+        {
+          "bytes": 68024,
+          "name": "./usr/lib/libffi.so.7.1.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 133032,
+          "name": "./usr/lib/libnsl.so.1",
+          "replacements": 1
+        },
+        {
+          "bytes": 68136,
+          "name": "./usr/lib/libgstbasecamerabinsrc-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67712,
+          "name": "./usr/lib/libresolv.so.2",
+          "replacements": 1
+        },
+        {
+          "bytes": 68064,
+          "name": "./usr/lib/libout123.so.0.5.1",
+          "replacements": 2
+        },
+        {
+          "bytes": 67888,
+          "name": "./usr/lib/libXi.so.6.1.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67848,
+          "name": "./usr/lib/libgstanalytics-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 198768,
+          "name": "./usr/lib/libexpat.so.1.6.8",
+          "replacements": 1
+        },
+        {
+          "bytes": 1518384,
+          "name": "./usr/lib/libgstreamer-1.0.so.0.2501.0",
+          "replacements": 5
+        },
+        {
+          "bytes": 133808,
+          "name": "./usr/lib/libgstsdp-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67200,
+          "name": "./usr/lib/libX11-xcb.so.1.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 134224,
+          "name": "./usr/lib/libgstplayer-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67792,
+          "name": "./usr/lib/libxcb-randr.so.0.1.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67560,
+          "name": "./usr/lib/libxcb-shm.so.0.0.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 134432,
+          "name": "./usr/lib/libkdb5.so.10.0",
+          "replacements": 3
+        },
+        {
+          "bytes": 135416,
+          "name": "./usr/lib/libatopology.so.2.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 199680,
+          "name": "./usr/lib/libgstcodecs-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 134712,
+          "name": "./usr/lib/libgstnet-1.0.so.0.2501.0",
+          "replacements": 3
+        },
+        {
+          "bytes": 67632,
+          "name": "./usr/lib/libxcb-sync.so.1.0.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 529936,
+          "name": "./usr/lib/libgstaudio-1.0.so.0.2501.0",
+          "replacements": 3
+        },
+        {
+          "bytes": 67592,
+          "name": "./usr/lib/libxcb-dri3.so.0.1.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 855432,
+          "name": "./usr/lib/libgstcodecparsers-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 266664,
+          "name": "./usr/lib/libgirepository-2.0.so.0.8200.2",
+          "replacements": 3
+        },
+        {
+          "bytes": 67952,
+          "name": "./usr/lib/libkrad.so.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67968,
+          "name": "./usr/lib/libXrender.so.1.3.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 2442208,
+          "name": "./usr/lib/libgnutls.so.30.39.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 1657608,
+          "name": "./usr/lib/libc.so.6",
+          "replacements": 40
+        },
+        {
+          "bytes": 359,
+          "name": "./usr/lib/libc.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 67768,
+          "name": "./usr/lib/libxcb-render.so.0.0.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67624,
+          "name": "./usr/lib/libXdmcp.so.6.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 333552,
+          "name": "./usr/lib/libpulse.so.0.24.3",
+          "replacements": 3
+        },
+        {
+          "bytes": 68328,
+          "name": "./usr/lib/libgsturidownloader-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67528,
+          "name": "./usr/lib/libbrotlidec.so.1.1.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67704,
+          "name": "./usr/lib/libogg.so.0.8.5",
+          "replacements": 1
+        },
+        {
+          "bytes": 723856,
+          "name": "./usr/lib/libzstd.so.1.5.6",
+          "replacements": 1
+        },
+        {
+          "bytes": 67832,
+          "name": "./usr/lib/libgstriff-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67800,
+          "name": "./usr/lib/libpulse-mainloop-glib.so.0.0.6",
+          "replacements": 2
+        },
+        {
+          "bytes": 67504,
+          "name": "./usr/lib/libgstfft-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 71128,
+          "name": "./usr/lib/mpg123/output_oss.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 70648,
+          "name": "./usr/lib/mpg123/output_dummy.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 862672,
+          "name": "./usr/lib/libkrb5.so.3.3",
+          "replacements": 13
+        },
+        {
+          "bytes": 792856,
+          "name": "./usr/lib/libgstvideo-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 134608,
+          "name": "./usr/lib/libgstadaptivedemux-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 68560,
+          "name": "./usr/lib/libkrb5support.so.0.1",
+          "replacements": 1
+        },
+        {
+          "bytes": 134808,
+          "name": "./usr/lib/libgstplay-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67864,
+          "name": "./usr/lib/libgstallocators-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67480,
+          "name": "./usr/lib/libgstphotography-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 133760,
+          "name": "./usr/lib/libgnutls-openssl.so.27.0.2",
+          "replacements": 2
+        },
+        {
+          "bytes": 68896,
+          "name": "./usr/lib/libgnutlsxx.so.30.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 397600,
+          "name": "./usr/lib/libhogweed.so.6.9",
+          "replacements": 1
+        },
+        {
+          "bytes": 1906264,
+          "name": "./usr/lib/libglib-2.0.so.0.8200.2",
+          "replacements": 3
+        },
+        {
+          "bytes": 265248,
+          "name": "./usr/lib/libpng16.so.16.44.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 198920,
+          "name": "./usr/lib/libsyn123.so.0.2.3",
+          "replacements": 1
+        },
+        {
+          "bytes": 67656,
+          "name": "./usr/lib/libXxf86vm.so.1.0.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67624,
+          "name": "./usr/lib/libXfixes.so.3.1.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67800,
+          "name": "./usr/lib/libgmodule-2.0.so.0.8200.2",
+          "replacements": 1
+        },
+        {
+          "bytes": 264592,
+          "name": "./usr/lib/libgstmpegts-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67888,
+          "name": "./usr/lib/libnss_compat.so.2",
+          "replacements": 3
+        },
+        {
+          "bytes": 134312,
+          "name": "./usr/lib/libgstapp-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 1329712,
+          "name": "./usr/lib/libX11.so.6.4.0",
+          "replacements": 6
+        },
+        {
+          "bytes": 134784,
+          "name": "./usr/lib/libkadm5srv_mit.so.12.0",
+          "replacements": 3
+        },
+        {
+          "bytes": 592424,
+          "name": "./usr/lib/libvulkan.so.1.3.301",
+          "replacements": 5
+        },
+        {
+          "bytes": 67320,
+          "name": "./usr/lib/libgstsctp-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 133920,
+          "name": "./usr/lib/libdrm.so.2.123.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 68088,
+          "name": "./usr/lib/libverto.so.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 133496,
+          "name": "./usr/lib/libz.so.1.3.1",
+          "replacements": 1
+        },
+        {
+          "bytes": 71520,
+          "name": "./usr/lib/getconf/POSIX_V6_LP64_OFF64",
+          "replacements": 1
+        },
+        {
+          "bytes": 71520,
+          "name": "./usr/lib/getconf/POSIX_V7_LP64_OFF64",
+          "replacements": 1
+        },
+        {
+          "bytes": 71520,
+          "name": "./usr/lib/getconf/XBS5_LP64_OFF64",
+          "replacements": 1
+        },
+        {
+          "bytes": 1188616,
+          "name": "./usr/lib/libasound.so.2.0.0",
+          "replacements": 6
+        },
+        {
+          "bytes": 67496,
+          "name": "./usr/lib/libXcomposite.so.1.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67544,
+          "name": "./usr/lib/libxcb-present.so.0.0.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67872,
+          "name": "./usr/lib/libpulse-simple.so.0.1.1",
+          "replacements": 2
+        },
+        {
+          "bytes": 724088,
+          "name": "./usr/lib/libjpeg.so.8.3.2",
+          "replacements": 2
+        },
+        {
+          "bytes": 68560,
+          "name": "./usr/lib/libgsttranscoder-1.0.so.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67496,
+          "name": "./usr/lib/libnss_db.so.2",
+          "replacements": 9
+        },
+        {
+          "bytes": 68184,
+          "name": "./usr/lib/libXcursor.so.1.0.2",
+          "replacements": 4
+        },
+        {
+          "bytes": 133496,
+          "name": "./usr/lib/libmpeg2.so.0.1.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 529712,
+          "name": "./usr/lib/libgstbase-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 135312,
+          "name": "./usr/lib/libgssrpc.so.4.2",
+          "replacements": 1
+        },
+        {
+          "bytes": 68840,
+          "name": "./usr/lib/libgstbadaudio-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 724136,
+          "name": "./usr/lib/libfreetype.so.6.20.2",
+          "replacements": 1
+        },
+        {
+          "bytes": 67648,
+          "name": "./usr/lib/libXau.so.6.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 238104,
+          "name": "./usr/lib/ld-linux-aarch64.so.1",
+          "replacements": 10
+        },
+        {
+          "bytes": 134696,
+          "name": "./usr/lib/libXext.so.6.4.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 330656,
+          "name": "./usr/lib/libfontconfig.so.1.14.0",
+          "replacements": 8
+        },
+        {
+          "bytes": 67888,
+          "name": "./usr/lib/libgstinsertbin-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 463728,
+          "name": "./usr/lib/libgobject-2.0.so.0.8200.2",
+          "replacements": 1
+        },
+        {
+          "bytes": 2108320,
+          "name": "./usr/lib/libgio-2.0.so.0.8200.2",
+          "replacements": 6
+        },
+        {
+          "bytes": 266856,
+          "name": "./usr/lib/libgsttag-1.0.so.0.2501.0",
+          "replacements": 4
+        },
+        {
+          "bytes": 331632,
+          "name": "./usr/lib/libnettle.so.8.9",
+          "replacements": 1
+        },
+        {
+          "bytes": 334928,
+          "name": "./usr/lib/libgssapi_krb5.so.2.2",
+          "replacements": 4
+        },
+        {
+          "bytes": 201504,
+          "name": "./usr/lib/libgstmse-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 332008,
+          "name": "./usr/lib/libmpg123.so.0.48.2",
+          "replacements": 1
+        },
+        {
+          "bytes": 657912,
+          "name": "./usr/lib/libbrotlienc.so.1.1.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 185,
+          "name": "./usr/lib/libm.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 199352,
+          "name": "./usr/lib/libk5crypto.so.3.1",
+          "replacements": 1
+        },
+        {
+          "bytes": 133648,
+          "name": "./usr/lib/libgstwebrtc-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 67776,
+          "name": "./usr/lib/libXrandr.so.2.2.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 68488,
+          "name": "./usr/lib/gstreamer-1.0/libgstaudiomixer.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68904,
+          "name": "./usr/lib/gstreamer-1.0/libgstwavparse.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68232,
+          "name": "./usr/lib/gstreamer-1.0/libgstvideobox.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 267304,
+          "name": "./usr/lib/gstreamer-1.0/libgstogg.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 68664,
+          "name": "./usr/lib/gstreamer-1.0/libgstvideoconvertscale.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 68760,
+          "name": "./usr/lib/gstreamer-1.0/libgstaudioconvert.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 67384,
+          "name": "./usr/lib/gstreamer-1.0/libgstapp.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 134376,
+          "name": "./usr/lib/gstreamer-1.0/libgstaudiofx.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 467096,
+          "name": "./usr/lib/gstreamer-1.0/libgstcoreelements.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 68648,
+          "name": "./usr/lib/gstreamer-1.0/libgstvideocrop.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 67848,
+          "name": "./usr/lib/gstreamer-1.0/libgstid3demux.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 334648,
+          "name": "./usr/lib/gstreamer-1.0/libgstvideoparsersbad.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 399544,
+          "name": "./usr/lib/gstreamer-1.0/libgstmatroska.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68968,
+          "name": "./usr/lib/gstreamer-1.0/libgstrawparse.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 67904,
+          "name": "./usr/lib/gstreamer-1.0/libgstvolume.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68808,
+          "name": "./usr/lib/gstreamer-1.0/libgstvideofilter.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 664232,
+          "name": "./usr/lib/gstreamer-1.0/libgstplayback.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 134664,
+          "name": "./usr/lib/gstreamer-1.0/libgstvideomixer.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 134600,
+          "name": "./usr/lib/gstreamer-1.0/libgstdeinterlace.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 3943104,
+          "name": "./usr/lib/gstreamer-1.0/libgstlibav.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 135736,
+          "name": "./usr/lib/gstreamer-1.0/libgstencoding.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 68616,
+          "name": "./usr/lib/gstreamer-1.0/libgstvideorate.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 200904,
+          "name": "./usr/lib/gstreamer-1.0/libgstaudioparsers.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68360,
+          "name": "./usr/lib/gstreamer-1.0/libgstaudioresample.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 139176,
+          "name": "./usr/lib/gstreamer-1.0/libgsttypefindfunctions.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68200,
+          "name": "./usr/lib/gstreamer-1.0/libgstmpg123.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 664008,
+          "name": "./usr/lib/gstreamer-1.0/libgstisomp4.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 134200,
+          "name": "./usr/lib/gstreamer-1.0/libgstcompositor.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 135576,
+          "name": "./usr/lib/gstreamer-1.0/libgstasf.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 201352,
+          "name": "./usr/lib/gstreamer-1.0/libgstavi.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 67960,
+          "name": "./usr/lib/gstreamer-1.0/libgstapetag.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 134456,
+          "name": "./usr/lib/gstreamer-1.0/libgstmpegpsdemux.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68408,
+          "name": "./usr/lib/gstreamer-1.0/libgstmpeg2dec.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 68536,
+          "name": "./usr/lib/gstreamer-1.0/libgstfdkaac.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 67560,
+          "name": "./usr/lib/libgstisoff-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 333320,
+          "name": "./usr/lib/libgstpbutils-1.0.so.0.2501.0",
+          "replacements": 5
+        },
+        {
+          "bytes": 199560,
+          "name": "./usr/lib/libxcb.so.1.1.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 200272,
+          "name": "./usr/lib/libgstrtsp-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 134384,
+          "name": "./usr/lib/libkadm5clnt_mit.so.12.0",
+          "replacements": 3
+        },
+        {
+          "bytes": 67520,
+          "name": "./usr/lib/libmpeg2convert.so.0.0.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 67288,
+          "name": "./usr/lib/libgthread-2.0.so.0.8200.2",
+          "replacements": 1
+        },
+        {
+          "bytes": 142008,
+          "name": "./usr/lib/krb5/plugins/preauth/spake.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 74328,
+          "name": "./usr/lib/krb5/plugins/preauth/otp.so",
+          "replacements": 3
+        },
+        {
+          "bytes": 71936,
+          "name": "./usr/lib/krb5/plugins/preauth/test.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 69560,
+          "name": "./usr/lib/krb5/plugins/tls/k5tls.so",
+          "replacements": 1
+        },
+        {
+          "bytes": 152112,
+          "name": "./usr/lib/krb5/plugins/kdb/db2.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 78744,
+          "name": "./usr/lib/pulseaudio/libpulsedsp.so",
+          "replacements": 2
+        },
+        {
+          "bytes": 636848,
+          "name": "./usr/lib/pulseaudio/libpulsecommon-17.0.so",
+          "replacements": 10
+        },
+        {
+          "bytes": 200568,
+          "name": "./usr/lib/libgstrtp-1.0.so.0.2501.0",
+          "replacements": 2
+        },
+        {
+          "bytes": 68256,
+          "name": "./usr/lib/libgstcontroller-1.0.so.0.2501.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 198624,
+          "name": "./usr/lib/libbrotlicommon.so.1.1.0",
+          "replacements": 1
+        },
+        {
+          "bytes": 527944,
+          "name": "./usr/lib/libsndfile.so.1.0.37",
+          "replacements": 1
+        },
+        {
+          "bytes": 67752,
+          "name": "./usr/lib/libcom_err.so.3.0",
+          "replacements": 1
+        }
+      ],
+      "members": 3309,
+      "original_sha256": "aeea2938cc63b0708cb2da999b5a0e3915229b6ab4eac13de061c87f34ffc1dc",
+      "replacements": 447,
+      "sha256": "e370bf627611c4d2cce1f20cf3155c7ef8c0a10e0569b366af787eec2d278dbc"
+    },
+    "app/src/main/assets/rootfs_patches.tzst": {
+      "changed_members": [
+        {
+          "bytes": 73216,
+          "name": "./usr/lib/alsa-lib/libasound_module_pcm_android_aserver.so",
+          "replacements": 1
+        }
+      ],
+      "members": 76,
+      "original_sha256": "49ab7a5158ef7ccff5ae96dfd539df48483454ed11c0d6788a4f95e0104c864a",
+      "replacements": 1,
+      "sha256": "5ab6900f76b9cde509dca5db9b95f628d173fa56d293f79e00aac28c38e90a70"
+    },
+    "app/src/main/assets/wincomponents/direct3d.tzst": {
+      "changed_members": [],
+      "members": 101,
+      "original_sha256": "149d55436e050bfa3fe8caf650cb97ddb2bc9fa99cd96869bd2bc4977b708fb5",
+      "replacements": 0,
+      "sha256": "149d55436e050bfa3fe8caf650cb97ddb2bc9fa99cd96869bd2bc4977b708fb5"
+    },
+    "app/src/main/assets/wincomponents/directmusic.tzst": {
+      "changed_members": [],
+      "members": 12,
+      "original_sha256": "eb906732d14766641edfae0b2d722c36f4632de7fa321a5844037115b513b77e",
+      "replacements": 0,
+      "sha256": "eb906732d14766641edfae0b2d722c36f4632de7fa321a5844037115b513b77e"
+    },
+    "app/src/main/assets/wincomponents/directplay.tzst": {
+      "changed_members": [],
+      "members": 10,
+      "original_sha256": "70eb81449230af66286f5b4d5922dca13057600c35d4cdfe91930e966c2386d9",
+      "replacements": 0,
+      "sha256": "70eb81449230af66286f5b4d5922dca13057600c35d4cdfe91930e966c2386d9"
+    },
+    "app/src/main/assets/wincomponents/directshow.tzst": {
+      "changed_members": [],
+      "members": 15,
+      "original_sha256": "aa682b7ee6e5903e4571bfe5a8dc9b05d0a9f05cd860cfdc810f2ddd3745e9b4",
+      "replacements": 0,
+      "sha256": "aa682b7ee6e5903e4571bfe5a8dc9b05d0a9f05cd860cfdc810f2ddd3745e9b4"
+    },
+    "app/src/main/assets/wincomponents/directsound.tzst": {
+      "changed_members": [],
+      "members": 5,
+      "original_sha256": "72f0e880eef1387a55602ac02b07ef26778d23c2f70d931bd2d13e92f8dc99d4",
+      "replacements": 0,
+      "sha256": "72f0e880eef1387a55602ac02b07ef26778d23c2f70d931bd2d13e92f8dc99d4"
+    },
+    "app/src/main/assets/wincomponents/vcrun2005.tzst": {
+      "changed_members": [],
+      "members": 25,
+      "original_sha256": "6ae9f3c22fecbc5dc2cee99354ff52587523663275f02bdfbf4ed36b91d2d90a",
+      "replacements": 0,
+      "sha256": "6ae9f3c22fecbc5dc2cee99354ff52587523663275f02bdfbf4ed36b91d2d90a"
+    },
+    "app/src/main/assets/wincomponents/vcrun2010.tzst": {
+      "changed_members": [],
+      "members": 11,
+      "original_sha256": "9def7b4b5c31c839d155f05e372e0e9ce4968b57f815c1abf93b7735e7d0ceb7",
+      "replacements": 0,
+      "sha256": "9def7b4b5c31c839d155f05e372e0e9ce4968b57f815c1abf93b7735e7d0ceb7"
+    },
+    "app/src/main/assets/wincomponents/wmdecoder.tzst": {
+      "changed_members": [],
+      "members": 6,
+      "original_sha256": "a2ca365cc43265680ee71a7b13a4626ed02368feec135571fb841c7b4abf62d1",
+      "replacements": 0,
+      "sha256": "a2ca365cc43265680ee71a7b13a4626ed02368feec135571fb841c7b4abf62d1"
+    },
+    "app/src/main/assets/wincomponents/xaudio.tzst": {
+      "changed_members": [],
+      "members": 89,
+      "original_sha256": "128ab3f25a74ff371d381cc0e028e8e2101f72e434ff46b85f629921ee0e2683",
+      "replacements": 0,
+      "sha256": "128ab3f25a74ff371d381cc0e028e8e2101f72e434ff46b85f629921ee0e2683"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libFLAC.so": {
+      "bytes": 238784,
+      "original_sha256": "029daf547f4d8914887753cb067f8c3a184d9098dacd811eca15ff03a1734535",
+      "replacements": 0,
+      "sha256": "029daf547f4d8914887753cb067f8c3a184d9098dacd811eca15ff03a1734535"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libc++_shared.so": {
+      "bytes": 1292896,
+      "original_sha256": "df2767fb3f2fdb44a871cb9a694fa5d849f86b69fb996008bd5bf732ece7f3cc",
+      "replacements": 0,
+      "sha256": "df2767fb3f2fdb44a871cb9a694fa5d849f86b69fb996008bd5bf732ece7f3cc"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libfluidsynth-assetloader.so": {
+      "bytes": 6136,
+      "original_sha256": "01f10ba852da027f24d35fb6d2aa587199c8cd2547a484799c11ec9c9542bb04",
+      "replacements": 0,
+      "sha256": "01f10ba852da027f24d35fb6d2aa587199c8cd2547a484799c11ec9c9542bb04"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libfluidsynth.so": {
+      "bytes": 444744,
+      "original_sha256": "686104b19f2571d7674dcc155e4385e2b75a9cc5537712a356750e01e57202f9",
+      "replacements": 0,
+      "sha256": "686104b19f2571d7674dcc155e4385e2b75a9cc5537712a356750e01e57202f9"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libgio-2.0.so": {
+      "bytes": 1583888,
+      "original_sha256": "9515ab32df670f3261feee7a987467681792c3d050cdc193855233646949eff8",
+      "replacements": 0,
+      "sha256": "9515ab32df670f3261feee7a987467681792c3d050cdc193855233646949eff8"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libglib-2.0.so": {
+      "bytes": 2200640,
+      "original_sha256": "7f905fcffc568884653e8652af51dd1a69013f7eb6dbb39a8c8719503dc4ec0f",
+      "replacements": 0,
+      "sha256": "7f905fcffc568884653e8652af51dd1a69013f7eb6dbb39a8c8719503dc4ec0f"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libgmodule-2.0.so": {
+      "bytes": 11456,
+      "original_sha256": "da0b26f148b0b406136d0afa9032be1ed7a946b86cd601d19d7886166b66f5da",
+      "replacements": 0,
+      "sha256": "da0b26f148b0b406136d0afa9032be1ed7a946b86cd601d19d7886166b66f5da"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libgobject-2.0.so": {
+      "bytes": 379536,
+      "original_sha256": "e9d65c3f65167269dd8392cde27eaa24ca18ac47b8979fa6f2294e5dc7190ef9",
+      "replacements": 0,
+      "sha256": "e9d65c3f65167269dd8392cde27eaa24ca18ac47b8979fa6f2294e5dc7190ef9"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libgthread-2.0.so": {
+      "bytes": 4256,
+      "original_sha256": "3551751014caf5cd15c352c39f4914b798663bbc7441cde50d2f0bf0b19261db",
+      "replacements": 0,
+      "sha256": "3551751014caf5cd15c352c39f4914b798663bbc7441cde50d2f0bf0b19261db"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libinstpatch-1.0.so": {
+      "bytes": 832264,
+      "original_sha256": "2da0eabc3c8a85b1fbfe0749fb6bdc47e09a0905ff231dbe3c90151793823ae1",
+      "replacements": 0,
+      "sha256": "2da0eabc3c8a85b1fbfe0749fb6bdc47e09a0905ff231dbe3c90151793823ae1"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libltdl.so": {
+      "bytes": 121520,
+      "original_sha256": "e6c7a402a53b78bacf7312cd5c7e7d9aef5f15cd6e0bc847912522ca09a250c4",
+      "replacements": 0,
+      "sha256": "e6c7a402a53b78bacf7312cd5c7e7d9aef5f15cd6e0bc847912522ca09a250c4"
+    },
+    "app/src/main/jniLibs/arm64-v8a/liboboe.so": {
+      "bytes": 275984,
+      "original_sha256": "777940c6d8f95b15749592224d91eebcc951cee37f3866e65eeec3b9a596eb3e",
+      "replacements": 0,
+      "sha256": "777940c6d8f95b15749592224d91eebcc951cee37f3866e65eeec3b9a596eb3e"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libogg.so": {
+      "bytes": 29752,
+      "original_sha256": "24d51cf112ec335c112d8e753abf4346800ad31ab0742f6d75c16082a6b7f5b8",
+      "replacements": 0,
+      "sha256": "24d51cf112ec335c112d8e753abf4346800ad31ab0742f6d75c16082a6b7f5b8"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libopus.so": {
+      "bytes": 400048,
+      "original_sha256": "54b64261a3dd521a34bc9b879321c92885f4b33aad1f5e1d3aafe3afb6b06842",
+      "replacements": 0,
+      "sha256": "54b64261a3dd521a34bc9b879321c92885f4b33aad1f5e1d3aafe3afb6b06842"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libpcre.so": {
+      "bytes": 237464,
+      "original_sha256": "b94c6ab513b6c628cd4f5e5c644c82a9505dcddcdb99c7970e4492851d92c983",
+      "replacements": 0,
+      "sha256": "b94c6ab513b6c628cd4f5e5c644c82a9505dcddcdb99c7970e4492851d92c983"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libpcreposix.so": {
+      "bytes": 7336,
+      "original_sha256": "c496d8515bba479de61a8f2cd479470989b2d84d069ec71958b498b9420b95d7",
+      "replacements": 0,
+      "sha256": "c496d8515bba479de61a8f2cd479470989b2d84d069ec71958b498b9420b95d7"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libpulse.so": {
+      "bytes": 332776,
+      "original_sha256": "db4dbb786d613ff0496a5c104eba85afb7fa67a890c91cfe6b2b5a7ea385a8cd",
+      "replacements": 0,
+      "sha256": "db4dbb786d613ff0496a5c104eba85afb7fa67a890c91cfe6b2b5a7ea385a8cd"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libpulseaudio.so": {
+      "bytes": 80312,
+      "original_sha256": "2f5dd7e2c828e570787182eb85b21350b7ac9dbc1da0e1988d0cb48de7ed4ef6",
+      "replacements": 0,
+      "sha256": "2f5dd7e2c828e570787182eb85b21350b7ac9dbc1da0e1988d0cb48de7ed4ef6"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libpulsecommon-13.0.so": {
+      "bytes": 473944,
+      "original_sha256": "96abf45e5981723d855b69d63d72ddc2033898128ee6d6df036f518349681014",
+      "replacements": 0,
+      "sha256": "96abf45e5981723d855b69d63d72ddc2033898128ee6d6df036f518349681014"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libpulsecore-13.0.so": {
+      "bytes": 621400,
+      "original_sha256": "364d57e94cd9dbd7a52fe6182d64321cded3efd88c1c3dbd07a2d2b11cd487ed",
+      "replacements": 0,
+      "sha256": "364d57e94cd9dbd7a52fe6182d64321cded3efd88c1c3dbd07a2d2b11cd487ed"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libsndfile.so": {
+      "bytes": 689472,
+      "original_sha256": "a499fbaadb35b594e831183f21109b0b9b279ffeedb25ef7badc7da936809f0b",
+      "replacements": 0,
+      "sha256": "a499fbaadb35b594e831183f21109b0b9b279ffeedb25ef7badc7da936809f0b"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libvorbis.so": {
+      "bytes": 187440,
+      "original_sha256": "3a726f2c1e06a42b45bbf321694612f266bde2ed47c9214507183b44256b337c",
+      "replacements": 0,
+      "sha256": "3a726f2c1e06a42b45bbf321694612f266bde2ed47c9214507183b44256b337c"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libvorbisenc.so": {
+      "bytes": 653632,
+      "original_sha256": "7207f7b9bd0a29be4bde76f511eb6a8689779d57772e98a68ed936fb7752a24e",
+      "replacements": 0,
+      "sha256": "7207f7b9bd0a29be4bde76f511eb6a8689779d57772e98a68ed936fb7752a24e"
+    },
+    "app/src/main/jniLibs/arm64-v8a/libvorbisfile.so": {
+      "bytes": 31312,
+      "original_sha256": "fedcc9a3fd560ee5b0d987b4e8d380360e2f51edd215a55298c4d8e614c2f7ab",
+      "replacements": 0,
+      "sha256": "fedcc9a3fd560ee5b0d987b4e8d380360e2f51edd215a55298c4d8e614c2f7ab"
+    }
+  },
+  "format": 1,
+  "method": "Equal-length runtime path substitution; regular file byte lengths and ELF offsets unchanged",
+  "original_package": "com.winlator",
+  "package": "com.pd2.thor",
+  "zstandard_version": "0.25.0",
+  "zstd_version": [
+    1,
+    5,
+    7
+  ]
+}

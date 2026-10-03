@@ -1,0 +1,75 @@
+name: Android preview
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install pinned Android tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;24.0.8215888' 'cmake;3.22.1'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare relocated runtime
+        run: |
+          python3 -m pip install zstandard==0.25.0
+          python3 -m unittest discover -s tests -p 'test_runtime_fetch.py' -v
+          python3 scripts/fetch-runtime.py
+          python3 scripts/relocate-runtime.py
+          python3 scripts/relocate-runtime.py --check
+          python3 scripts/fetch-runtime.py --check-final
+          python3 -m unittest discover -s tests -p 'test_runtime_relocation.py' -v
+          ./scripts/test-import.sh
+          python3 tests/test_input_router.py
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Build ARM64 preview
+        run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Package APK and checksums
+        run: ./scripts/package-preview.sh
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PD2-Android-0.1.0-preview
+          path: |
+            app/build/distributions/PD2-Android-0.1.0-preview.apk
+            app/build/distributions/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish tagged preview
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --prerelease \
+            --title 'PD2 Android 0.1.0 Preview' \
+            --notes-file docs/RELEASE-0.1.0.md \
+            app/build/distributions/PD2-Android-0.1.0-preview.apk \
+            app/build/distributions/SHA256SUMS
