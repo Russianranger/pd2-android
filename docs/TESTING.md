@@ -1,16 +1,17 @@
 # 0.1.2 launch diagnostics and Thor qualification
 
-Launcher startup, runtime preparation, and installation import were accepted on 0.1.1. The user reported that all four graphics launch profiles returned to the launcher. The surviving final-attempt log records a Wine stack overflow; its cause is unconfirmed. Use this preview for one controlled launch with improved evidence collection.
+Launcher startup, runtime preparation, and installation import were accepted on 0.1.1. The new 0.1.2 Stability/Wine DirectDraw attempt also failed. Its trace locates the first captured game fault in native `Fog.dll + 0x1879A`, with Wine reporting a stack overflow; the underlying cause is unconfirmed. The existing 0.1.2 APK already contains the next Interpreter diagnostic option. This documentation update does not introduce a new APK or claim a fix.
 
 ## Next launch test
 
-1. Install 0.1.2 **over the existing app**. Keep its storage; the same application ID and signing identity preserve private runtime/game files.
-2. Reuse the accepted runtime and game installation. **Do not press Prepare runtime or re-import.**
-3. In **Launch settings**, choose **Turnip + Zink · Wine DirectDraw (compatibility)**. Leave **CPU mode → Stability (default)** selected for the first attempt.
-4. Press **Play once**. Report whether a game window or PD2 menu appears, the last screen visible, and roughly how long it takes to return if it fails.
-5. If it returns to the launcher, immediately use **Export support logs**, save/share the ZIP, and upload it to the chat. Keep this graphics profile; testing all four choices again is unnecessary.
+1. Keep the installed **0.1.2** app and its accepted runtime/game files. **Do not prepare, import, reinstall, or repeat the failed Stability attempt.**
+2. Keep **Launch settings → Turnip + Zink · Wine DirectDraw (compatibility)** selected.
+3. Select **Launch settings → CPU mode → Interpreter (diagnostic; very slow)**.
+4. Press **Play once** and allow at most **60 seconds** for the title screen. Record whether it returns to the launcher, displays the title/menu, or remains unfinished at the limit.
+5. If it returns, export immediately. If it remains unfinished, use the quick menu to return to the launcher and press **Stop client**. If the menu appears, record that success, then stop the client without starting a gameplay test.
+6. Use **Export support logs**, save/share the new ZIP, and upload it to the chat. Restore **CPU mode → Stability (default)** afterward.
 
-If that attempt also fails, one optional comparison uses **Launch settings → CPU mode → Interpreter (diagnostic; very slow)** with the same Wine DirectDraw profile. Press Play once and allow up to **60 seconds** for the title screen. If it remains unfinished, use the quick menu to return to the launcher and press **Stop client**, then export another support ZIP. Record whether it returned, displayed the title, or was stopped at the limit. Interpreter can take much longer; this interval bounds the diagnostic test and does not establish how long every valid load should take. Return CPU mode to **Stability (default)** afterward.
+Interpreter can take much longer; the 60-second interval bounds this diagnostic comparison and does not establish how long every valid load should take. Do not cycle through the other graphics choices for this test.
 
 If the whole Android app closes:
 
@@ -29,7 +30,7 @@ Use your complete, updated **English classic Diablo II + Lord of Destruction + P
 
 Report that the menu appeared and export the result before pursuing graphics/controller changes. Runtime preparation and import have already passed; this launch qualification does not require repeating them. The controls and save checklist below remains the later milestone, after an appropriate PD2/D2GL graphics path is established.
 
-Export support information after any new failure before changing settings. Further renderer comparisons should follow diagnosis of the first 0.1.2 attempt; do not cycle through all four settings before sending that evidence.
+Export support information after the Interpreter result before changing graphics settings. Further renderer comparisons should follow diagnosis of that result; do not cycle through all four settings before sending the evidence.
 
 ## Native controller
 
@@ -90,4 +91,4 @@ An import success is not a gameplay success. APK build/CI success is not physica
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
 
-The 0.1.2 local verification passed 13 Android 13/API 33 Robolectric tests and 26 session-log host checks. The ARM64 APK build also passed with the same application ID and signing certificate. These checks cover launcher/service/recovery behavior, diagnostic policy/reporting, PE inventory, and log limits; they do not run PD2 or confirm a fix on the Thor. Published GitHub Actions verification remains pending until its run is inspected, and the next physical test remains the compatibility launch described above.
+The 0.1.2 local verification passed 13 Android 13/API 33 Robolectric tests and 26 session-log host checks. The ARM64 APK build also passed with the same application ID and signing certificate. These existing results cover launcher/service/recovery behavior, diagnostic policy/reporting, PE inventory, and log limits; they do not run PD2 or confirm a fix on the Thor. This evidence-only documentation update introduces no new build or CI result. The next physical test is the Interpreter comparison above.

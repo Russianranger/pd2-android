@@ -8,9 +8,19 @@ The initial implementation uses Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current build is **0.1.2, a diagnostics and stability preview**. The user confirmed that 0.1.1 opens, prepares the runtime, and imports their installation on the Thor. Preserve those accepted steps. PD2 returned to the launcher with all four graphics profiles. A Windows-client failure is now recorded, but its underlying cause remains unconfirmed; gameplay is not qualified.
+The current APK remains **0.1.2, a diagnostics and stability preview**. The user confirmed that 0.1.1 opens, prepares the runtime, and imports their installation on the Thor. Preserve those accepted steps. The 0.1.2 Stability/Wine DirectDraw compatibility attempt also failed. Its new diagnostics locate the first captured game fault in native `Fog.dll`, but the underlying cause remains unconfirmed; gameplay is not qualified. This update records evidence and next steps only, with no new APK, code, version, or CI result.
 
-The next test is a single **Turnip + Zink · Wine DirectDraw (compatibility)** launch with CPU Stability, followed immediately by **Export support logs** if it returns to the launcher. If needed, one second attempt uses Interpreter with the same graphics choice and a separate export. Install over the existing app with the same preview signing identity. Do not uninstall, clear storage, prepare the accepted runtime again, or re-import the accepted game files.
+The next test uses the existing 0.1.2 app: keep **Turnip + Zink · Wine DirectDraw (compatibility)** and select **Launch settings → CPU mode → Interpreter (diagnostic; very slow)**. Press Play once, allow at most 60 seconds for the title, then stop/export the result and restore Stability. Do not uninstall, clear storage, prepare the accepted runtime again, re-import the accepted game files, or repeat the failed Stability attempt.
+
+## 0.1.2 device failure: native Fog stack overflow
+
+The new support ZIP confirms that the intended policy was applied: `cpuPreset: STABILITY`, `interpreter: false`, `BOX64_DYNAREC=1`, and built-in `ddraw=b`, using Turnip/Zink with `-ddraw -w`. This was a genuine compatibility attempt, not the earlier native-first DirectDraw choice.
+
+The game thread loaded native `Fog.dll` at `0x6FF50000`. Its first captured fault is at `0x6FF6879A`, which is `Fog.dll + 0x1879A`: a write to `0x00121FFC` with 32-bit `ESP=0x00122004`. Wine dispatches `EXCEPTION_STACK_OVERFLOW` (`0xC00000FD`) and reports a 32-bit stack range `0x00120000–0x00220000`, totaling 1 MiB. The module trace shows no `ProjectDiablo.dll` load before that fault.
+
+The fault location and stack-overflow classification are established for this captured attempt. The exact Fog function and whether the failure reflects recursion, legitimate stack consumption, or CPU-translation behavior are not established. Earlier RPC exceptions on other threads and directory/status warnings have not been shown to cause this game-thread failure. Do not delete imported files, increase the game stack, replace DLLs, or claim a renderer/translator fix from these observations.
+
+`launch.json` records runtime exit status 0 despite the captured game fault. That outer runtime result does not mean the Windows game started successfully. See the summary-only [device evidence note](evidence/2026-10-03-fog-startup.md).
 
 ## 0.1.1 device evidence and 0.1.2 response
 
@@ -22,7 +32,7 @@ Only the final **Turnip/VirGL + DirectDraw** attempt's runtime log survived beca
 wine: Unhandled stack overflow at address 6FF6879A (thread 00e0), starting debugger...
 ```
 
-The surviving log ends before any logged OpenGL-library initialization, and Wine's detailed output was suppressed with `WINEDEBUG=-all`. This evidence does not identify the faulting game DLL, establish that all four attempts had the same exception, or prove a graphics-driver cause. Do not describe a Fog/module fault, CPU translator bug, or renderer fix as confirmed.
+The surviving 0.1.1 log ends before any logged OpenGL-library initialization, and Wine's detailed output was suppressed with `WINEDEBUG=-all`. That earlier evidence did not identify the faulting game DLL, establish that all four attempts had the same exception, or prove a graphics-driver cause. The new 0.1.2 trace above identifies native Fog as the first captured fault location; its underlying cause remains unconfirmed.
 
 All four 0.1.1 choices used `WINEDLLOVERRIDES=ddraw,glide3x=n,b`; the DirectDraw options could still load the imported native D2GL wrapper. They therefore did not establish a built-in Wine DirectDraw baseline.
 
@@ -36,7 +46,7 @@ The 0.1.2 response:
 
 These changes make failures distinguishable without repeating import/setup or cycling through all renderers before collecting evidence. The first compatibility test qualifies client appearance only; using Wine's built-in DirectDraw may bypass D2GL/controller features, which need their own later test. CPU profiles and wrapper selection are compatibility candidates, not proven remedies or performance optimizations.
 
-For the optional Interpreter attempt, allow up to 60 seconds for the title screen. If it remains unfinished, return to the launcher, stop the client, export that result, and restore Stability. This is a bounded diagnostic interval, not proof that a valid interpreter launch must complete within 60 seconds.
+Interpreter is now the next diagnostic attempt because the Stability compatibility test failed. Allow up to 60 seconds for the title screen. If it remains unfinished, return to the launcher, stop the client, export that result, and restore Stability. If the menu appears, record that observation, then stop/export before pursuing gameplay. This is a bounded diagnostic interval, not proof that a valid interpreter launch must complete within 60 seconds.
 
 ## Startup correction and diagnostics
 
@@ -83,18 +93,18 @@ The completed local 0.1.2 checks are:
 - `python3 tests/test_session_logs.py`: 26 host checks passed for attempt-log retention, size bounds, preservation, and cleanup behavior.
 - The ARM64 APK build passed in 22 seconds as version 0.1.2/code 3. Application ID, signing certificate, minimum SDK 26, and target SDK 28 are unchanged. Runtime dependency sources/archives and the native libraries are unchanged from 0.1.1.
 
-These are completed local results. GitHub Actions verification for the published 0.1.2 commit/release is pending until its run is inspected; do not infer a CI pass from the local build.
+These record the completed local 0.1.2 results. This evidence-only documentation update does not rebuild the APK or report a new CI result; local checks do not establish a published GitHub Actions result.
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user has now accepted launcher startup, runtime preparation, and import on 0.1.1; the original 0.1.0 startup-crash cause and the current Windows-client stack-overflow cause remain unconfirmed.
 
-The 0.1.2 launch retest follows once its APK and checksums have been produced. Preserve the accepted steps and continue from the failing client launch:
+The existing 0.1.2 APK contains the next Interpreter diagnostic option. Preserve the accepted steps and continue from the failing client launch:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
 | Launcher startup | Accepted on 0.1.1 | User opened the launcher and completed setup/import |
 | Runtime preparation | Accepted on 0.1.1 | User report and `runtimePrepared: true` in support ZIP |
 | Installation import | Accepted on 0.1.1 | User report, import-completed log, and structural validation details |
-| Client launch | Failed on 0.1.1; 0.1.2 retest pending | Four profiles returned; last runtime log records Wine stack overflow |
+| Client launch | Failed on 0.1.1 and 0.1.2 Stability compatibility | New trace locates the first game-thread stack overflow in native Fog; Interpreter comparison pending |
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
 | Native controller | Pending | Left-stick movement, independent right-stick aiming, triggers/buttons, and controller UI on the Thor |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
