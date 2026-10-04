@@ -35,6 +35,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
     private boolean moveCursorToTouchpoint = false;
     private Finger fingerPointerButtonLeft;
     private Finger fingerPointerButtonRight;
+    private long pointerReleaseGeneration;
     private float scrollAccumY = 0;
     private boolean scrolling = false;
     private final XServer xServer;
@@ -153,7 +154,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
             case MotionEvent.ACTION_MOVE:
                 if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
                     float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
-                    if (isEnabled()) xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
+                    if (isEnabled()) {
+                        xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
+                        recordPointerRoute("external", "move");
+                    }
                 }
                 else {
                     for (byte i = 0; i < MAX_FINGERS; i++) {
@@ -193,8 +197,11 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
     private void handleFingerUp(Finger finger1) {
         switch (numFingers) {
             case 1:
-                if (finger1.isTap()) {
-                    if (moveCursorToTouchpoint) xServer.injectPointerMove(finger1.x, finger1.y);
+                if (isEnabled() && finger1.isTap()) {
+                    if (moveCursorToTouchpoint) {
+                        xServer.injectPointerMove(finger1.x, finger1.y);
+                        recordPointerRoute("touch", "move");
+                    }
                     pressPointerButtonLeft(finger1);
                 }
                 break;
@@ -231,11 +238,13 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
                 if (scrollAccumY < -100) {
                     xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_DOWN);
                     xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_DOWN);
+                    recordPointerRoute("touch", "scroll");
                     scrollAccumY = 0;
                 }
                 else if (scrollAccumY > 100) {
                     xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_UP);
                     xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_UP);
+                    recordPointerRoute("touch", "scroll");
                     scrollAccumY = 0;
                 }
                 scrolling = true;
@@ -250,6 +259,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
         if (!scrolling && numFingers <= 2 && !skipPointerMove) {
             if (moveCursorToTouchpoint && numFingers == 1) {
                 xServer.injectPointerMove(finger1.x, finger1.y);
+                recordPointerRoute("touch", "move");
             }
             else {
                 int dx = finger1.deltaX();
@@ -260,6 +270,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
                     winHandler.mouseEvent(MouseEventFlags.MOVE, dx, dy, 0);
                 }
                 else xServer.injectPointerMoveDelta(dx, dy);
+                recordPointerRoute("touch", "move");
             }
         }
     }
@@ -292,6 +303,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
     private void pressPointerButtonLeft(Finger finger) {
         if (isEnabled() && pointerButtonLeftEnabled && !xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_LEFT)) {
             xServer.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
+            recordPointerRoute("touch", "button");
             fingerPointerButtonLeft = finger;
         }
     }
@@ -299,14 +311,20 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
     private void pressPointerButtonRight(Finger finger) {
         if (isEnabled() && pointerButtonRightEnabled && !xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_RIGHT)) {
             xServer.injectPointerButtonPress(Pointer.Button.BUTTON_RIGHT);
+            recordPointerRoute("touch", "button");
             fingerPointerButtonRight = finger;
         }
     }
 
     private void releasePointerButtonLeft(final Finger finger) {
         if (isEnabled() && pointerButtonLeftEnabled && finger == fingerPointerButtonLeft && xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_LEFT)) {
+            final long generation = pointerReleaseGeneration;
             postDelayed(() -> {
-                xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+                if (generation != pointerReleaseGeneration || finger != fingerPointerButtonLeft) return;
+                if (isEnabled() && xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_LEFT)) {
+                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+                    recordPointerRoute("touch", "button");
+                }
                 fingerPointerButtonLeft = null;
             }, 30);
         }
@@ -314,8 +332,13 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
 
     private void releasePointerButtonRight(final Finger finger) {
         if (isEnabled() && pointerButtonRightEnabled && finger == fingerPointerButtonRight && xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_RIGHT)) {
+            final long generation = pointerReleaseGeneration;
             postDelayed(() -> {
-                xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
+                if (generation != pointerReleaseGeneration || finger != fingerPointerButtonRight) return;
+                if (isEnabled() && xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_RIGHT)) {
+                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
+                    recordPointerRoute("touch", "button");
+                }
                 fingerPointerButtonRight = null;
             }, 30);
         }
@@ -323,6 +346,25 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
 
     public void setSensitivity(float sensitivity) {
         this.sensitivity = sensitivity;
+    }
+
+    @Override public void setEnabled(boolean enabled) {
+        if (!enabled && isEnabled()) {
+            pointerReleaseGeneration++;
+            // Activity cleanup may already have balanced these buttons. Never send a second up.
+            if (xServer != null) {
+                if (fingerPointerButtonLeft != null && xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_LEFT)) {
+                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+                    recordPointerRoute("touch", "button");
+                }
+                if (fingerPointerButtonRight != null && xServer.pointer.isButtonPressed(Pointer.Button.BUTTON_RIGHT)) {
+                    xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
+                    recordPointerRoute("touch", "button");
+                }
+            }
+            fingerPointerButtonLeft = fingerPointerButtonRight = null;
+        }
+        super.setEnabled(enabled);
     }
 
     public boolean isPointerButtonLeftEnabled() {
@@ -354,31 +396,42 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
     }
 
     public boolean onExternalMouseEvent(MotionEvent event) {
+        return onExternalMouseEvent(event, "external");
+    }
+
+    private boolean onExternalMouseEvent(MotionEvent event, String source) {
         boolean handled = false;
         if (isEnabled() && event.isFromSource(InputDevice.SOURCE_MOUSE)) {
             int actionButton = event.getActionButton();
             switch (event.getAction()) {
                 case MotionEvent.ACTION_BUTTON_PRESS:
                     if (actionButton == MotionEvent.BUTTON_PRIMARY) {
+                        fingerPointerButtonLeft = null;
                         xServer.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
+                        recordPointerRoute(source, "button");
                     }
                     else if (actionButton == MotionEvent.BUTTON_SECONDARY) {
+                        fingerPointerButtonRight = null;
                         xServer.injectPointerButtonPress(Pointer.Button.BUTTON_RIGHT);
+                        recordPointerRoute(source, "button");
                     }
                     handled = true;
                     break;
                 case MotionEvent.ACTION_BUTTON_RELEASE:
                     if (actionButton == MotionEvent.BUTTON_PRIMARY) {
                         xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+                        recordPointerRoute(source, "button");
                     }
                     else if (actionButton == MotionEvent.BUTTON_SECONDARY) {
                         xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_RIGHT);
+                        recordPointerRoute(source, "button");
                     }
                     handled = true;
                     break;
                 case MotionEvent.ACTION_HOVER_MOVE:
                     float[] transformedPoint = XForm.transformPoint(xform, event.getX(), event.getY());
                     xServer.injectPointerMove((int)transformedPoint[0], (int)transformedPoint[1]);
+                    recordPointerRoute(source, "move");
                     handled = true;
                     break;
                 case MotionEvent.ACTION_SCROLL:
@@ -386,10 +439,12 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
                     if (scrollY <= -1.0f) {
                         xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_DOWN);
                         xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_DOWN);
+                        recordPointerRoute(source, "scroll");
                     }
                     else if (scrollY >= 1.0f) {
                         xServer.injectPointerButtonPress(Pointer.Button.BUTTON_SCROLL_UP);
                         xServer.injectPointerButtonRelease(Pointer.Button.BUTTON_SCROLL_UP);
+                        recordPointerRoute(source, "scroll");
                     }
                     handled = true;
                     break;
@@ -416,6 +471,11 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
 
     @Override
     public boolean onCapturedPointer(View view, MotionEvent event) {
+        // Capture dispatch bypasses the Activity's generic-motion gate.
+        if (!isEnabled()) {
+            recordPointerRoute("captured", "disabled");
+            return true;
+        }
         if (event.getAction() == MotionEvent.ACTION_MOVE) {
             float dx = event.getX() * sensitivity;
             if (Math.abs(dx) > CURSOR_ACCELERATION_THRESHOLD) dx *= CURSOR_ACCELERATION;
@@ -423,12 +483,23 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
             float dy = event.getY() * sensitivity;
             if (Math.abs(dy) > CURSOR_ACCELERATION_THRESHOLD) dy *= CURSOR_ACCELERATION;
 
-            xServer.injectPointerMoveDelta(Mathf.roundPoint(dx), Mathf.roundPoint(dy));
+            int roundedX = Mathf.roundPoint(dx), roundedY = Mathf.roundPoint(dy);
+            if (roundedX == 0 && roundedY == 0) {
+                recordPointerRoute("captured", "zero");
+                return true;
+            }
+            xServer.injectPointerMoveDelta(roundedX, roundedY);
+            recordPointerRoute("captured", "move");
             return true;
         }
         else {
             event.setSource(event.getSource() | InputDevice.SOURCE_MOUSE);
-            return onExternalMouseEvent(event);
+            return onExternalMouseEvent(event, "captured");
         }
+    }
+
+    private void recordPointerRoute(String source, String kind) {
+        WinHandler winHandler = xServer.getWinHandler();
+        if (winHandler != null) winHandler.controllerDiagnostics.recordPointerRoute(source, kind);
     }
 }

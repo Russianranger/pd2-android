@@ -29,6 +29,8 @@ python3 -m unittest discover -s tests -p 'test_controller_runtime.py' -v
 python3 -m unittest discover -s tests -p 'test_runtime_relocation.py' -v
 ./scripts/test-import.sh
 python3 tests/test_input_router.py
+python3 tests/test_native_controller_input.py
+python3 tests/test_captured_pointer.py
 python3 tests/test_crash_recovery.py
 python3 tests/test_session_logs.py
 sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;24.0.8215888' 'cmake;3.22.1'
@@ -53,7 +55,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.10-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.11-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -99,7 +101,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum. If this preview is published through that path, use the immutable tag `v0.1.10`.
+GitHub prerelease with the APK and checksum. If this preview is published through that path, use the immutable tag `v0.1.11`.
 
 ## Startup verification boundary
 
@@ -169,7 +171,7 @@ The native module is unchanged. APK size is 171,296,970 bytes; SHA-256:
 `d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
 Published 0.1.7 CI run 37169294205 passed. The user rejected the physical menu test; re-entry remains unqualified.
 
-Install 0.1.10 over the existing accepted preview with the same signing key/application ID to retain
+Install 0.1.11 over the existing accepted preview with the same signing key/application ID to retain
 imported files. The targeted controller update reuses rootfs version 24 and the current
 `wine-9.2-pd2-1` managed prefix; **no Prepare runtime or re-import is needed**.
 The backend installs automatically on Play. To restore the original, select
@@ -209,4 +211,12 @@ All 105 unique automated tests across 15 suites passed with zero failures, error
 
 Final ARM64 packaging and APK identity/signature/payload checks passed: `com.pd2.thor`, 0.1.10/code 11, min SDK 26, target SDK 28, ARM64 only, retaining the preview certificate. All 72 runtime assets and 35 Android native libraries match the verified 0.1.9 APK byte-for-byte.
 
-Local APK size: 174,025,221 bytes. SHA-256: `e2f8ea363b5f2d6c3b332998bad91b612bdd348d12e1c6f920b6af1186ce5440`. Published 0.1.10 source CI and physical reconnect qualification remain pending. See [Testing](TESTING.md) and [Handoff](HANDOFF.md); update over the existing app without Prepare runtime or re-import.
+Local APK size: 174,025,221 bytes. SHA-256: `e2f8ea363b5f2d6c3b332998bad91b612bdd348d12e1c6f920b6af1186ce5440`. [Published 0.1.10 CI run 37196226447](https://github.com/Russianranger/pd2-android/actions/runs/37196226447) passed. The subsequent physical report still rejects Native on Save/Quit. See [Testing](TESTING.md) and [Handoff](HANDOFF.md); update over the existing app without Prepare runtime or re-import.
+
+## 0.1.11 controller and cursor verification
+
+0.1.11/code 12 corrects independent trigger handling and immediate Native thumb-button edges, guards captured pointer forwarding, balances held mouse buttons, expands cursor-overlay hiding, and tests synchronized Java-side HID + legacy XInput reconnect. The packaged Wine/HID assets, runtime/prefix/import, and signing identity remain the accepted baseline. No physical Save/Quit recovery or shoulder-tab fix is claimed.
+
+Local verification passed **122 tests across 16 suites**, with no failures, errors or skips; all host input/import/recovery/log and runtime checks passed, including the Wine backend sanitizer checks and all 206 final runtime pins. Final ARM64 assembly, package identity, matching preview certificate/V2 signature, ZIP integrity and alignment passed. All 72 runtime assets match the verified 0.1.10 CI APK byte-for-byte. Of 35 Android native libraries, 26 match exactly, eight differ only in build IDs, and VirGL rebuild differences were statically traced to source-path strings and address/relocation adjustments; this is not physical graphics qualification. No Wine/HID binary changes are included.
+
+APK: `PD2-Android-0.1.11-preview.apk`, **174,055,860 bytes**. SHA-256: `0a307e4cde8a88312ec82f4413e76f71cf1f7d935a1597e86557081460e7a89c`. Identity: `com.pd2.thor`, 0.1.11/code 12, min SDK 26, target SDK 28, ARM64 only. Published source CI is pending; physical Save/Quit and shoulder-tab qualification remain pending. See [Testing](TESTING.md) and the [research evidence](evidence/2026-10-04-controller-research.md) for the separate physical qualification.

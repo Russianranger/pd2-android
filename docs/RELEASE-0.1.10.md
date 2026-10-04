@@ -24,6 +24,6 @@ Install over the existing app without uninstalling, clearing storage, Prepare ru
 5. Test **Hide white cursor: On**. PD2's cursor should remain when supplied by the game. Turn the option Off if Menu cursor needs its visible app pointer.
 6. Export support logs with the exact first failed step and the Native retry/cursor-toggle results.
 
-Local verification passed all 105 unique automated tests, host input/reconnect checks, pinned dependencies, and final ARM64 packaging. APK identity/signature checks passed; all 72 runtime assets and 35 Android native libraries match 0.1.9 byte-for-byte. Published 0.1.10 source CI and physical reconnect qualification remain pending. See [Testing](TESTING.md), [Handoff](HANDOFF.md), and the [evidence note](evidence/2026-10-04-native-reconnect.md).
+Local verification passed all 105 unique automated tests, host input/reconnect checks, pinned dependencies, and final ARM64 packaging. APK identity/signature checks passed; all 72 runtime assets and 35 Android native libraries match 0.1.9 byte-for-byte. [Published 0.1.10 CI run 37196226447](https://github.com/Russianranger/pd2-android/actions/runs/37196226447) passed. The subsequent physical report still rejects Native on Save/Quit. See [Testing](TESTING.md), [Handoff](HANDOFF.md), and the [evidence note](evidence/2026-10-04-native-reconnect.md).
 
 Local APK SHA-256: `e2f8ea363b5f2d6c3b332998bad91b612bdd348d12e1c6f920b6af1186ce5440`. An independently built CI APK has its own digest.

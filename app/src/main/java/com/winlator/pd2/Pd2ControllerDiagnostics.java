@@ -58,11 +58,47 @@ public final class Pd2ControllerDiagnostics {
     private static final class ModeInput {
         long handledMotionEvents, handledKeyEvents, lastHandledMotionAt, lastHandledKeyAt;
         final PointerOutput pointerOutput = new PointerOutput();
+        final PointerRouting pointerRouting = new PointerRouting();
+        JSONObject latestPointerContext;
 
         JSONObject snapshot() throws JSONException {
             return new JSONObject().put("handledMotionEvents", handledMotionEvents).put("handledKeyEvents", handledKeyEvents)
                     .put("lastHandledMotionAt", lastHandledMotionAt).put("lastHandledKeyAt", lastHandledKeyAt)
-                    .put("pointerOutput", pointerOutput.snapshot());
+                    .put("pointerOutput", pointerOutput.snapshot()).put("pointerRouting", pointerRouting.snapshot())
+                    .put("latestPointerContext", latestPointerContext == null ? JSONObject.NULL
+                            : new JSONObject(latestPointerContext.toString()));
+        }
+    }
+
+    private static final class PointerRouting {
+        private static final String[] SOURCES = {"captured", "external", "touch"};
+        private static final String[] KINDS = {"disabled", "zero", "move", "button", "scroll"};
+        private final long[][] counts = new long[SOURCES.length][KINDS.length];
+        private long lastEmissionAt;
+
+        void record(String source, String kind, long at) {
+            for (int sourceIndex = 0; sourceIndex < SOURCES.length; sourceIndex++) {
+                if (!SOURCES[sourceIndex].equals(source)) continue;
+                for (int kindIndex = 0; kindIndex < KINDS.length; kindIndex++) {
+                    if (!KINDS[kindIndex].equals(kind)) continue;
+                    if (kindIndex < 2 && sourceIndex != 0) return;
+                    counts[sourceIndex][kindIndex] = increment(counts[sourceIndex][kindIndex]);
+                    if (kindIndex >= 2) lastEmissionAt = at;
+                    return;
+                }
+            }
+        }
+
+        JSONObject snapshot() throws JSONException {
+            JSONObject result = new JSONObject();
+            for (int source = 0; source < SOURCES.length; source++) {
+                JSONObject counters = new JSONObject();
+                for (int kind = source == 0 ? 0 : 2; kind < KINDS.length; kind++)
+                    counters.put(KINDS[kind] + "Events", counts[source][kind]);
+                result.put(SOURCES[source], counters);
+            }
+            return result.put("lastEmissionAt", lastEmissionAt)
+                    .put("scope", "Touch, external and captured pointer emission categories; no coordinates, device IDs or game acknowledgment");
         }
     }
 
@@ -238,6 +274,11 @@ public final class Pd2ControllerDiagnostics {
         inputByMode[modeIndex()].pointerOutput.record(kind, at);
     }
 
+    /** Includes X11 pointer paths that are separate from the temporary menu helper. */
+    public synchronized void recordPointerRoute(String source, String kind) {
+        inputByMode[modeIndex()].pointerRouting.record(source, kind, System.currentTimeMillis());
+    }
+
     /** Copy only pointer geometry and fixed routing metadata, dropping titles, paths and other fields. */
     public synchronized void recordPointerContext(JSONObject state) {
         if (state == null) return;
@@ -245,7 +286,7 @@ public final class Pd2ControllerDiagnostics {
             JSONObject clean = new JSONObject();
             for (String name : new String[]{"screenWidth", "screenHeight"}) copyInteger(state, clean, name, 0, 65536);
             for (String name : new String[]{"pointerX", "pointerY"}) copyInteger(state, clean, name, -65536, 65536);
-            for (String name : new String[]{"relative", "gameCursorVisible", "forceRoot", "rootCursorVisible"}) {
+            for (String name : new String[]{"relative", "gameCursorVisible", "forceRoot", "rootCursorVisible", "cursorOverlayVisible"}) {
                 Object value = state.opt(name);
                 if (value instanceof Boolean) clean.put(name, value);
             }
@@ -266,6 +307,7 @@ public final class Pd2ControllerDiagnostics {
             }
             if (clean.length() == 0) return;
             clean.put("at", System.currentTimeMillis()).put("mode", mode);
+            inputByMode[modeIndex()].latestPointerContext = clean;
             if (recentPointerContexts.size() == 16) recentPointerContexts.removeFirst();
             recentPointerContexts.addLast(clean);
         } catch (JSONException ignored) { }
@@ -307,7 +349,7 @@ public final class Pd2ControllerDiagnostics {
                                 .put("unavailable", reconnectUnavailable).put("sendFailures", reconnectSendFailures)
                                 .put("timedOut", reconnectTimedOut)
                                 .put("lastPhase", lastReconnectPhase).put("lastPhaseAt", lastReconnectAt)
-                                .put("scope", "Explicit HID discovery absent/present packets; Windows PnP acceptance is not acknowledged"))
+                                .put("scope", "Explicit HID and legacy XInput absent/present UDP sends; Windows disconnection and game acceptance are not acknowledged"))
                         .put("nativeStateDelivery", new JSONObject().put("hidNonNeutralSent", hidNonNeutralStateSent)
                                 .put("hidNeutralSent", hidNeutralStateSent).put("xinputNonNeutralSent", xinputNonNeutralStateSent)
                                 .put("xinputNeutralSent", xinputNeutralStateSent).put("sendFailures", nativeStateSendFailures)
@@ -320,7 +362,7 @@ public final class Pd2ControllerDiagnostics {
                                 .put("handledKeyAt", lastHandledKeyAt).put("hidStateReplyAt", lastHidReplyAt)
                                 .put("xinputStateReplyAt", lastXInputReplyAt))
                         .put("nativeBridge", "legacy_xinput_7949_and_hid_7950")
-                        .put("bridgeRevision", "java-hid-7950-v2")
+                        .put("bridgeRevision", "java-native-reconnect-v3")
                         .put("nativeInputEnabled", nativeInputEnabled)
                         .put("socketReady", socketReady).put("winHandlerInitReceived", initReceived)
                         .put("selectedDevice", selectedDevice == null ? JSONObject.NULL : selectedDevice)
@@ -357,6 +399,10 @@ public final class Pd2ControllerDiagnostics {
                             .put("controllerAxisRZ", ExternalController.hasControllerAxis(device, MotionEvent.AXIS_RZ))
                             .put("controllerAxisRX", ExternalController.hasControllerAxis(device, MotionEvent.AXIS_RX))
                             .put("controllerAxisRY", ExternalController.hasControllerAxis(device, MotionEvent.AXIS_RY))
+                            .put("controllerAxisLTRIGGER", ExternalController.hasControllerAxis(device, MotionEvent.AXIS_LTRIGGER))
+                            .put("controllerAxisRTRIGGER", ExternalController.hasControllerAxis(device, MotionEvent.AXIS_RTRIGGER))
+                            .put("controllerAxisBRAKE", ExternalController.hasControllerAxis(device, MotionEvent.AXIS_BRAKE))
+                            .put("controllerAxisGAS", ExternalController.hasControllerAxis(device, MotionEvent.AXIS_GAS))
                             .put("accepted", ExternalController.acceptsController(device.getName(), device.isVirtual(),
                                     device.getSources(), keys, x || y));
                 }

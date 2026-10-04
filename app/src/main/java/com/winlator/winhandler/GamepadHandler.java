@@ -74,10 +74,11 @@ public class GamepadHandler {
         if (!enabled) { cancelNativeReconnect(true); neutralizeAll(); }
     }
 
-    /** Explicit recovery only: recycle Wine's HID notification device without changing its backend. */
+    /** Explicit experiment: recycle both Wine's HID device and the legacy XInput connection. */
     public boolean reconnectNativeDevice() {
         winHandler.controllerDiagnostics.recordNativeReconnect("requested");
-        if (stopped || !inputEnabled || !hidSubscribed || hidGamepad == null || !winHandler.isInputReady()) {
+        if (stopped || !inputEnabled || !hidSubscribed || hidGamepad == null
+                || !legacyNativeReady() || !winHandler.isInputReady()) {
             winHandler.controllerDiagnostics.recordNativeReconnect("unavailable");
             return false;
         }
@@ -95,7 +96,11 @@ public class GamepadHandler {
         neutralizeAll();
         winHandler.addControllerAction(() -> {
             if (!reconnectCurrent(epoch, 1)) return;
-            boolean sent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, ModernGamepadProtocol.hidDevice(null));
+            // Wine's removal notification makes the game rescan XInput. Advertise
+            // the legacy device absent first, so that scan can observe disconnect.
+            boolean legacySent = sendLegacyDeviceAndNeutral(null);
+            boolean hidSent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, ModernGamepadProtocol.hidDevice(null));
+            boolean sent = legacySent && hidSent;
             winHandler.controllerDiagnostics.recordNativeReconnect(sent ? "detachSent" : "sendFailure");
             if (sent) reconnectHandler.postDelayed(() -> attachNativeDevice(epoch), HID_RECONNECT_GAP_MS);
             else reconnectHandler.post(() -> { if (reconnectCurrent(epoch, 1)) cancelNativeReconnect(true); });
@@ -104,7 +109,24 @@ public class GamepadHandler {
     }
 
     private boolean reconnectCurrent(long epoch, int phase) {
-        return !stopped && inputEnabled && hidSubscribed && hidReconnectGeneration == epoch && hidReconnectPhase == phase;
+        return !stopped && inputEnabled && hidSubscribed && legacyNativeReady()
+                && hidReconnectGeneration == epoch && hidReconnectPhase == phase;
+    }
+
+    private boolean legacyNativeReady() {
+        return legacyGamepad != null && legacyGamepadClients.contains(LegacyGamepadProtocol.XINPUT_PORT);
+    }
+
+    /** Runs only on the serialized controller queue; an absent state cannot resurrect Wine's device. */
+    private boolean sendLegacyDeviceAndNeutral(GamepadSlot device) {
+        boolean sent = true;
+        int id = device != null ? LegacyGamepadProtocol.GAMEPAD_ID : 0;
+        for (int port : legacyGamepadClients) {
+            sent &= winHandler.sendPacket(port, LegacyGamepadProtocol.device(id, dinputMapperType,
+                    device != null ? device.getName() : ""));
+            sent &= sendNativeStatePacket(port, LegacyGamepadProtocol.state(id, device != null, new GamepadState()));
+        }
+        return sent;
     }
 
     private void attachNativeDevice(long epoch) {
@@ -114,10 +136,13 @@ public class GamepadHandler {
         winHandler.addControllerAction(() -> {
             if (!reconnectCurrent(epoch, 2)) return;
             final GamepadSlot current = hidGamepad;
-            boolean sent = current != null && winHandler.sendPacket(ModernGamepadProtocol.HID_PORT,
+            boolean legacySent = sendLegacyDeviceAndNeutral(legacyGamepad);
+            boolean hidSent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT,
                     ModernGamepadProtocol.hidDevice(current));
-            final boolean prepared = sent && sendNativeStatePacket(ModernGamepadProtocol.HID_PORT,
+            boolean neutralSent = sendNativeStatePacket(ModernGamepadProtocol.HID_PORT,
                     ModernGamepadProtocol.state(0, DINPUT_MAPPER_TYPE_XINPUT, new GamepadState()));
+            boolean sent = legacySent && hidSent && current != null;
+            final boolean prepared = sent && neutralSent;
             winHandler.controllerDiagnostics.recordNativeReconnect(sent ? "attachSent" : "sendFailure");
             if (sent && !prepared) winHandler.controllerDiagnostics.recordNativeReconnect("sendFailure");
             reconnectHandler.post(() -> {
@@ -146,9 +171,11 @@ public class GamepadHandler {
         if (restore && !stopped && hidSubscribed) winHandler.addControllerAction(() -> {
             if (stopped || hidReconnectGeneration != epoch || hidReconnectPhase != 0) return;
             GamepadSlot current = hidGamepad;
-            winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, ModernGamepadProtocol.hidDevice(current));
-            if (current != null) sendNativeStatePacket(ModernGamepadProtocol.HID_PORT,
+            boolean legacyRestored = sendLegacyDeviceAndNeutral(legacyGamepad);
+            boolean hidRestored = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, ModernGamepadProtocol.hidDevice(current));
+            boolean prepared = current == null || sendNativeStatePacket(ModernGamepadProtocol.HID_PORT,
                     ModernGamepadProtocol.state(0, DINPUT_MAPPER_TYPE_XINPUT, new GamepadState()));
+            if (!legacyRestored || !hidRestored || !prepared) winHandler.controllerDiagnostics.recordNativeReconnect("sendFailure");
         });
     }
 
@@ -338,7 +365,7 @@ public class GamepadHandler {
         return LegacyGamepadProtocol.usesLegacyProtocol(winHandler.getWineIdentifier(), port);
     }
 
-    private void handleLegacyGetGamepadRequest(int port) {
+    void handleLegacyGetGamepadRequest(int port) {
         ByteBuffer request = winHandler.receiveData;
         if (request.remaining() < 6) return;
         boolean xinput = request.get() == 1;
@@ -361,11 +388,15 @@ public class GamepadHandler {
         final GamepadSlot device = selected;
         final GamepadState state = device != null ? snapshot(device) : new GamepadState();
         final long generation = inputGeneration;
+        final long topology = hidTopologyGeneration;
         final byte mapper = dinputMapperType;
         winHandler.addControllerAction(() -> {
-            int id = device != null ? LegacyGamepadProtocol.GAMEPAD_ID : 0;
-            winHandler.sendPacket(port, LegacyGamepadProtocol.device(id, mapper, device != null ? device.getName() : ""));
-            if (device != null) sendNativeStatePacket(port, LegacyGamepadProtocol.state(id, true,
+            if (stopped) return;
+            boolean detached = hidReconnectPhase == 1;
+            if (!detached && topology != hidTopologyGeneration) return;
+            int id = device != null && !detached ? LegacyGamepadProtocol.GAMEPAD_ID : 0;
+            winHandler.sendPacket(port, LegacyGamepadProtocol.device(id, mapper, id != 0 ? device.getName() : ""));
+            if (device != null) sendNativeStatePacket(port, LegacyGamepadProtocol.state(id, !detached,
                     nativeControlsAllowed(generation) ? state : new GamepadState()));
         });
     }
@@ -378,8 +409,12 @@ public class GamepadHandler {
         final boolean connected = device != null && requestedId == LegacyGamepadProtocol.GAMEPAD_ID;
         final GamepadState state = connected ? snapshot(device) : new GamepadState();
         final long generation = inputGeneration;
-        winHandler.addControllerAction(() -> sendNativeStatePacket(port, LegacyGamepadProtocol.state(requestedId, connected,
-                nativeControlsAllowed(generation) ? state : new GamepadState())));
+        final long topology = hidTopologyGeneration;
+        winHandler.addControllerAction(() -> {
+            if (stopped || (hidReconnectPhase != 1 && topology != hidTopologyGeneration)) return;
+            sendNativeStatePacket(port, LegacyGamepadProtocol.state(requestedId, connected && hidReconnectPhase != 1,
+                    nativeControlsAllowed(generation) ? state : new GamepadState()));
+        });
     }
 
     private GamepadState snapshot(GamepadSlot device) {
@@ -396,7 +431,8 @@ public class GamepadHandler {
         final GamepadSlot device = legacyGamepad;
         final long generation = inputGeneration;
         for (final int port : legacyGamepadClients) winHandler.addControllerAction(() ->
-                sendNativeStatePacket(port, LegacyGamepadProtocol.state(LegacyGamepadProtocol.GAMEPAD_ID, device != null,
+                sendNativeStatePacket(port, LegacyGamepadProtocol.state(LegacyGamepadProtocol.GAMEPAD_ID,
+                        device != null && hidReconnectPhase != 1,
                         nativeControlsAllowed(generation) ? state : new GamepadState())));
     }
 
@@ -436,6 +472,8 @@ public class GamepadHandler {
         }
         if (isLegacyClient(port)) {
             legacyGamepadClients.remove(Integer.valueOf(port));
+            if (port == LegacyGamepadProtocol.XINPUT_PORT && hidReconnectPhase != 0)
+                reconnectHandler.post(() -> cancelNativeReconnect(true));
             if (legacyGamepadClients.isEmpty()) {
                 legacyGamepad = null;
                 winHandler.controllerDiagnostics.setSelectedDevice(null);

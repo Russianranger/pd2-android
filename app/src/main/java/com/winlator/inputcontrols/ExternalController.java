@@ -37,7 +37,6 @@ public class ExternalController implements GamepadSlot {
     private final ArrayList<ExternalControllerBinding> controllerBindings = new ArrayList<>();
     private final GamepadState state = new GamepadState();
     private GamepadVibration vibration;
-    private boolean processTriggerButtonOnMotionEvent = true;
 
     @Override
     public String getName() {
@@ -174,13 +173,26 @@ public class ExternalController implements GamepadSlot {
     }
 
     private void processTriggerButton(MotionEvent event) {
-        state.triggerL = Mathf.clamp(Math.max(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE)) - Mathf.EPSILON, 0.0f, 1.0f);
-        state.triggerR = Mathf.clamp(Math.max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS)) - Mathf.EPSILON, 0.0f, 1.0f);
+        // Mixed controllers can report digital full-press events as well as axes.
+        // Each side's declared axis remains authoritative throughout the session.
+        if (hasTriggerAxis(event.getDevice(), true))
+            state.triggerL = triggerAxis(event, MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_BRAKE);
+        if (hasTriggerAxis(event.getDevice(), false))
+            state.triggerR = triggerAxis(event, MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_GAS);
+    }
+
+    private static float triggerAxis(MotionEvent event, int axis, int alias) {
+        return Mathf.clamp(Math.max(event.getAxisValue(axis), event.getAxisValue(alias)) - Mathf.EPSILON, 0.0f, 1.0f);
+    }
+
+    private static boolean hasTriggerAxis(InputDevice device, boolean left) {
+        return device != null && (hasControllerAxis(device, left ? MotionEvent.AXIS_LTRIGGER : MotionEvent.AXIS_RTRIGGER)
+                || hasControllerAxis(device, left ? MotionEvent.AXIS_BRAKE : MotionEvent.AXIS_GAS));
     }
 
     public boolean updateStateFromMotionEvent(MotionEvent event) {
         if (isJoystickDevice(event)) {
-            if (processTriggerButtonOnMotionEvent) processTriggerButton(event);
+            processTriggerButton(event);
             int historySize = event.getHistorySize();
             for (int i = 0; i < historySize; i++) processJoystickInput(event, i);
             processJoystickInput(event, -1);
@@ -194,8 +206,13 @@ public class ExternalController implements GamepadSlot {
         int keyCode = event.getKeyCode();
         int buttonIdx = getButtonIdxByKeyCode(keyCode);
         if (buttonIdx != -1) {
-            if (buttonIdx == IDX_BUTTON_L2 || buttonIdx == IDX_BUTTON_R2) processTriggerButtonOnMotionEvent = false;
+            float triggerL = state.triggerL, triggerR = state.triggerR;
             state.setPressed(buttonIdx, pressed);
+            // Keep digital bits for legacy bindings, without replacing the
+            // analog level when this trigger exposes an axis. A key release
+            // at the full-press threshold must not cancel a partial hold.
+            if (buttonIdx == IDX_BUTTON_L2 && hasTriggerAxis(event.getDevice(), true)) state.triggerL = triggerL;
+            if (buttonIdx == IDX_BUTTON_R2 && hasTriggerAxis(event.getDevice(), false)) state.triggerR = triggerR;
             return true;
         }
 

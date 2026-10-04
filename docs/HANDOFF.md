@@ -8,9 +8,25 @@ The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current implementation is **0.1.10, a native reconnect preview**, version code 11. Native initially works inside a character and Menu cursor navigation is accepted. The user reports that 0.1.9 Native still fails after Save/Exit **and after character re-entry**. The new matching 0.1.9 capture records resumed Native stick activity but no face-button key attempt in that interval. The screenshot shows the app's white cursor over PD2's gauntlet. The input failure's cause remains unconfirmed.
+The current implementation is **0.1.11, a controller and cursor preview**, version code 12. Initial Native gameplay and Menu cursor navigation are accepted. The latest 0.1.10 report still rejects Native on Save/Quit and adds unreliable LT + L3 and shoulder-tab navigation. Earlier 0.1.9 recovery also failed after gameplay re-entry. The matching 0.1.10 log shows two actual Wine HID detach/attach cycles and continuing game-side controller calls; it does not establish accepted controller values or game actions. The full recovery cause remains unconfirmed.
 
-Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep GameNative-arguments Glide, Stability, and controller notifications enabled. See [Testing](TESTING.md) and the [Native reconnect evidence note](evidence/2026-10-04-native-reconnect.md).
+Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep GameNative-arguments Glide, Stability, and controller notifications enabled. See [Testing](TESTING.md), [0.1.11 release notes](RELEASE-0.1.11.md), and the [controller research evidence](evidence/2026-10-04-controller-research.md).
+
+## 0.1.11 scope
+
+- Replace the session-wide digital-trigger latch with independent analog authority for LT/RT. Digital-only sides retain their state during motion, and a full-press digital release does not cancel a partial analog hold. The legacy Wine XInput protocol still exposes digital trigger output.
+- Deliver Native single L3/R3 down/up edges immediately through `Pd2ThumbButtons`, preserving held combinations. L3 + R3 remains reserved; the first thumb can reach gameplay before the second opens the menu, which releases the input. Pointer routes retain deferred single-thumb navigation.
+- Consume captured pointer callbacks while disabled, suppress moves that round to zero, and release only held mouse buttons in activity cleanup. Shared-router cleanup coalesces releases for controls held by multiple sources on the same output route. Invalidate delayed touch releases on disable and verify callback generation, finger ownership, and current held state so stale callbacks cannot release a later press. Disabled touch-up cannot warp. Deliberate Native touch/mouse remains available.
+- Add `inputByMode.*.pointerRouting` source/emission counters for touch, external mouse, and captured input, including disabled/zero captured callbacks. Retain the latest pointer context per mode independently of the recent-context ring, preserving Native geometry/focus through subsequent Menu navigation. Values and device identities are not recorded. These count input requests, not PD2 acceptance.
+- On explicit Native selection, detach legacy XInput before HID, keep both absent for at least 600 ms starting after required successful sends, then restore legacy neutral and HID neutral before completing. Existing generations, cancellation, watchdog, and input gates bound this Java-only experiment. Unlike 0.1.10, legacy discovery/polls/state pushes also advertise absence during the gap. No runtime/PE replacement is involved.
+- Expand saved **Hide white cursor** to the app's root and Wine/X11 overlays and Android pointer icons, keeping the cursor rendered inside PD2's framebuffer. Default Off is retained.
+- Preserve foreground recovery, accepted Menu cursor, Wine 9.2/rootfs 24/`wine9-hid-1` assets, prefix/import/saves, graphics settings, icon/theme, and signing identity.
+
+The requested research hour started at **12:55:09 UTC** on 2026-10-04 and continues until **13:55:09 UTC**. Actual completion time and final 0.1.11 validation are **pending**. The evidence report contains primary PD2, D2GL, Android, and Microsoft links, exact latest-log counts, source defects, and remaining limitations. Exact official LT + L3/shoulder mappings and frontend Native support were not established by accessible sources. Use the installed client's Controls menu for reproduction and keep Save/Quit UI, title/character menus, and gameplay re-entry results separate.
+
+Local verification passed **122 tests across 16 suites**, with no failures, errors or skips; all host input/import/recovery/log and runtime checks passed, including the Wine backend sanitizer checks and all 206 final runtime pins. Final ARM64 assembly, package identity, matching preview certificate/V2 signature, ZIP integrity and alignment passed. All 72 runtime assets match the verified 0.1.10 CI APK byte-for-byte. Of 35 Android native libraries, 26 match exactly, eight differ only in build IDs, and VirGL rebuild differences were statically traced to source-path strings and address/relocation adjustments; this is not physical graphics qualification. No Wine/HID binary changes are included.
+
+APK: `PD2-Android-0.1.11-preview.apk`, **174,055,860 bytes**. SHA-256: `0a307e4cde8a88312ec82f4413e76f71cf1f7d935a1597e86557081460e7a89c`. Identity: `com.pd2.thor`, 0.1.11/code 12, min SDK 26, target SDK 28, ARM64 only. Published source CI is pending; physical Save/Quit and shoulder-tab qualification remain pending. Physical Save/Quit recovery, shoulder navigation, and complete controller qualification remain pending independently of build checks. The next test checks LT + L3 and shoulders before Save/Quit, repeats after re-entry and explicit Native selection plus a face-button activation, and checks cursor hiding separately in the main menu and in-game.
 
 ## 0.1.10 scope
 
@@ -31,7 +47,7 @@ Local 0.1.10 verification passed:
 - All 72 runtime assets and all 35 Android native libraries match the verified 0.1.9 APK byte-for-byte, including the Wine/HID assets.
 - Local APK size: 174,025,221 bytes. SHA-256: `e2f8ea363b5f2d6c3b332998bad91b612bdd348d12e1c6f920b6af1186ce5440`.
 
-Published 0.1.10 source CI and physical reconnect qualification remain pending. The next physical test explicitly selects Native after character re-entry, waits about one second, then presses/releases a face button before testing sticks. A second explicit Native selection is available as a single retry. See [0.1.10 release notes](RELEASE-0.1.10.md).
+The subsequent 0.1.10 physical report still rejects Native on Save/Quit. Its matching trace shows both HID reconnects reach Wine, new raw handles 0x7/0x9, and continued controller calls; legacy XInput stays connected. This establishes a meaningful reconnect without proving correct game input or recovery. The current test is 0.1.11 above; see [0.1.10 release notes](RELEASE-0.1.10.md) for historical scope.
 
 ## 0.1.9 scope
 
@@ -259,7 +275,7 @@ Published 0.1.7 CI run 37169294205 passed. The user rejected its physical menu t
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Native failure after Save/Exit/character re-entry remain unconfirmed.
 
-The next physical step tests explicit Native reconnect after Save/Exit and character re-entry on the accepted Wine 9.2/HID setup. Runtime preparation and import are not repeated:
+The next physical step checks 0.1.11 combinations, cursor layers, and synchronized explicit Native reconnect on the accepted Wine 9.2/HID setup. Runtime preparation and import are not repeated:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
@@ -270,13 +286,15 @@ The next physical step tests explicit Native reconnect after Save/Exit and chara
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
 | Native controller | In-character input accepted on 0.1.6 | User report; detailed independent aiming/buttons/triggers still pending |
 | Menu cursor | Accepted on 0.1.8 | User report; retain this navigation path |
-| Native after Save/Exit/re-entry | Failed on 0.1.9 by user report | Explicit Native reconnect, wait, face-button activation, then sticks; cause unconfirmed |
+| Native after Save/Quit/re-entry | Re-entry failed on 0.1.9; Save/Quit still fails in latest 0.1.10 report | Record Save/Quit UI, title/character menus, and gameplay re-entry separately on 0.1.11; cause unconfirmed |
+| Native combinations / shoulder tabs | LT + L3 and shoulder-tab problems reported on 0.1.10 | Qualify independent triggers and immediate thumb edges; shoulder-specific fix not established |
+| White cursor toggle | Main-menu white cursor persists in latest report | Check expanded hiding in main menu and in-game independently of Native response |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
 | Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
 | Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |
 | Online play | Pending | User authenticates and enters a normal PD2 online game |
 
-The immediate qualification step is character re-entry using the accepted Menu cursor if necessary, followed by explicit Native reconnect and face-button activation before checking sticks. Repeat the cycle and gear/launcher resume checks, and test the white-cursor toggle separately. Specific controller actions, rendering/audio, lifecycle, saved progress, and online gates remain pending beyond accepted initial Native input and Menu cursor.
+The immediate qualification step checks LT + L3 and individual shoulder/tab edges in initial Native gameplay, then Save/Quit and re-entry using the accepted Menu cursor if needed. Explicitly select Native, wait, press/release a face button, and repeat the same controls. Test the white-cursor toggle in the main menu and in-game separately. Rendering/audio, lifecycle, saved progress, and online gates remain pending beyond accepted initial Native input and Menu cursor.
 
 ## Next work after the first device test
 

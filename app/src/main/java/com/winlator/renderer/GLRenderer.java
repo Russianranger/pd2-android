@@ -57,6 +57,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private boolean cursorVisible = true;
     private volatile boolean forceRootCursor;
     private volatile boolean rootCursorVisible = true;
+    private volatile boolean cursorOverlayVisible = true;
     private float cursorScale = 1.0f;
     private int cursorBackColor = 0xffffff;
     private int cursorForeColor = 0x000000;
@@ -264,7 +265,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             short x = xServer.pointer.getClampedX();
             short y = xServer.pointer.getClampedY();
 
-            switch (cursorSource(cursor, forceRootCursor, rootCursorVisible)) {
+            switch (cursorSource(cursor, forceRootCursor, rootCursorVisible, cursorOverlayVisible)) {
                 case ROOT:
                     renderCursorDrawable(rootCursorDrawable, x, y);
                     break;
@@ -387,9 +388,21 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         return rootCursorVisible;
     }
 
+    /** Hide X cursor overlays while leaving the game framebuffer and pointer input intact. */
+    public void setCursorOverlayVisible(boolean cursorOverlayVisible) {
+        this.cursorOverlayVisible = cursorOverlayVisible;
+        xServerView.requestRender();
+    }
+
+    public boolean isCursorOverlayVisible() {
+        return cursorOverlayVisible;
+    }
+
     enum CursorSource { ROOT, GUEST, NONE }
 
-    static CursorSource cursorSource(Cursor cursor, boolean forceRootCursor, boolean rootCursorVisible) {
+    static CursorSource cursorSource(Cursor cursor, boolean forceRootCursor, boolean rootCursorVisible,
+                                     boolean cursorOverlayVisible) {
+        if (!cursorOverlayVisible) return CursorSource.NONE;
         if (rootCursorVisible && (forceRootCursor || cursor == null)) return CursorSource.ROOT;
         if (cursor != null && cursor.isVisible()) return CursorSource.GUEST;
         return CursorSource.NONE;

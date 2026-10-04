@@ -15,6 +15,7 @@ import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
@@ -72,7 +73,9 @@ import com.winlator.inputcontrols.ControlsProfile;
 import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.pd2.Pd2InputRouter;
+import com.winlator.pd2.Pd2ThumbButtons;
 import com.winlator.pd2.Pd2MenuPointer;
+import com.winlator.pd2.Pd2PointerCleanup;
 import com.winlator.pd2.Pd2NativeFocusRecovery;
 import com.winlator.pd2.Pd2ControllerDialogs;
 import com.winlator.pd2.Pd2ControllerRuntime;
@@ -161,8 +164,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean pd2HasWindowFocus = true;
     private volatile boolean pd2StopRequested;
     private Integer pd2RuntimeExitStatus;
-    private boolean pd2LeftThumbDown, pd2RightThumbDown, pd2ChordConsumed;
-    private boolean pd2LeftThumbDeferred, pd2RightThumbDeferred;
+    private final Pd2ThumbButtons pd2ThumbButtons = new Pd2ThumbButtons();
     private Pd2InputRouter pd2InputRouter;
     private Pd2MenuPointer pd2MenuPointer;
     private Pd2NativeFocusRecovery pd2NativeFocusRecovery;
@@ -390,8 +392,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pd2Session) {
             pd2HasWindowFocus = hasFocus;
             if (!hasFocus) {
-                pd2LeftThumbDown = pd2RightThumbDown = pd2ChordConsumed = false;
-                pd2LeftThumbDeferred = pd2RightThumbDeferred = false;
                 releasePd2Input();
             }
             updatePd2InputMode();
@@ -428,8 +428,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pd2Session) {
             pd2Paused = true;
             pd2NativeReconnectPending = false;
-            pd2LeftThumbDown = pd2RightThumbDown = pd2ChordConsumed = false;
-            pd2LeftThumbDeferred = pd2RightThumbDeferred = false;
             releasePd2Input();
             winHandler.gamepadHandler.setInputEnabled(false);
             updatePd2InputMode();
@@ -738,7 +736,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         xServerView = new XServerView(this, xServer);
         final GLRenderer renderer = xServerView.getRenderer();
         renderer.setCursorVisible(false);
-        if (pd2Session) renderer.setRootCursorVisible(!preferences.getBoolean("pd2_hide_white_cursor", false));
+        if (pd2Session) applyPd2CursorVisibility();
         renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
         renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
         renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
@@ -755,6 +753,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             if (!drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.openDrawer(GravityCompat.START);
         });
         rootView.addView(touchpadView);
+        if (pd2Session) applyPd2CursorVisibility();
 
         inputControlsView = new InputControlsView(this);
         inputControlsView.setOverlayOpacity(preferences.getFloat("overlay_opacity", InputControlsView.DEFAULT_OVERLAY_OPACITY));
@@ -813,16 +812,32 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     }
 
     private void releasePd2Input() {
+        pd2ThumbButtons.clear();
         if (pd2InputRouter != null) pd2InputRouter.releaseAll();
         if (inputControlsView != null) inputControlsView.releaseAll();
         winHandler.gamepadHandler.neutralizeAll();
         if (xServer != null) {
-            for (Pointer.Button button : Pointer.Button.values()) xServer.injectPointerButtonRelease(button);
+            // Modal/focus cleanup must balance held buttons without manufacturing
+            // raw mouse releases that can switch PD2 away from controller input.
+            Pd2PointerCleanup.releaseHeldButtons(xServer);
             for (XKeycode keycode : XKeycode.values()) xServer.injectKeyRelease(keycode);
         }
     }
 
     private boolean pd2PointerControls() { return pd2MouseKeyboard || pd2MenuCursor; }
+
+    private void applyPd2CursorVisibility() {
+        boolean visible = !preferences.getBoolean("pd2_hide_white_cursor", false);
+        if (xServerView != null) {
+            GLRenderer renderer = xServerView.getRenderer();
+            renderer.setRootCursorVisible(visible);
+            renderer.setCursorOverlayVisible(visible);
+            xServerView.setPointerIcon(PointerIcon.getSystemIcon(this,
+                    visible ? PointerIcon.TYPE_DEFAULT : PointerIcon.TYPE_NULL));
+        }
+        if (touchpadView != null) touchpadView.setPointerIcon(PointerIcon.getSystemIcon(this,
+                visible ? PointerIcon.TYPE_DEFAULT : PointerIcon.TYPE_NULL));
+    }
 
     private String pd2InputModeName() {
         return pd2MenuCursor ? "menu_cursor" : pd2MouseKeyboard ? "mouse_keyboard" : "native";
@@ -847,7 +862,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             else pd2MenuPointer.deactivate();
         }
         xServerView.getRenderer().setForceRootCursor(menuPointerActive);
-        xServerView.getRenderer().setRootCursorVisible(!preferences.getBoolean("pd2_hide_white_cursor", false));
+        applyPd2CursorVisibility();
         boolean nativeActive = !pd2PointerControls() && inputAvailable;
         pd2NativeFocusRecovery.setActive(nativeActive);
         winHandler.gamepadHandler.setInputEnabled(nativeActive);
@@ -899,6 +914,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         try {
             state.put("forceRoot", xServerView.getRenderer().isForceRootCursor());
             state.put("rootCursorVisible", xServerView.getRenderer().isRootCursorVisible());
+            state.put("cursorOverlayVisible", xServerView.getRenderer().isCursorOverlayVisible());
         }
         catch (org.json.JSONException ignored) { }
         winHandler.controllerDiagnostics.recordPointerContext(state);
@@ -970,7 +986,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     case 13:
                         boolean hideWhiteCursor = !preferences.getBoolean("pd2_hide_white_cursor", false);
                         preferences.edit().putBoolean("pd2_hide_white_cursor", hideWhiteCursor).apply();
-                        xServerView.getRenderer().setRootCursorVisible(!hideWhiteCursor);
+                        applyPd2CursorVisibility();
                         Toast.makeText(this, hideWhiteCursor ? "White cursor hidden" : "White cursor shown", Toast.LENGTH_SHORT).show();
                         break;
                 }
@@ -1237,21 +1253,22 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 int code = event.getKeyCode();
                 boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
                 if (code == KeyEvent.KEYCODE_BUTTON_THUMBL || code == KeyEvent.KEYCODE_BUTTON_THUMBR) {
-                    if (event.getRepeatCount() != 0) return true;
-                    boolean left = code == KeyEvent.KEYCODE_BUTTON_THUMBL;
-                    boolean deferred = left ? pd2LeftThumbDeferred : pd2RightThumbDeferred;
-                    if (left) { pd2LeftThumbDown = down; pd2LeftThumbDeferred = down && event.getRepeatCount() == 0; }
-                    else { pd2RightThumbDown = down; pd2RightThumbDeferred = down && event.getRepeatCount() == 0; }
-                    if (pd2LeftThumbDown && pd2RightThumbDown && !pd2MenuOpen) {
-                        pd2ChordConsumed = true;
-                        pd2LeftThumbDeferred = pd2RightThumbDeferred = false;
-                        showPd2QuickMenu();
-                    } else if (!down && deferred && !pd2ChordConsumed && !pd2MenuOpen && pd2HasWindowFocus && !pd2Paused && !drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                        KeyEvent press = KeyEvent.changeAction(event, KeyEvent.ACTION_DOWN);
-                        if (pd2PointerControls()) { routePd2PointerKey(press); routePd2PointerKey(event); }
-                        else { winHandler.onKeyEvent(press); winHandler.onKeyEvent(event); }
+                    if (event.getAction() != KeyEvent.ACTION_DOWN && event.getAction() != KeyEvent.ACTION_UP) return true;
+                    boolean available = !pd2StopRequested && !pd2MenuOpen && pd2HasWindowFocus
+                            && !pd2Paused && !drawerLayout.isDrawerOpen(GravityCompat.START);
+                    Pd2ThumbButtons.Action action = pd2ThumbButtons.event(event.getDeviceId(),
+                            code == KeyEvent.KEYCODE_BUTTON_THUMBL, down, event.getRepeatCount() != 0,
+                            pd2PointerControls(), available);
+                    switch (action) {
+                        case OPEN_MENU: showPd2QuickMenu(); break;
+                        case POINTER_TAP:
+                            routePd2PointerKey(KeyEvent.changeAction(event, KeyEvent.ACTION_DOWN));
+                            routePd2PointerKey(event);
+                            break;
+                        case NATIVE_DOWN:
+                        case NATIVE_UP: winHandler.onKeyEvent(event); break;
+                        case NONE: break;
                     }
-                    if (!pd2LeftThumbDown && !pd2RightThumbDown) pd2ChordConsumed = false;
                     return true;
                 }
                 if (pd2MenuOpen || !pd2HasWindowFocus || pd2Paused || drawerLayout.isDrawerOpen(GravityCompat.START)) return super.dispatchKeyEvent(event);

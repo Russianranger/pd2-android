@@ -11,6 +11,8 @@ import com.winlator.xserver.XKeycode;
 import com.winlator.xserver.XServer;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 
 /** Mouse/keyboard and temporary menu layouts. Native mode uses Wine's gamepad driver. */
@@ -199,8 +201,18 @@ public final class Pd2InputRouter {
     }
 
     public void releaseAll() {
-        for (Map.Entry<String, XKeycode> held : heldKeys.entrySet()) keyOwners.get(held.getKey()).key(held.getValue(), false);
-        for (Map.Entry<String, Pointer.Button> held : heldButtons.entrySet()) buttonOwners.get(held.getKey()).button(held.getValue(), false);
+        Map<MenuInput, HashSet<XKeycode>> releasedKeys = new IdentityHashMap<>();
+        for (Map.Entry<String, XKeycode> held : heldKeys.entrySet()) {
+            MenuInput owner = keyOwners.get(held.getKey());
+            if (releasedKeys.computeIfAbsent(owner, ignored -> new HashSet<>()).add(held.getValue()))
+                owner.key(held.getValue(), false);
+        }
+        Map<MenuInput, HashSet<Pointer.Button>> releasedButtons = new IdentityHashMap<>();
+        for (Map.Entry<String, Pointer.Button> held : heldButtons.entrySet()) {
+            MenuInput owner = buttonOwners.get(held.getKey());
+            if (releasedButtons.computeIfAbsent(owner, ignored -> new HashSet<>()).add(held.getValue()))
+                owner.button(held.getValue(), false);
+        }
         heldKeys.clear();
         heldButtons.clear();
         keyOwners.clear();

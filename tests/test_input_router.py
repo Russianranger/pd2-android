@@ -300,6 +300,39 @@ public class RouterTest {
   check(sink.events.contains("+BUTTON_RIGHT") && backend.events.size()==menuEvents,"injected menu backend changed full fallback");
   router.releaseAll();
  }
+ static void sharedSourcesReleaseEachOwnedButtonAndKeyOnlyOnce() {
+  XServer sink = new XServer(); Pd2InputRouter router = new Pd2InputRouter(sink);
+  for(int device:new int[]{1,2}) {
+   router.keyEvent(event(device,KeyEvent.KEYCODE_BUTTON_A,true));
+   router.keyEvent(event(device,KeyEvent.KEYCODE_BUTTON_B,true));
+   router.keyEvent(event(device,KeyEvent.KEYCODE_BUTTON_X,true));
+  }
+  for(String control:new String[]{"BUTTON_LEFT","BUTTON_RIGHT","KEY_SHIFT_L"})
+   check(java.util.Collections.frequency(sink.events,"+"+control)==1,"shared fallback source pressed twice: "+control);
+  router.releaseAll(); router.releaseAll();
+  for(String control:new String[]{"BUTTON_LEFT","BUTTON_RIGHT","KEY_SHIFT_L"})
+   check(java.util.Collections.frequency(sink.events,"-"+control)==1,"shared fallback release was not balanced once: "+control);
+  check(sink.buttons.isEmpty() && sink.keys.isEmpty(),"shared fallback cleanup left input held");
+  class MenuBackend implements Pd2InputRouter.MenuInput {
+   final java.util.ArrayList<String> events = new java.util.ArrayList<>();
+   public void move(int x,int y) {}
+   public void button(Pointer.Button b,boolean down) { events.add((down?"+":"-")+b); }
+   public void key(XKeycode k,boolean down) { events.add((down?"+":"-")+k); }
+  }
+  MenuBackend backend = new MenuBackend(); sink.events.clear();
+  router = new Pd2InputRouter(sink,backend); router.setMenuControls(true);
+  for(int device:new int[]{1,2}) router.keyEvent(event(device,KeyEvent.KEYCODE_BUTTON_A,true));
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,true));
+  router.keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_SELECT,true));
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_START,true));
+  router.keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_THUMBR,true));
+  router.setMenuControls(false); router.releaseAll();
+  for(String control:new String[]{"BUTTON_LEFT","KEY_ESC","KEY_ENTER"}) {
+   check(java.util.Collections.frequency(backend.events,"+"+control)==1,"shared menu press duplicated: "+control);
+   check(java.util.Collections.frequency(backend.events,"-"+control)==1,"shared old-owner release duplicated: "+control);
+  }
+  check(sink.events.isEmpty(),"old menu owner cleanup leaked to new X11 mode");
+ }
  public static void main(String[] args) {
   fallbackCompatibility();
   menuCursorEitherStickAndRightPriority();
@@ -310,7 +343,8 @@ public class RouterTest {
   unchangedModeKeepsHeldInput();
   configurationAndRejectedEventsNeverInject();
   injectedMenuBackendKeepsFallbackSeparateAndBalancesOwner();
-  System.out.println("PASS: 9 router scenarios: fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary, injected backend ownership");
+  sharedSourcesReleaseEachOwnedButtonAndKeyOnlyOnce();
+  System.out.println("PASS: 10 router scenarios: fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary, injected backend ownership, shared-source balanced cleanup");
  }
 }
 """,

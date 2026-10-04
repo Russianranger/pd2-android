@@ -335,6 +335,7 @@ public final class LegacyGamepadProtocolTest {
         slot.state.buttons = 1; slot.state.thumbLX = 1;
         handler.gamepadHandler.sendGamepadState(slot);
         handler.gamepadHandler.handleModernGetGamepadRequest(7950); // Old positive metadata waiting in queue.
+        queueLegacyDiscovery(handler); // Old positive XInput metadata must also stay absent.
         assertTrue(handler.gamepadHandler.reconnectNativeDevice());
         // The interval starts at the actual removal send, not at request or queue time.
         advanceReconnect(1000); assertTrue(handler.packets.isEmpty());
@@ -345,18 +346,20 @@ public final class LegacyGamepadProtocolTest {
         slot.state.buttons = 1; slot.state.thumbLX = 1;
         handler.gamepadHandler.sendGamepadState(slot);
         handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        queueLegacyDiscovery(handler);
+        queueLegacyPoll(handler);
         handler.drain(); assertBlackoutPackets(handler.packets);
         handler.packets.clear();
         advanceReconnect(599); handler.drain(); assertTrue(handler.packets.isEmpty());
         // Queue another heartbeat in the detached phase, then transition to attach before draining it.
         handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        queueLegacyDiscovery(handler);
+        queueLegacyPoll(handler);
         advanceReconnect(1); handler.drain();
-        assertEquals(2, handler.packets.size());
-        assertEquals(8, handler.packets.get(0).bytes[0]); assertEquals(1, handler.packets.get(0).bytes[1]);
-        assertEquals(9, handler.packets.get(1).bytes[0]); assertNeutral(handler.packets.get(1));
+        assertAttachPackets(handler.packets);
         // Nothing from the blackout may replay after the attach-completion callback.
         handler.gamepadHandler.sendGamepadState(slot); advanceReconnect(0); handler.drain();
-        assertNeutral(handler.packets.get(2)); assertNeutral(handler.packets.get(3));
+        assertNeutral(handler.packets.get(4)); assertNeutral(handler.packets.get(5));
         handler.packets.clear();
         slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
         assertEquals(1, littleEndian(handler.packets.get(0).bytes).getShort(6));
@@ -418,9 +421,7 @@ public final class LegacyGamepadProtocolTest {
         advanceReconnect(300); assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain();
         handler.packets.clear(); advanceReconnect(599); handler.drain(); assertTrue(handler.packets.isEmpty());
         advanceReconnect(1); handler.drain(); advanceReconnect(0);
-        assertEquals(2, handler.packets.size());
-        assertEquals(8, handler.packets.get(0).bytes[0]); assertEquals(1, handler.packets.get(0).bytes[1]);
-        assertNeutral(handler.packets.get(1));
+        assertAttachPackets(handler.packets);
         org.json.JSONObject reconnect = handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect");
         assertEquals(2, reconnect.getLong("requests")); assertEquals(2, reconnect.getLong("detachSent"));
         assertEquals(1, reconnect.getLong("attachSent")); assertEquals(1, reconnect.getLong("completed"));
@@ -446,6 +447,112 @@ public final class LegacyGamepadProtocolTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(millis));
     }
 
+    @Test public void legacyAbsentAdvertisementPrecedesHidRemovalAndSubscriptionsSurviveTheGap() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain();
+        int legacyRemoval = -1, hidRemoval = -1;
+        for (int index = 0; index < handler.packets.size(); index++) {
+            Packet packet = handler.packets.get(index);
+            if (packet.bytes[0] != 8) continue;
+            if (packet.port == 7949) { legacyRemoval = index; assertEquals(0, littleEndian(packet.bytes).getInt(1)); }
+            if (packet.port == 7950) { hidRemoval = index; assertEquals(0, packet.bytes[1]); }
+        }
+        assertTrue(legacyRemoval >= 0 && hidRemoval > legacyRemoval);
+        handler.packets.clear();
+        queueLegacyDiscovery(handler); queueLegacyPoll(handler);
+        slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertBlackoutPackets(handler.packets);
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7949 && packet.bytes[0] == 8));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("counts").getLong("notifySubscriptions"));
+        handler.packets.clear(); advanceReconnect(600); handler.drain(); advanceReconnect(0);
+        assertAttachPackets(handler.packets);
+        handler.packets.clear(); slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(0).bytes).getShort(6));
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(2));
+    }
+
+    @Test public void failedLegacyRemovalStillAttemptsHidRemovalAndRestoresBothNeutralDevices() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.failNextLegacyDiscovery = true;
+        handler.drain(); advanceReconnect(0); handler.drain();
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 0));
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7949 && packet.bytes[0] == 8 && littleEndian(packet.bytes).getInt(1) == 1));
+        for (Packet packet : handler.packets) if (packet.bytes[0] == 9) assertNeutralControls(packet);
+        org.json.JSONObject reconnect = handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect");
+        assertEquals(0, reconnect.getLong("detachSent")); assertEquals(1, reconnect.getLong("sendFailures"));
+        assertEquals(1, reconnect.getLong("cancelled"));
+        handler.packets.clear(); advanceReconnect(3000); handler.drain(); assertTrue(handler.packets.isEmpty());
+        slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(0).bytes).getShort(6));
+    }
+
+    @Test public void failedLegacyNeutralAttachDoesNotClaimCompletionAndRestoresNeutralInput() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain(); handler.packets.clear();
+        advanceReconnect(600); handler.failNextLegacyState = true; handler.drain(); advanceReconnect(0); handler.drain();
+        org.json.JSONObject reconnect = handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect");
+        assertEquals(0, reconnect.getLong("attachSent")); assertEquals(0, reconnect.getLong("completed"));
+        assertEquals(1, reconnect.getLong("sendFailures")); assertEquals(1, reconnect.getLong("cancelled"));
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7949 && packet.bytes[0] == 8 && littleEndian(packet.bytes).getInt(1) == 1));
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        for (Packet packet : handler.packets) if (packet.bytes[0] == 9) assertNeutral(packet);
+        handler.packets.clear(); slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(0).bytes).getShort(6));
+    }
+
+    @Test public void modalGateAndMissingLegacySubscriptionCannotStartThePairedReconnect() throws Exception {
+        FixtureHandler gated = new FixtureHandler(); connectHid(gated);
+        gated.gamepadHandler.setInputEnabled(false); gated.drain(); gated.packets.clear();
+        assertFalse(gated.gamepadHandler.reconnectNativeDevice()); gated.drain(); assertTrue(gated.packets.isEmpty());
+        FixtureHandler noLegacy = new FixtureHandler(); connectHid(noLegacy);
+        Field clients = GamepadHandler.class.getDeclaredField("legacyGamepadClients"); clients.setAccessible(true);
+        ((List<?>)clients.get(noLegacy.gamepadHandler)).clear();
+        assertFalse(noLegacy.gamepadHandler.reconnectNativeDevice()); noLegacy.drain(); assertTrue(noLegacy.packets.isEmpty());
+    }
+
+    @Test public void failedLegacyCancellationRestoreIsReportedAndPeriodicDiscoveryCanRecoverIt() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain(); handler.packets.clear();
+        handler.failNextLegacyDiscovery = true; handler.gamepadHandler.setInputEnabled(false); handler.drain();
+        org.json.JSONObject reconnect = handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect");
+        assertEquals(1, reconnect.getLong("sendFailures")); assertEquals(1, reconnect.getLong("cancelled"));
+        assertEquals(0, reconnect.getLong("completed"));
+        for (Packet packet : handler.packets) if (packet.bytes[0] == 9) assertNeutral(packet);
+        handler.packets.clear(); queueLegacyDiscovery(handler); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(0).bytes).getInt(1)); assertNeutral(handler.packets.get(1));
+        int sent = handler.packets.size(); advanceReconnect(3000); handler.drain(); assertEquals(sent, handler.packets.size());
+    }
+
+    @Test public void legacyUnsubscribeDuringBlackoutCancelsAttachWithoutInventingASubscription() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain(); handler.packets.clear();
+        handler.gamepadHandler.handleReleaseGamepadRequest(7949); advanceReconnect(0); handler.drain();
+        assertFalse(handler.packets.stream().anyMatch(packet -> packet.port == 7949));
+        int sent = handler.packets.size(); advanceReconnect(3000); handler.drain(); assertEquals(sent, handler.packets.size());
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("cancelled"));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("attachSent"));
+    }
+
+    private static void queueLegacyDiscovery(FixtureHandler handler) {
+        handler.receiveData.clear(); handler.receiveData.put((byte)1).put((byte)1).putInt(123).flip();
+        handler.gamepadHandler.handleLegacyGetGamepadRequest(7949);
+    }
+
+    private static void queueLegacyPoll(FixtureHandler handler) {
+        handler.receiveData.clear(); handler.receiveData.putInt(1).flip();
+        handler.gamepadHandler.handleGetGamepadStateRequest(7949);
+    }
+
+    private static void assertAttachPackets(List<Packet> packets) {
+        assertEquals(4, packets.size());
+        assertEquals(7949, packets.get(0).port); assertEquals(8, packets.get(0).bytes[0]);
+        assertEquals(1, littleEndian(packets.get(0).bytes).getInt(1));
+        assertEquals(7949, packets.get(1).port); assertNeutral(packets.get(1));
+        assertEquals(7950, packets.get(2).port); assertEquals(8, packets.get(2).bytes[0]);
+        assertEquals(1, packets.get(2).bytes[1]);
+        assertEquals(7950, packets.get(3).port); assertNeutral(packets.get(3));
+    }
+
     private static FixtureSlot connectHid(FixtureHandler handler) throws Exception {
         FixtureSlot slot = connect(handler, false);
         handler.gamepadHandler.handleModernGetGamepadRequest(7950); handler.drain(); handler.packets.clear();
@@ -454,20 +561,30 @@ public final class LegacyGamepadProtocolTest {
 
     private static void assertBlackoutPackets(List<Packet> packets) {
         for (Packet packet : packets) {
-            if (packet.bytes[0] == 9) assertNeutral(packet);
-            else if (packet.port == 7950 && packet.bytes[0] == 8) assertEquals(0, packet.bytes[1]);
+            if (packet.bytes[0] == 9) {
+                assertNeutralControls(packet);
+                if (packet.port == 7949) { assertEquals(0, packet.bytes[1]); assertEquals(0, littleEndian(packet.bytes).getInt(2)); }
+            }
+            else if (packet.bytes[0] == 8) {
+                if (packet.port == 7950) assertEquals(0, packet.bytes[1]);
+                if (packet.port == 7949) assertEquals(0, littleEndian(packet.bytes).getInt(1));
+            }
         }
     }
 
     private static void assertNeutral(Packet packet) {
+        assertNeutralControls(packet);
+        if (packet.port == 7949) {
+            assertEquals(1, packet.bytes[1]); assertEquals(1, littleEndian(packet.bytes).getInt(2));
+        }
+    }
+
+    private static void assertNeutralControls(Packet packet) {
         assertEquals(9, packet.bytes[0]);
         int start = packet.port == 7950 ? 2 : 6;
         int hat = packet.port == 7950 ? 4 : 8;
         for (int index = start; index < 17; index++) assertEquals("offset " + index,
                 index == hat ? (byte)-1 : 0, packet.bytes[index]);
-        if (packet.port == 7949) {
-            assertEquals(1, packet.bytes[1]); assertEquals(1, littleEndian(packet.bytes).getInt(2));
-        }
     }
 
     private static String repeat(String value, int count) {
@@ -518,6 +635,8 @@ public final class LegacyGamepadProtocolTest {
         final boolean interceptActions;
         boolean failNextDiscovery;
         boolean failNextHidState;
+        boolean failNextLegacyDiscovery;
+        boolean failNextLegacyState;
         FixtureHandler() { this(true); }
         FixtureHandler(boolean interceptActions) { super(null); this.interceptActions = interceptActions; initReceived = true; }
         @Override String getWineIdentifier() { return "wine-9.2-custom"; }
@@ -531,6 +650,8 @@ public final class LegacyGamepadProtocolTest {
         @Override protected boolean sendPacket(int port, byte[] packet) {
             if (failNextDiscovery && port == 7950 && packet[0] == 8) { failNextDiscovery = false; return false; }
             if (failNextHidState && port == 7950 && packet[0] == 9) { failNextHidState = false; return false; }
+            if (failNextLegacyDiscovery && port == 7949 && packet[0] == 8) { failNextLegacyDiscovery = false; return false; }
+            if (failNextLegacyState && port == 7949 && packet[0] == 9) { failNextLegacyState = false; return false; }
             packets.add(new Packet(port, packet.clone())); return true;
         }
         @Override protected boolean sendPacket(int port) {

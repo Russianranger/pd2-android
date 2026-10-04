@@ -32,6 +32,40 @@ import static org.junit.Assert.*;
 public final class Pd2ControllerDiagnosticsTest {
     @Before public void clearDevices() { InputDevices.devices.clear(); }
 
+    @Test public void pointerRoutesAttributeEmissionsAndRejectedCaptureToTheCurrentModeWithoutValues() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        diagnostics.recordPointerRoute("captured", "disabled");
+        diagnostics.recordPointerRoute("captured", "zero");
+        diagnostics.recordPointerRoute("captured", "move");
+        diagnostics.recordPointerRoute("external", "button");
+        diagnostics.recordPointerRoute("touch", "scroll");
+        diagnostics.recordPointerRoute("private-device-name", "move");
+        diagnostics.recordPointerRoute("touch", "private-key-value");
+        diagnostics.recordPointerRoute("external", "disabled");
+        diagnostics.setMode("menu_cursor", true);
+        diagnostics.recordPointerRoute("captured", "move");
+        diagnostics.recordPointerRoute("captured", "move");
+        JSONObject report = diagnostics.snapshot();
+        JSONObject nativeRoute = report.getJSONObject("inputByMode").getJSONObject("native").getJSONObject("pointerRouting");
+        JSONObject captured = nativeRoute.getJSONObject("captured");
+        for (String field : new String[]{"disabledEvents", "zeroEvents", "moveEvents"}) assertEquals(field, 1, captured.getLong(field));
+        assertEquals(1, nativeRoute.getJSONObject("external").getLong("buttonEvents"));
+        assertEquals(1, nativeRoute.getJSONObject("touch").getLong("scrollEvents"));
+        assertFalse(nativeRoute.getJSONObject("external").has("disabledEvents"));
+        assertTrue(nativeRoute.getLong("lastEmissionAt") > 0);
+        assertEquals(2, report.getJSONObject("inputByMode").getJSONObject("menu_cursor")
+                .getJSONObject("pointerRouting").getJSONObject("captured").getLong("moveEvents"));
+        assertEquals(0, report.getJSONObject("inputByMode").getJSONObject("mouse_keyboard")
+                .getJSONObject("pointerRouting").getLong("lastEmissionAt"));
+        assertEquals(0, report.getJSONObject("pointerOutput").getLong("moveEvents"));
+        assertFalse(report.toString().contains("private-device-name"));
+        assertFalse(report.toString().contains("private-key-value"));
+        captured.put("moveEvents", 999);
+        assertEquals(1, diagnostics.snapshot().getJSONObject("inputByMode").getJSONObject("native")
+                .getJSONObject("pointerRouting").getJSONObject("captured").getLong("moveEvents"));
+        assertTrue(report.toString().getBytes(StandardCharsets.UTF_8).length < Pd2ControllerDiagnostics.MAX_REPORT_BYTES);
+    }
+
     @Test public void reconnectAndStateDeliveryCountersSeparateRequestsFromSuccessfulPacketsAndFilterUnknownDetails() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
         diagnostics.recordNativeReconnect(null); diagnostics.recordNativeReconnect("private-controller-id");
@@ -235,6 +269,26 @@ public final class Pd2ControllerDiagnosticsTest {
         assertEquals(77, unchanged.getJSONObject("focusWindow").getInt("id"));
     }
 
+    @Test public void nativePointerContextSurvivesMenuNavigationBeforeSupportExport() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(RuntimeEnvironment.getApplication());
+        diagnostics.setMode("native", true);
+        diagnostics.recordPointerContext(new JSONObject().put("pointerX", 123).put("cursorOverlayVisible", false)
+                .put("title", "private-title"));
+        diagnostics.setMode("menu_cursor", true);
+        for (int i = 0; i < 20; i++) diagnostics.recordPointerContext(new JSONObject().put("pointerX", i));
+        JSONObject report = diagnostics.snapshot();
+        for (int i = 0; i < 16; i++) assertEquals("menu_cursor",
+                report.getJSONArray("recentPointerContexts").getJSONObject(i).getString("mode"));
+        JSONObject latest = report.getJSONObject("inputByMode").getJSONObject("native")
+                .getJSONObject("latestPointerContext");
+        assertEquals(123, latest.getInt("pointerX"));
+        assertFalse(latest.getBoolean("cursorOverlayVisible"));
+        assertFalse(latest.has("title"));
+        latest.put("pointerX", 999);
+        assertEquals(123, diagnostics.snapshot().getJSONObject("inputByMode").getJSONObject("native")
+                .getJSONObject("latestPointerContext").getInt("pointerX"));
+    }
+
     @Test public void pointerContextFiltersPrivateFieldsAndInvalidTypesWithoutCopyingOversizedData() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
         StringBuilder privateText = new StringBuilder();
@@ -348,6 +402,25 @@ public final class Pd2ControllerDiagnosticsTest {
         assertTrue(text.getBytes(StandardCharsets.UTF_8).length <= Pd2ControllerDiagnostics.MAX_REPORT_BYTES);
     }
 
+    @Test public void triggerAxisInventoryReportsEachAliasWithoutPressedValues() throws Exception {
+        InputDevice device = device(1, "Mixed triggers", InputDevice.SOURCE_JOYSTICK, InputDevice.SOURCE_JOYSTICK);
+        Method range = InputDevice.class.getDeclaredMethod("addMotionRange", int.class, int.class,
+                float.class, float.class, float.class, float.class, float.class);
+        range.setAccessible(true);
+        range.invoke(device, MotionEvent.AXIS_LTRIGGER, InputDevice.SOURCE_JOYSTICK, 0f, 1f, 0f, 0f, 0f);
+        range.invoke(device, MotionEvent.AXIS_GAS, InputDevice.SOURCE_JOYSTICK, 0f, 1f, 0f, 0f, 0f);
+        // An axis owned only by the mouse half of a composite device is excluded.
+        range.invoke(device, MotionEvent.AXIS_RTRIGGER, InputDevice.SOURCE_MOUSE, 0f, 1f, 0f, 0f, 0f);
+        InputDevices.devices.put(1, device);
+        JSONObject first = new Pd2ControllerDiagnostics(null).snapshot().getJSONArray("devices").getJSONObject(0);
+        assertTrue(first.getBoolean("controllerAxisLTRIGGER"));
+        assertFalse(first.getBoolean("controllerAxisRTRIGGER"));
+        assertFalse(first.getBoolean("controllerAxisBRAKE"));
+        assertTrue(first.getBoolean("controllerAxisGAS"));
+        assertFalse(first.has("triggerL"));
+        assertFalse(first.has("triggerR"));
+    }
+
     @Test public void countersDistinguishInputOwnershipTransportAndForwardingWithoutRecordingValues() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
         diagnostics.setMode("mouse_keyboard", false);
@@ -389,7 +462,7 @@ public final class Pd2ControllerDiagnosticsTest {
         diagnostics.recordReply((byte)9, 7950, false);
         JSONObject report = diagnostics.snapshot();
         assertEquals("legacy_xinput_7949_and_hid_7950", report.getString("nativeBridge"));
-        assertEquals("java-hid-7950-v2", report.getString("bridgeRevision"));
+        assertEquals("java-native-reconnect-v3", report.getString("bridgeRevision"));
         JSONObject counts = report.getJSONObject("counts");
         assertEquals(1, counts.getLong("hidDiscoveryRequests7950"));
         assertEquals(1, counts.getLong("hidDeviceReplies7950"));

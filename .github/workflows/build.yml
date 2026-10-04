@@ -51,6 +51,9 @@ jobs:
           ./scripts/test-import.sh
           python3 tests/test_input_router.py
           python3 tests/test_menu_pointer.py
+          python3 tests/test_native_controller_input.py
+          python3 tests/test_pointer_cleanup.py
+          python3 tests/test_captured_pointer.py
           python3 tests/test_crash_recovery.py
           python3 tests/test_session_logs.py
       - name: Set up Gradle
