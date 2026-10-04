@@ -203,6 +203,128 @@ public final class LegacyGamepadProtocolTest {
         assertEquals(0, handler.drainPendingActions());
     }
 
+    @Test public void hidDiscoveryAndPressReleaseRunBeforeInitAlongsideTheLegacyBridge() throws Exception {
+        FixtureHandler handler = new FixtureHandler(false);
+        handler.initReceived = false;
+        handler.setSocketReady(true);
+        FixtureSlot slot = connect(handler, false);
+        handler.gamepadHandler.setDInputMapperType(GamepadHandler.DINPUT_MAPPER_TYPE_STANDARD);
+        Field models = GamepadHandler.class.getDeclaredField("gamepadModelIds"); models.setAccessible(true);
+        models.set(handler.gamepadHandler, new short[]{(short)0x9999, (short)0x8888});
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        assertEquals(1, handler.drainPendingActions());
+        assertEquals(2, handler.packets.size());
+        Packet discovery = handler.packets.get(0), initial = handler.packets.get(1);
+        assertEquals(7950, discovery.port);
+        assertEquals(256, discovery.bytes.length);
+        assertEquals(1, discovery.bytes[1]);
+        assertEquals(10, discovery.bytes[2]);
+        assertEquals(1, discovery.bytes[3]);
+        assertEquals(0x045e, littleEndian(discovery.bytes).getShort(5) & 0xffff);
+        assertEquals(0x02a1, littleEndian(discovery.bytes).getShort(7) & 0xffff);
+        for (int index = 61; index < 256; index++) assertEquals(0, discovery.bytes[index]);
+        assertEquals(256, initial.bytes.length);
+        assertEquals(9, initial.bytes[0]);
+        assertEquals(0, initial.bytes[1]);
+        assertEquals(-1, initial.bytes[4]);
+
+        slot.state.buttons = 1;
+        slot.state.triggerL = 1;
+        handler.gamepadHandler.sendGamepadState(slot);
+        slot.state.buttons = 0;
+        slot.state.triggerL = 0;
+        handler.gamepadHandler.sendGamepadState(slot);
+        assertEquals(4, handler.drainPendingActions());
+        assertEquals(64, handler.packets.get(2).bytes.length);
+        assertEquals(7949, handler.packets.get(2).port);
+        assertEquals(1 | 1 << 10, littleEndian(handler.packets.get(2).bytes).getShort(6));
+        assertEquals(256, handler.packets.get(3).bytes.length);
+        assertEquals(7950, handler.packets.get(3).port);
+        assertEquals(1, littleEndian(handler.packets.get(3).bytes).getShort(2));
+        assertEquals(32767, littleEndian(handler.packets.get(3).bytes).getShort(13));
+        assertEquals(0, littleEndian(handler.packets.get(4).bytes).getShort(6));
+        assertEquals(0, littleEndian(handler.packets.get(5).bytes).getShort(2));
+        assertEquals(0, littleEndian(handler.packets.get(5).bytes).getShort(13));
+        assertFalse(handler.initReceived);
+    }
+
+    @Test public void hidSlotZeroTracksFirstSelectedPadEvenWhenItsConfiguredSlotIsThree() throws Exception {
+        FixtureHandler handler = new FixtureHandler();
+        FixtureSlot slot = connect(handler, false);
+        Field slots = GamepadHandler.class.getDeclaredField("gamepadSlots"); slots.setAccessible(true);
+        GamepadSlot[] configured = (GamepadSlot[])slots.get(handler.gamepadHandler);
+        configured[0] = null;
+        configured[3] = slot;
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        handler.drain();
+        slot.state.thumbRX = 1;
+        handler.gamepadHandler.sendGamepadState(slot);
+        handler.drain();
+        Packet hid = handler.packets.get(handler.packets.size() - 1);
+        assertEquals(7950, hid.port);
+        assertEquals(0, hid.bytes[1]);
+        assertEquals(32767, littleEndian(hid.bytes).getShort(9));
+    }
+
+    @Test public void modalNeutralizationInvalidatesHidPressAndNeverLeaksEmptySlotPayloads() throws Exception {
+        FixtureHandler handler = new FixtureHandler(false);
+        handler.initReceived = false;
+        handler.setSocketReady(true);
+        FixtureSlot slot = connect(handler, true);
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        handler.drainPendingActions();
+        handler.packets.clear();
+        Arrays.fill(handler.sendData.array(), (byte)0x7f);
+        slot.state.buttons = 1;
+        slot.state.thumbLX = 1;
+        handler.gamepadHandler.sendGamepadState(slot);
+        handler.gamepadHandler.setInputEnabled(false);
+        handler.gamepadHandler.setInputEnabled(true);
+        handler.drainPendingActions();
+        int hidPackets = 0, modernPackets = 0;
+        for (Packet packet : handler.packets) {
+            if (packet.port == 7949) {
+                assertEquals(64, packet.bytes.length);
+                assertEquals(1, packet.bytes[1]);
+                assertEquals(0, littleEndian(packet.bytes).getShort(6));
+            }
+            else {
+                assertEquals(256, packet.bytes.length);
+                assertEquals(0, littleEndian(packet.bytes).getShort(2));
+                assertEquals(-1, packet.bytes[4]);
+                for (int index = 5; index < 256; index++) assertEquals(0, packet.bytes[index]);
+                if (packet.port == 7950) { hidPackets++; assertEquals(0, packet.bytes[1]); }
+                else modernPackets++;
+            }
+        }
+        assertEquals(2, hidPackets);
+        assertEquals(5, modernPackets); // Queued slot0 plus neutral reports for all four slots.
+    }
+
+    @Test public void emptyHidDiscoveryClearsAllRecordsAndReleaseStopsHidPushes() throws Exception {
+        FixtureHandler handler = new FixtureHandler();
+        FixtureSlot slot = connect(handler, false);
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        handler.drain();
+        handler.gamepadHandler.handleReleaseGamepadRequest(7950);
+        handler.packets.clear();
+        slot.state.buttons = 1;
+        handler.gamepadHandler.sendGamepadState(slot);
+        handler.drain();
+        assertEquals(1, handler.packets.size());
+        assertEquals(7949, handler.packets.get(0).port);
+        Field slots = GamepadHandler.class.getDeclaredField("gamepadSlots"); slots.setAccessible(true);
+        Arrays.fill((GamepadSlot[])slots.get(handler.gamepadHandler), null);
+        handler.packets.clear();
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        handler.drain();
+        assertEquals(1, handler.packets.size());
+        byte[] absent = handler.packets.get(0).bytes;
+        assertEquals(256, absent.length);
+        assertEquals(8, absent[0]);
+        for (int index = 1; index < absent.length; index++) assertEquals(0, absent[index]);
+    }
+
     private static String repeat(String value, int count) {
         StringBuilder output = new StringBuilder();
         for (int index = 0; index < count; index++) output.append(value);

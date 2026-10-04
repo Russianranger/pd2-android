@@ -12,6 +12,9 @@ APK's matching prefix template/common-DLL list. Other rootfs members, graphics,
 and Box64 0.4.4 retain their existing source. Relocation then applies the
 equal-length package-path substitution; it is idempotent, and `--check`
 validates the result before compiling.
+Use a Linux host with GNU binutils (`readelf`/`nm`) for the controller backend
+artifact checks. Rebuilding that backend also requires host x86-64 GCC and the
+exact packaged Wine 9 `ntdll.so`; this is separate from the Android NDK build.
 
 ```sh
 python3 -m pip install zstandard==0.25.0
@@ -21,6 +24,8 @@ python3 scripts/fetch-runtime.py
 python3 scripts/relocate-runtime.py
 python3 scripts/relocate-runtime.py --check
 python3 scripts/fetch-runtime.py --check-final
+python3 scripts/build-controller-runtime.py --check
+python3 -m unittest discover -s tests -p 'test_controller_runtime.py' -v
 python3 -m unittest discover -s tests -p 'test_runtime_relocation.py' -v
 ./scripts/test-import.sh
 python3 tests/test_input_router.py
@@ -48,9 +53,31 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.5-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.6-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
+
+## Targeted Wine 9 controller backend
+
+`runtime/controller/` contains the producer and pinned Wine 9 headers/glue,
+including its LGPL notice and source inventory. The normal APK build packages
+`app/src/main/assets/pd2/controller/winebus.so` and its manifest. The build check
+verifies vendored and producer/build source hashes, manifest identity, artifact
+hash/size, ELF dependencies, and the 17-entry Wine 9 Unix ABI. It does not run
+PD2 or prove device compatibility.
+
+To rebuild the artifact, extract the exact `x86_64-unix/ntdll.so` from the
+prepared Wine 9 rootfs and run:
+
+```sh
+python3 scripts/build-controller-runtime.py --ntdll /path/to/opt/wine/lib/wine/x86_64-unix/ntdll.so
+python3 scripts/build-controller-runtime.py --check
+```
+
+The module links only to `ntdll.so` and libc and is installed before Play with
+verified original-backend backup/replacement. Wine version, rootfs archives,
+prefix, and imported PD2 files are retained. The backend uses the Wine 9 Unix
+ABI through matching headers/glue.
 
 ## Preview identity
 
@@ -72,7 +99,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum; the controller detection preview tag is `v0.1.5`.
+GitHub prerelease with the APK and checksum; the controller notifications preview tag is `v0.1.6`.
 
 ## Startup verification boundary
 
@@ -117,12 +144,27 @@ For 0.1.5, all 49 API 33 Robolectric tests, the 47 import/11 crash/26 session-lo
 checks, input-router checks, and the ARM64 APK build passed. The build took
 16 seconds as version code 6; all 35 packaged native libraries and 25 runtime
 archives match 0.1.4. Identity/certificate and SDK levels are unchanged.
-Published 0.1.5 CI remains pending. Its controller changes require a physical
-in-game retest; title startup was accepted on 0.1.4.
+Its [CI run 37162841712](https://github.com/Russianranger/pd2-android/actions/runs/37162841712)
+also succeeded for commit `f9f0618`. Title startup was accepted on 0.1.4, while
+the 0.1.5 device bundle still lacked PD2 controller activation.
 
-Install 0.1.5 over 0.1.4 with the same signing key/application ID to retain
-imported files. This Java update reuses rootfs version 24 and the current
+For 0.1.6, all 76 API 33 Robolectric tests, the 47 import/11 crash/26 session-log
+checks, input-router checks, and three native controller tests passed. Native
+source/artifact/ABI checks passed for the 31,064-byte `wine9-hid-1` module,
+linking only `ntdll.so`/libc with maximum GLIBC 2.17. Native tests exercise the
+production UDP/HID code through a host harness; complete Wine/HID/PD2 integration
+was not validated. Final ARM64 assembly/signature/version checks passed. All 35
+Android native libraries and 70 existing assets match 0.1.5; only the controller
+backend/manifest are added, with the final module verified inside the APK.
+Version 0.1.6/code 7 retains the same package/certificate, min SDK 26, and target
+SDK 28. Published 0.1.6 CI and the physical test remain pending.
+
+Install 0.1.6 over 0.1.5 with the same signing key/application ID to retain
+imported files. The targeted controller update reuses rootfs version 24 and the current
 `wine-9.2-pd2-1` managed prefix; **no Prepare runtime or re-import is needed**.
+The backend installs automatically on Play. To restore the original, select
+**Launch settings → Controller → Controller notifications disabled**, force-stop
+the app, reopen, and Play.
 A first installation or an upgrade from the older Wine 10 baseline still needs
 runtime preparation. The controller retest and remaining qualification sequence
 are in [Testing](TESTING.md).

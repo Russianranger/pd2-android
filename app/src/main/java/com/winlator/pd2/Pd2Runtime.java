@@ -17,6 +17,7 @@ import com.winlator.core.FileUtils;
 import com.winlator.core.WineInfo;
 import com.winlator.core.WineRegistryEditor;
 import com.winlator.core.WineThemeManager;
+import com.winlator.core.WineUtils;
 import com.winlator.xenvironment.RootFS;
 import com.winlator.xenvironment.RootFSInstaller;
 
@@ -83,6 +84,7 @@ public final class Pd2Runtime {
             }
 
             try {
+                Pd2ControllerRuntime.prepare(activity);
                 ContainerManager manager = new ContainerManager(activity);
                 SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
                 Container selected = manager.getContainerById(preferences.getInt(CONTAINER_ID, 0));
@@ -120,7 +122,8 @@ public final class Pd2Runtime {
                     deliver(ready);
                 });
             }
-            catch (RuntimeException | JSONException error) {
+            catch (RuntimeException | JSONException | java.io.IOException error) {
+                Pd2Activity.appendLauncherLog(activity, "Runtime/controller setup failed: " + error.getMessage());
                 if (creating) deliver(null);
                 else callback.call(null);
             }
@@ -136,6 +139,7 @@ public final class Pd2Runtime {
         if (!installation.valid) throw new IllegalStateException(installation.message);
         seedInstallationRegistry(container, installed, installation);
         seedFogDiagnostics(new File(container.getRootDir(), ".wine/user.reg"));
+        seedControllerRegistry(new File(container.getRootDir(), ".wine/system.reg"), Pd2ControllerRuntime.enabled(context));
         container.setName(CONTAINER_NAME);
         container.setScreenSize("1280x720");
         container.setGraphicsDriver(renderer);
@@ -147,6 +151,13 @@ public final class Pd2Runtime {
         container.setBox64Preset(Pd2LaunchPolicy.cpuPreset());
         container.setWinComponents(WIN_COMPONENTS);
         container.setStartupSelection(Container.STARTUP_SELECTION_ESSENTIAL);
+        container.putExtra(MANAGED, "1");
+        String notifications = Pd2ControllerRuntime.enabled(context) ? "1" : "0";
+        if (!notifications.equals(container.getExtra("pd2ControllerNotifications"))) {
+            container.putExtra("startupSelection", "");
+        }
+        container.putExtra("pd2ControllerNotifications", notifications);
+        WineUtils.changeServicesStatus(container, container.getStartupSelection());
         container.setEnvVars(environment(context));
         container.setDrives("P:" + installed.getAbsolutePath());
         container.putExtra(MANAGED, "1");
@@ -197,6 +208,19 @@ public final class Pd2Runtime {
 
     private static String windowsPath(String relative) {
         return "P:\\" + relative.replace('/', '\\');
+    }
+
+    /** The Wine 9 PE bus uses its SDL slots to start the Android HID producer. */
+    private static void seedControllerRegistry(File hive, boolean notifications) {
+        if (!hive.isFile()) throw new IllegalStateException("The private Wine registry is missing");
+        try (WineRegistryEditor registry = new WineRegistryEditor(hive)) {
+            String key = "System\\CurrentControlSet\\Services\\winebus";
+            String controlSet = registry.getSymlinkValue("System\\CurrentControlSet", "SymbolicLinkValue");
+            if (controlSet != null) key = controlSet + "\\Services\\winebus";
+            registry.setDwordValue(key, "Enable SDL", 1);
+            // This synthetic pad has no host hidraw endpoint to prefer.
+            registry.setDwordValue(key, "DisableHidraw", notifications ? 1 : 0);
+        }
     }
 
     /** Trace only native Fog exports in this app's dedicated prefix. */
@@ -316,6 +340,8 @@ public final class Pd2Runtime {
                 .put("drives", "P:" + Pd2Installer.installedDirectory(context).getAbsolutePath())
                 .put("hudMode", 0)
                 .put("startupSelection", Container.STARTUP_SELECTION_ESSENTIAL)
+                .put("extraData", new JSONObject().put(MANAGED, "1")
+                        .put("pd2ControllerNotifications", Pd2ControllerRuntime.enabled(context) ? "1" : "0"))
                 .put("box64Preset", Pd2LaunchPolicy.cpuPreset())
                 .put("desktopTheme", WineThemeManager.DEFAULT_DESKTOP_THEME);
     }

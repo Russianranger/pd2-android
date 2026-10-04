@@ -233,6 +233,10 @@ public abstract class WineUtils {
             for (String service : services) {
                 String name = service.substring(0, service.indexOf(":"));
                 int value = startupSelection != Container.STARTUP_SELECTION_NORMAL ? SERVICE_DISABLED : Character.getNumericValue(service.charAt(service.length()-1));
+                if ("1".equals(container.getExtra("pd2Managed"))
+                        && "1".equals(container.getExtra("pd2ControllerNotifications"))
+                        && (name.equals("PlugPlay") || name.equals("RpcSs")))
+                    value = Character.getNumericValue(service.charAt(service.length()-1));
                 registryEditor.setDwordValue(controlSetPath+"\\Services\\"+name, "Start", value);
             }
 

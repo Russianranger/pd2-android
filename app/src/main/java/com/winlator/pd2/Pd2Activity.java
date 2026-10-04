@@ -235,7 +235,18 @@ public final class Pd2Activity extends AppCompatActivity {
             operation = which == 4 ? "Glide with your GameNative arguments selected."
                     : "Launch profile saved.";
             d.dismiss(); updateUi();
-        }).setNeutralButton("CPU mode", (d, w) -> showCpuSettings()).setNegativeButton("Close", null).show());
+        }).setNeutralButton("CPU mode", (d, w) -> showCpuSettings())
+          .setPositiveButton("Controller", (d, w) -> showControllerSettings()).setNegativeButton("Close", null).show());
+    }
+    private void showControllerSettings() {
+        String[] modes = {"Controller notifications enabled (default)", "Controller notifications disabled"};
+        int selected = Pd2ControllerRuntime.enabled(this) ? 0 : 1;
+        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Native controller")
+            .setSingleChoiceItems(modes, selected, (d, which) -> {
+                preferences.edit().putBoolean(Pd2ControllerRuntime.ENABLED_PREFERENCE, which == 0).apply();
+                operation = "Controller setting saved. Restart the app before launching the game to apply it.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
     }
     private void showCpuSettings() {
         String[] modes = {"Stability (default)", "Interpreter (diagnostic; very slow)"};
@@ -293,7 +304,7 @@ public final class Pd2Activity extends AppCompatActivity {
     private void appendLauncherLog(String text) {
         appendLauncherLog(this, text);
     }
-    private static void appendLauncherLog(android.content.Context context, String text) {
+    static void appendLauncherLog(android.content.Context context, String text) {
         try {
             File file = new File(context.getFilesDir(), "pd2/logs/launcher.log"); file.getParentFile().mkdirs();
             if (file.length() > 1024 * 1024) file.delete();
@@ -319,6 +330,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("rootfsVersion", RootFS.find(this).getVersion())
                 .put("renderer", preferences.getString("pd2_renderer", "turnip,zink"))
                 .put("inputMode", preferences.getBoolean("pd2_mouse_keyboard", false) ? "mouse_keyboard" : "native")
+                .put("controllerRuntime", Pd2ControllerRuntime.status(this))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
                 .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")
                 .put("installation", installation == null ? "unchecked" : installation.details).put("lastOperation", operation);

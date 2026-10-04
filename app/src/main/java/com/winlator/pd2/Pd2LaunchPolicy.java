@@ -5,7 +5,7 @@ import com.winlator.container.Container;
 
 /** Runtime-only choices; never change DLLs in the imported installation. */
 public final class Pd2LaunchPolicy {
-    public static final String WINE_DEBUG = "-all,err+all,warn+all,+seh,+loaddll,+xinput,+rawinput";
+    public static final String WINE_DEBUG = "-all,err+all,warn+all,+seh,+loaddll,+xinput,+rawinput,+hid";
     public static final String CPU_PREFERENCE = "pd2_interpreter";
     public static final String GAMENATIVE_ARGUMENTS = "-3dfx -dxnocompatmodefix";
 

@@ -1,0 +1,3 @@
+# Preserve the pinned upstream snapshot, including its original whitespace.
+runtime/controller/vendor/wine9/** -text -whitespace
+app/src/main/assets/pd2/controller/winebus.so binary

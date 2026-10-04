@@ -54,6 +54,10 @@ jobs:
           python3 tests/test_session_logs.py
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+      - name: Verify Wine 9 controller backend
+        run: |
+          python3 scripts/build-controller-runtime.py --check
+          python3 -m unittest discover -s tests -p 'test_controller_runtime.py' -v
       - name: Test Android 13 startup and build ARM64 preview
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - name: Upload Android startup test results

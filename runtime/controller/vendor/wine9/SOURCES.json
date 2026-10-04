@@ -1,0 +1,286 @@
+{
+  "commit": "a4ef2bf8963fe4bfab390eebf73336364ce209bc",
+  "files": {
+    "COPYING.LIB": {
+      "bytes": 26434,
+      "sha256": "e237fa56668030e928551ddd60f05df5fe957f75eab874bbd017e085ed722e7c",
+      "upstream_path": "COPYING.LIB"
+    },
+    "dlls/winebus.sys/bus_iohid.c": {
+      "bytes": 14833,
+      "sha256": "5f470dae4040490390fdf413c8dcb50603af316a0b95d3061e09683b5a7a7b04",
+      "upstream_path": "dlls/winebus.sys/bus_iohid.c"
+    },
+    "dlls/winebus.sys/bus_sdl.c": {
+      "bytes": 46601,
+      "sha256": "96c66da8117fc30c4b836173473906124d330cc74868e0194318fd90a9920e7b",
+      "upstream_path": "dlls/winebus.sys/bus_sdl.c"
+    },
+    "dlls/winebus.sys/bus_udev.c": {
+      "bytes": 64624,
+      "sha256": "d49ffa3d18ad8704d70056315f1ad1539bc3bf27aad3eb2544bf8f01c5c58ed1",
+      "upstream_path": "dlls/winebus.sys/bus_udev.c"
+    },
+    "dlls/winebus.sys/hid.c": {
+      "bytes": 52011,
+      "sha256": "1301d831e419767366278243869487a0ad4ae407342e199a344201310b14c086",
+      "upstream_path": "dlls/winebus.sys/hid.c"
+    },
+    "dlls/winebus.sys/pop_hid_macros.h": {
+      "bytes": 1791,
+      "sha256": "f4fbaef7b1000d5fba6c1817f8b17acbb07d44c9a7a48adb0305f958d978856a",
+      "upstream_path": "dlls/winebus.sys/pop_hid_macros.h"
+    },
+    "dlls/winebus.sys/psh_hid_macros.h": {
+      "bytes": 3469,
+      "sha256": "1a249f7c9586d06e50b45b37a4014f8955cfb708a3ee267ed7d4a4d6dbe616e8",
+      "upstream_path": "dlls/winebus.sys/psh_hid_macros.h"
+    },
+    "dlls/winebus.sys/unix_private.h": {
+      "bytes": 8504,
+      "sha256": "afe81bf7eb67de0b476639be13f25ca5ff9d0d0f9fb296bc6825eaef86d24bd4",
+      "upstream_path": "dlls/winebus.sys/unix_private.h"
+    },
+    "dlls/winebus.sys/unixlib.c": {
+      "bytes": 11943,
+      "sha256": "15dc1dd7caf8a5f2ac5c05595ea8f0b9ca5ebdacce8fcbfa7e3c45ba53287621",
+      "upstream_path": "dlls/winebus.sys/unixlib.c"
+    },
+    "dlls/winebus.sys/unixlib.h": {
+      "bytes": 4950,
+      "sha256": "4f91527821065003204c3e1feb497a80267927b5e9994d50952f7c4f954068fd",
+      "upstream_path": "dlls/winebus.sys/unixlib.h"
+    },
+    "include/basetsd.h": {
+      "bytes": 8312,
+      "sha256": "b0a46666a79d5c93ec97c834cb7e14192770b11c6713aa8263a7351b54df4f1f",
+      "upstream_path": "include/basetsd.h"
+    },
+    "include/concurrencysal.h": {
+      "bytes": 1591,
+      "sha256": "8da72f7dfd616b1c521049f681d8ad14ca795dfbed62a6ec8c42b867f078e7c2",
+      "upstream_path": "include/concurrencysal.h"
+    },
+    "include/ddk/hidclass.h": {
+      "bytes": 3249,
+      "sha256": "2fa397f747f920b204032c936ee879746e234894d727c6b68bdc4dac809899d0",
+      "upstream_path": "include/ddk/hidclass.h"
+    },
+    "include/ddk/hidpi.h": {
+      "bytes": 10960,
+      "sha256": "8c3fa079532c5779d8bf3431e12b8a7d9a0b2819127ec21f2f34a7ec2bfcac7c",
+      "upstream_path": "include/ddk/hidpi.h"
+    },
+    "include/ddk/hidsdi.h": {
+      "bytes": 2574,
+      "sha256": "91443178dc2f7b30e338ff5baab15ef72c2339067384cec27ff11de68fd4c7d2",
+      "upstream_path": "include/ddk/hidsdi.h"
+    },
+    "include/ddk/hidtypes.h": {
+      "bytes": 1043,
+      "sha256": "681e7a31dbad51997e99ae03ba02c112810d7d4e344417f2e4de39d075cfb2ef",
+      "upstream_path": "include/ddk/hidtypes.h"
+    },
+    "include/ddk/wdm.h": {
+      "bytes": 73787,
+      "sha256": "27ad85ee9e5d565c6d264232ea17fb9041c20f181eca78d8e4a6ad8f953d1ad7",
+      "upstream_path": "include/ddk/wdm.h"
+    },
+    "include/devpropdef.h": {
+      "bytes": 3525,
+      "sha256": "5115a80ee90e49eed38fa5b99647b8b5b95823a646b7b1eba64a9bb6fb985e47",
+      "upstream_path": "include/devpropdef.h"
+    },
+    "include/driverspecs.h": {
+      "bytes": 1375,
+      "sha256": "64cb9d930f9c88d245e1ff9b0e8a70b7908b866e2bea59ef6fec3310f94cd5da",
+      "upstream_path": "include/driverspecs.h"
+    },
+    "include/excpt.h": {
+      "bytes": 1731,
+      "sha256": "697b60397a441a9ea026e65afe726d8fa9ead5e5f3f30027119be67ff56810a6",
+      "upstream_path": "include/excpt.h"
+    },
+    "include/guiddef.h": {
+      "bytes": 5612,
+      "sha256": "0095660c2ffe17bb17fee90167505207890850af5fa1c6243acc57dd396baa57",
+      "upstream_path": "include/guiddef.h"
+    },
+    "include/hidusage.h": {
+      "bytes": 14924,
+      "sha256": "e1219fefb83653300ebdd0ceb191388ef64f1ce478a41cb18da16bd5c9164c66",
+      "upstream_path": "include/hidusage.h"
+    },
+    "include/libloaderapi.h": {
+      "bytes": 1291,
+      "sha256": "6c00dd2e67166b327cef0fe2b222233eb725f7e739a09c31bea027351017e692",
+      "upstream_path": "include/libloaderapi.h"
+    },
+    "include/memoryapi.h": {
+      "bytes": 1622,
+      "sha256": "ce18e8e2bb3457593622a25374383f3c500290421d79f2d927da4698f1f5c506",
+      "upstream_path": "include/memoryapi.h"
+    },
+    "include/namespaceapi.h": {
+      "bytes": 1399,
+      "sha256": "39a58febccb32db24f063408603f3cfcc2ad2378346565b00013fe90b7ac772d",
+      "upstream_path": "include/namespaceapi.h"
+    },
+    "include/ntdef.h": {
+      "bytes": 2361,
+      "sha256": "8970faf1d4f5240c13d3e12eb4db88fc16c986ce43a518dccf683c1e837f4f5e",
+      "upstream_path": "include/ntdef.h"
+    },
+    "include/ntstatus.h": {
+      "bytes": 120857,
+      "sha256": "58455541771367456216d33cd5c8c8a0698463950cafb74df967f661531132dd",
+      "upstream_path": "include/ntstatus.h"
+    },
+    "include/poppack.h": {
+      "bytes": 5579,
+      "sha256": "b0d603f339b8fc57384ca9238bddc8d78da3438686026ea8fef0824540f05a99",
+      "upstream_path": "include/poppack.h"
+    },
+    "include/processthreadsapi.h": {
+      "bytes": 1671,
+      "sha256": "4a16dcd60be7e84543b06c2f580b9d5abcb68640c41bbf90bc5ce8b7d60dcdd4",
+      "upstream_path": "include/processthreadsapi.h"
+    },
+    "include/pshpack1.h": {
+      "bytes": 3241,
+      "sha256": "bb18aee44e476108949097a78f28c8cc82d23ea77d455cbfcd61b7bdd3249409",
+      "upstream_path": "include/pshpack1.h"
+    },
+    "include/pshpack2.h": {
+      "bytes": 3241,
+      "sha256": "872566dcebbf937e8a91d2a36d88740c8a46f9b21a9bf73e58b6990f9b421521",
+      "upstream_path": "include/pshpack2.h"
+    },
+    "include/pshpack4.h": {
+      "bytes": 3241,
+      "sha256": "07ce3b5466df0ff629aa952a68b5988a518058a9d1c68cd271a851a655be8b98",
+      "upstream_path": "include/pshpack4.h"
+    },
+    "include/pshpack8.h": {
+      "bytes": 3241,
+      "sha256": "93a1fea47fda10a684684151283b03164af386ee1883d5542b3777d1a561fb00",
+      "upstream_path": "include/pshpack8.h"
+    },
+    "include/realtimeapiset.h": {
+      "bytes": 1766,
+      "sha256": "8d66004decbe532fa7e7b8d574d7327909d9ffc16de6fd59928091aea6faec28",
+      "upstream_path": "include/realtimeapiset.h"
+    },
+    "include/reason.h": {
+      "bytes": 3685,
+      "sha256": "564b311b138648990356355eaa9fee6f580c32d8a2f76fb27b6a33c9f54f380a",
+      "upstream_path": "include/reason.h"
+    },
+    "include/sal.h": {
+      "bytes": 13562,
+      "sha256": "efbd1af796c6eaefec83b674ac14c57011639cc1589b00ad7b860bcd4c3567e5",
+      "upstream_path": "include/sal.h"
+    },
+    "include/specstrings.h": {
+      "bytes": 10648,
+      "sha256": "b25b566cdfa752238f2984482056f69333e79c010bdca518415b5ed462ce4e98",
+      "upstream_path": "include/specstrings.h"
+    },
+    "include/specstrings_strict.h": {
+      "bytes": 1154,
+      "sha256": "56aa58588c445aec9a5b8eda89042393219eae3f55809b991ea6fbca656a33c7",
+      "upstream_path": "include/specstrings_strict.h"
+    },
+    "include/synchapi.h": {
+      "bytes": 1058,
+      "sha256": "571ec50ab68400939883c6b4391b0f03e03aa5ee718ed01daf2255cc42e9a298",
+      "upstream_path": "include/synchapi.h"
+    },
+    "include/threadpoolapiset.h": {
+      "bytes": 4190,
+      "sha256": "9a3f3aa53cb6551894cc844582cafe661b12d9e1d926824751b1c1908825f4a0",
+      "upstream_path": "include/threadpoolapiset.h"
+    },
+    "include/timezoneapi.h": {
+      "bytes": 2964,
+      "sha256": "07b65bc491cdc86f553ac9f0b100156b3bdaba2278b726ceba782108aaf66e6b",
+      "upstream_path": "include/timezoneapi.h"
+    },
+    "include/winapifamily.h": {
+      "bytes": 2210,
+      "sha256": "c870849e002bb620db892289639fcaee34a49b31bbb6bddb9f81f80f57a637d3",
+      "upstream_path": "include/winapifamily.h"
+    },
+    "include/winbase.h": {
+      "bytes": 146097,
+      "sha256": "bb0533ac373736cae5fa431cd90a64512f8bbb34285f53af07903c9527efc5a4",
+      "upstream_path": "include/winbase.h"
+    },
+    "include/windef.h": {
+      "bytes": 10970,
+      "sha256": "f9a1d8c769fd966ca2ecf27e34f3f09a85a3d1ac1f679543a7fab25b9fc9cfcf",
+      "upstream_path": "include/windef.h"
+    },
+    "include/wine/debug.h": {
+      "bytes": 20013,
+      "sha256": "b6fe09bbf66a2e56c68699292374a19d5d4caba14090d72483193dc63873f43d",
+      "upstream_path": "include/wine/debug.h"
+    },
+    "include/wine/hid.h": {
+      "bytes": 11272,
+      "sha256": "5354e7268379abe537b90bc2c1054158c4fe1208ffddc005a5f40243c064a1ef",
+      "upstream_path": "include/wine/hid.h"
+    },
+    "include/wine/list.h": {
+      "bytes": 8183,
+      "sha256": "0a26ad30970b147c06f2068e6e419f88b638db03414aed653fc4df594ef73ae7",
+      "upstream_path": "include/wine/list.h"
+    },
+    "include/wine/unixlib.h": {
+      "bytes": 7890,
+      "sha256": "b16932d17256f065df105806efd305d1b27a42db85be1d98769f929e60fb8114",
+      "upstream_path": "include/wine/unixlib.h"
+    },
+    "include/winerror.h": {
+      "bytes": 282999,
+      "sha256": "6955601b6b4429edc25bbfd27155d3ed540ede8b2f3a71b2978f7918109f9f50",
+      "upstream_path": "include/winerror.h"
+    },
+    "include/winioctl.h": {
+      "bytes": 52972,
+      "sha256": "0e5d59f1e63d45398e9eb4b44cedf5680379e8ed6b9d63f8ca943dad90c804af",
+      "upstream_path": "include/winioctl.h"
+    },
+    "include/winnls.h": {
+      "bytes": 41201,
+      "sha256": "ed2eb557f4a53fdef3955c6efe4a006f09f5a3425dd64a3f8fe1661b45d50142",
+      "upstream_path": "include/winnls.h"
+    },
+    "include/winnt.h": {
+      "bytes": 262082,
+      "sha256": "0aef8f9c554a68ddb2b3130c0903aeb67ba7429f32d4838a98d751ea79d6ee46",
+      "upstream_path": "include/winnt.h"
+    },
+    "include/winnt.rh": {
+      "bytes": 18872,
+      "sha256": "4f503f29b7ea9654d4cf84dcb417321a1f0b1b4afcc61c511b9d1cc6d23bc8d4",
+      "upstream_path": "include/winnt.rh"
+    },
+    "include/winreg.h": {
+      "bytes": 11718,
+      "sha256": "e9db3906d958779d05c92ab0bd3a38be4b20e930817099482b2779a0dd556995",
+      "upstream_path": "include/winreg.h"
+    },
+    "include/winternl.h": {
+      "bytes": 246456,
+      "sha256": "ca30587d24f53137e5fba3bbeff8996c57ea7a22f9877dfa9e7b460e2ee35004",
+      "upstream_path": "include/winternl.h"
+    }
+  },
+  "format": 1,
+  "license": "LGPL-2.1-or-later",
+  "license_file": "COPYING.LIB",
+  "repository": "brunodev85/wine-9.2-custom",
+  "scope": "Unmodified Wine9 HID/Unix bus helpers and the header closure required by the standalone Unix library. No Wine10 private ABI headers.",
+  "url": "https://github.com/brunodev85/wine-9.2-custom/tree/a4ef2bf8963fe4bfab390eebf73336364ce209bc"
+}

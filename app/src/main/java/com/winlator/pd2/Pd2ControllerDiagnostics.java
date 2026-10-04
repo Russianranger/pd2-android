@@ -38,6 +38,7 @@ public final class Pd2ControllerDiagnostics {
     private long deviceReplies, stateReplies, replyFailures, invalidPackets, socketFailures;
     private long motionEvents, handledMotionEvents, keyEvents, handledKeyEvents;
     private long legacyXInputDiscovery, legacyDInputDiscovery, notifySubscriptions;
+    private long hidDiscoveryRequests, hidDeviceReplies, hidStateReplies;
 
     public Pd2ControllerDiagnostics(Context context) {
         // WinHandler is an Activity field initialized before attachBaseContext.
@@ -73,6 +74,7 @@ public final class Pd2ControllerDiagnostics {
         if (code == 8) {
             if (port == 7948) dinputRequests = increment(dinputRequests);
             else if (port == 7949) xinputRequests = increment(xinputRequests);
+            else if (port == 7950) hidDiscoveryRequests = increment(hidDiscoveryRequests);
             else otherRequests = increment(otherRequests);
         }
         else if (code == 9) statePolls = increment(statePolls);
@@ -87,8 +89,14 @@ public final class Pd2ControllerDiagnostics {
     public synchronized void recordReply(byte code, int port, boolean success) {
         if (code != 8 && code != 9) return;
         if (!success) replyFailures = increment(replyFailures);
-        else if (code == 8) deviceReplies = increment(deviceReplies);
-        else stateReplies = increment(stateReplies);
+        else if (code == 8) {
+            deviceReplies = increment(deviceReplies);
+            if (port == 7950) hidDeviceReplies = increment(hidDeviceReplies);
+        }
+        else {
+            stateReplies = increment(stateReplies);
+            if (port == 7950) hidStateReplies = increment(hidStateReplies);
+        }
     }
 
     public synchronized void recordMotion(boolean handled) {
@@ -110,11 +118,15 @@ public final class Pd2ControllerDiagnostics {
                         .put("capturedAt", System.currentTimeMillis())
                         .put("scope", "Android input capabilities and aggregate counters; no pressed keys or axis values")
                         .put("mode", mode).put("inputAvailable", inputAvailable)
+                        .put("nativeBridge", "legacy_xinput_7949_and_hid_7950")
+                        .put("bridgeRevision", "java-hid-7950-v1")
                         .put("nativeInputEnabled", nativeInputEnabled)
                         .put("socketReady", socketReady).put("winHandlerInitReceived", initReceived)
                         .put("selectedDevice", selectedDevice == null ? JSONObject.NULL : selectedDevice)
                         .put("counts", new JSONObject().put("initMessages", initMessages)
                                 .put("dinputRequests7948", dinputRequests).put("xinputRequests7949", xinputRequests)
+                                .put("hidDiscoveryRequests7950", hidDiscoveryRequests)
+                                .put("hidDeviceReplies7950", hidDeviceReplies).put("hidStateReplies7950", hidStateReplies)
                                 .put("otherGamepadRequests", otherRequests).put("statePolls", statePolls)
                                 .put("legacyXInputDiscovery", legacyXInputDiscovery)
                                 .put("legacyDInputDiscovery", legacyDInputDiscovery)

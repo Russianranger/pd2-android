@@ -4,17 +4,17 @@ A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruc
 
 The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 9.2 (Custom) from official Winlator 10.1, retaining Box64 0.4.4 and the current Android display/input and graphics components. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.5 controller detection preview.** The user reached the PD2 title screen on the Thor with 0.1.4, accepting client startup after the Wine 9.2 change. Native controller detection did not work. Launcher startup, runtime preparation, and import remain accepted; gameplay, both native sticks, saves, and online play remain unqualified.
+**Status: 0.1.6 controller notifications preview.** Title startup remains accepted. The 0.1.5 evidence confirms that Android accepts the Thor's Xbox controller, handles its button/stick events, and sends legacy bridge replies, but native PD2 input still did not activate. Gameplay, both native sticks, saves, and online play remain unqualified.
 
-This preview corrects Java controller discovery/response handling and adds controller status and export diagnostics. It retains the working runtime, prefix, graphics settings, and imported files. The exact cause of the device's controller failure remains unconfirmed; the correction requires a device retest.
+This preview adds a Wine 9.2 HID backend and a matching Java path for controller device/input notifications, alongside the existing XInput bridge. It retains the Wine version, prefix, graphics settings, and imported files. The missing notification path is supported by source/log evidence; whether this change enables PD2 input on the Thor still requires a device retest.
 
 Passing automated checks does not qualify gameplay, native controller input, rendering/audio, or online play on the Thor. No performance improvement over an existing Winlator/GameNative setup has been measured yet.
 
-## Next 0.1.5 check
+## Next 0.1.6 check
 
-Install 0.1.5 over 0.1.4 without uninstalling or clearing storage; the application ID and preview signing identity are unchanged. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.**
+Install 0.1.6 over 0.1.5 without uninstalling or clearing storage. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.** The verified controller backend is installed automatically before Play, with the original retained for rollback.
 
-Keep **Turnip + Zink · Glide (GameNative arguments)** and **CPU mode → Stability (default)**. Use the mouse/keyboard fallback to enter a temporary offline character if needed, then switch to **Native controller**, close the quick menu, and press a controller button. Check movement/aiming without mouse input. Open **Controller status** after the attempt, then export support logs whether controller input works or fails; see [Testing](docs/TESTING.md).
+Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and **Launch settings → Controller → Controller notifications enabled (default)**. Enter a temporary offline character using fallback if needed, then select Native, close the menu, and press a controller button. Test both sticks without mouse input; inspect Controller status and export logs afterward. The [Testing](docs/TESTING.md) steps include rollback if startup regresses.
 
 If the whole Android app closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Java crash capture does not cover every possible process exit.
 
@@ -47,6 +47,8 @@ Private game files and saves survive APK updates using the same signing identity
 
 **Native controller** forwards the physical controller through the Wine 9.2-compatible bridge. This baseline exposes one active gamepad; its XInput triggers are digital and its Wine DLL does not support rumble. PD2 remains responsible for movement, aiming, and its controller bindings. Both sticks and triggers must be confirmed on the physical Thor.
 
+Controller notifications are enabled by default. To restore the original Wine backend, stop the client, select **Launch settings → Controller → Controller notifications disabled**, force-stop the Android app, reopen it, and press Play. Changing this option takes effect on the next fresh game launch.
+
 **Mouse / keyboard layout** turns the controller into mouse and keyboard input. Its left stick sends WASD, so enable PD2's WASD movement if you want to move using that fallback layout. The right stick moves the pointer; A and B provide left and right click. The quick menu also provides the Android keyboard and cursor-speed adjustment. Full bindings and switch tests are in [Testing](docs/TESTING.md).
 
 The screen size is 1280×720. Standard Glide uses `-3dfx -w`; the fifth Glide choice uses `-3dfx -dxnocompatmodefix` without `-w`, matching the supplied GameNative arguments. Both preserve the imported native wrapper. `-dxnocompatmodefix` is a D2DX wrapper option and does not explain the already captured early Fog fault. Wine DirectDraw compatibility (`-ddraw -w`) explicitly uses built-in `ddraw`. Native controller support remains a separate qualification gate after the first client display.
@@ -61,7 +63,9 @@ uses matched assets from the official Winlator 10.1 APK; other runtime component
 retain their existing pinned sources.
 The APK includes these dependencies and launches independently of Winlator or
 GameNative once your game files are imported.
+The targeted Wine 9 HID backend is built from the included source and pinned
+Wine 9 headers; [Build instructions](docs/BUILD.md) describe its artifact/ABI checks.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.5 release notes](docs/RELEASE-0.1.5.md) describe the discovery/response correction and diagnostics. Earlier release notes retain the preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.6 release notes](docs/RELEASE-0.1.6.md) describe the HID notification path and rollback. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

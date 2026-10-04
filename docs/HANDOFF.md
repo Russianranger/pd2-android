@@ -8,9 +8,23 @@ The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current implementation is **0.1.5, a controller detection preview**, version code 6. The user reached PD2's title screen on the Thor with 0.1.4, accepting client startup. The support bundle confirms Wine 9.2/rootfs 24 and prefix revision `wine-9.2-pd2-1`; Fog export 10019 now returns 1 past the earlier failing interval. Native controller detection did not work. The exact earlier Fog failure mechanism and the current controller failure cause remain unconfirmed.
+The current implementation is **0.1.6, a controller notifications preview**, version code 7. Title startup remains accepted on the Thor. The latest 0.1.5 bundle confirms that Android accepts the Xbox controller, handles its input, and sends legacy XInput replies; native PD2 activation still failed. The Wine 9 HID notification producer is now added as a targeted comparison. The source/log evidence supports that missing path, but its device result and the full failure mechanism remain unqualified.
 
-The next test installs 0.1.5 over 0.1.4 and reuses the accepted runtime/prefix/import: **no Prepare runtime or re-import**. Keep **Turnip + Zink · Glide (GameNative arguments)** and **Stability (default)**. Enter a temporary offline character using fallback if needed, select Native, close the menu, press a controller button, and test both sticks without mouse input. Inspect **Controller status** and export the ZIP after the attempt. Native title-menu navigation is unverified and is not the sole detection test.
+The next test installs 0.1.6 over 0.1.5 and reuses the accepted Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep the accepted GameNative-arguments Glide profile, Stability, and **Controller notifications enabled (default)**. Enter a temporary offline character using fallback if needed, select Native, close the menu, press a controller button, and test both sticks without mouse input. Inspect Controller status and export after the attempt. If startup regresses, export first, disable notifications under **Launch settings → Controller**, force-stop/reopen, and Play to restore the original backend.
+
+## 0.1.6 HID notification scope
+
+- Add targeted Wine 9 Unix `winebus.so` revision `wine9-hid-1` using the matching 17-entry Wine 9 ABI, plus Java's 256-byte producer on UDP 7950. Keep the existing 7949/64-byte legacy XInput path. Both expose the first selected pad; HID identity/layout are fixed and cannot be changed by model/mapper preferences.
+- Install before Play with a pinned original hash, verified backup, staged verification, and atomic replacement. Unknown runtime bytes are rejected. Notifications default on; disabling restores the verified original on the next fresh launch after force-stop/reopen.
+- Restore PlugPlay Start 2 and RpcSs Start 3 while retaining other Essential service settings. Keep private-prefix `Enable SDL=1`; set `DisableHidraw=1` while notifications are enabled and 0 while disabled, resolving the actual CurrentControlSet alias.
+- Preserve Wine 9.2, rootfs 24, prefix revision `wine-9.2-pd2-1`, imported PD2 files/saves, and application/signing identity. The change replaces only Wine's Unix controller backend; no PD2 DLL patch or prefix migration is performed.
+- Record `nativeBridge=legacy_xinput_7949_and_hid_7950`, `bridgeRevision=java-hid-7950-v1`, separate HID discovery/device/state counters, and backend install/enable/revision status.
+
+Local Java/native/source checks and final ARM64 APK verification passed. The Thor controller test and published 0.1.6 CI remain pending. See the [latest controller evidence](evidence/2026-10-04-controller-rawinput.md).
+
+## 0.1.5 device evidence
+
+The matching report accepts Android device 92, `Xbox Wireless Controller`, with 736/736 motion and 16/16 key events handled. It records 58 legacy discovery requests/replies and 859 state replies without reply failures. Wine loads built-in `XINPUT1_4.dll`; PD2 registers raw input for page 1/usages 4 and 5 with flags `0x2100`, then logs four initial GetState calls for indices 0–3 and no later calls. This establishes Java-path activity, not PD2 activation. Final socket/availability flags describe snapshot time and must not replace those accumulated observations.
 
 ## 0.1.5 controller scope
 
@@ -22,7 +36,7 @@ The next test installs 0.1.5 over 0.1.4 and reuses the accepted runtime/prefix/i
 - Replace the Fog `+snoop` channel after accepted startup with `+xinput,+rawinput`, retaining error/warning/exception/module-load logging.
 - Keep Wine 9.2, rootfs 24, revision `wine-9.2-pd2-1`, runtime assets, prefix, imported game files/saves, and application/signing identity unchanged. There is no new runtime preparation or prefix migration.
 
-Local 0.1.5 tests and the ARM64 build passed; published 0.1.5 CI remains pending. Actual PD2 controller activation, both sticks, and the remaining milestone gates still require the device retest. See the [controller evidence note](evidence/2026-10-03-controller-detection.md).
+Local 0.1.5 tests/build and [CI run 37162841712](https://github.com/Russianranger/pd2-android/actions/runs/37162841712) passed for commit `f9f0618`. Its subsequent device result establishes Android discovery/input/replies while native activation remains absent. The [earlier controller evidence note](evidence/2026-10-03-controller-detection.md) records the preceding 0.1.4 report.
 
 ## 0.1.4 runtime comparison
 
@@ -157,11 +171,23 @@ The completed local 0.1.5 checks are:
 - The ARM64 APK build passed in 18 seconds. Version 0.1.5/code 6 retains the same application/signing identity and SDK levels; all 35 packaged native libraries and 25 runtime archives match 0.1.4, with no temporary files packaged.
 - APK size: 171,401,972 bytes. SHA-256: `cd9f9ed746cd1c67e4417172034aa89c8b993253be1d48b92dc36dbb3639e02a`.
 
-Published 0.1.5 CI remains pending until inspected. Neither framework tests nor payload comparison qualify physical PD2 controller activation.
+Published 0.1.5 CI run 37162841712 succeeded. Neither framework tests nor payload comparison qualify physical PD2 controller activation.
+
+The completed local 0.1.6 checks are:
+
+- All 76 Android 13/API 33 Robolectric tests passed with no failures, errors, or skips. The 47 import checks, 11 crash-recovery checks, 26 session-log checks, and input-router checks passed.
+- Three native controller tests passed, including the production UDP/HID/lifecycle host harness under ASan/UBSan. Alignment checking is excluded for the upstream x86 report writes; LeakSanitizer is unavailable on this host. This does not establish complete Wine/HID/PD2 integration; that host test was blocked.
+- The pinned 55 Wine 9 source files and LGPL notice, producer/build source hashes, manifest identity, artifact hash, and exact ABI checks passed. The module exports only `__wine_unix_call_funcs`, with 17 entries and compile-time struct size/offset assertions; it links only `ntdll.so`/`libc.so.6`, requiring at most GLIBC 2.17.
+- Final backend: 31,064 bytes, revision `wine9-hid-1`, SHA-256 `541523c1e21059a386cfd60f6f18354c05b28ca2457faf867221911b545c4b0e`.
+- ARM64 assembly and signature/version checks passed: `com.pd2.thor`, version 0.1.6/code 7, min SDK 26, target SDK 28, and the same preview certificate.
+- All 35 packaged Android native libraries and 70 existing assets match 0.1.5 byte-for-byte. Only the controller backend and manifest assets are added; the final module hash was verified inside the APK.
+- APK size: 171,307,488 bytes. SHA-256: `21a5b1095ab254a7f4d5cf60ef9e6364b848fc604bbec58838226c510f796f8b`.
+
+Published 0.1.6 CI and physical native controller activation remain pending. No complete Wine/HID/PD2 integration success is claimed from the host checks.
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import and subsequently title startup on 0.1.4. The original Android crash, earlier Wine 10/Fog failure mechanism, and current controller-detection cause remain unconfirmed.
 
-The next physical step tests controller discovery/activation on the accepted Wine 9.2 setup. Runtime preparation and import are not repeated:
+The next physical step tests HID-backed controller activation on the accepted Wine 9.2 setup. Runtime preparation and import are not repeated:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
@@ -170,7 +196,7 @@ The next physical step tests controller discovery/activation on the accepted Win
 | Installation import | Accepted on 0.1.1 | User report, import-completed log, and structural validation details |
 | Client launch | Title startup accepted on 0.1.4 | User report; Wine 9.2/current prefix confirmed and Fog 10019 returns |
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
-| Native controller | Not detected in 0.1.4 report; retest pending | Test an offline character and capture discovery/input/reply diagnostics |
+| Native controller | Activation absent through 0.1.5; 0.1.6 retest pending | Android input/legacy replies confirmed; test HID notifications and both sticks in-game |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
 | Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
 | Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |

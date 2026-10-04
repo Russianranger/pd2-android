@@ -106,6 +106,28 @@ public final class Pd2ControllerDiagnosticsTest {
         assertFalse(report.toString().contains("axisValue"));
     }
 
+    @Test public void hidCountersDistinguishDiscoveryAndDeliveredStatesFromLegacyTraffic() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        diagnostics.recordRequest((byte)8, 7950);
+        diagnostics.recordRequest((byte)8, 7949);
+        diagnostics.recordReply((byte)8, 7950, true);
+        diagnostics.recordReply((byte)9, 7950, true);
+        diagnostics.recordReply((byte)9, 7949, true);
+        diagnostics.recordReply((byte)9, 7950, false);
+        JSONObject report = diagnostics.snapshot();
+        assertEquals("legacy_xinput_7949_and_hid_7950", report.getString("nativeBridge"));
+        assertEquals("java-hid-7950-v1", report.getString("bridgeRevision"));
+        JSONObject counts = report.getJSONObject("counts");
+        assertEquals(1, counts.getLong("hidDiscoveryRequests7950"));
+        assertEquals(1, counts.getLong("hidDeviceReplies7950"));
+        assertEquals(1, counts.getLong("hidStateReplies7950"));
+        assertEquals(1, counts.getLong("xinputRequests7949"));
+        assertEquals(1, counts.getLong("deviceReplies"));
+        assertEquals(2, counts.getLong("stateReplies"));
+        assertEquals(1, counts.getLong("replyFailures"));
+        assertEquals(0, counts.getLong("otherGamepadRequests"));
+    }
+
     @Test public void persistenceReplacesOnlyItsBoundedReportAndLeavesNoTemporaryFile() throws Exception {
         Application context = RuntimeEnvironment.getApplication();
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(context);

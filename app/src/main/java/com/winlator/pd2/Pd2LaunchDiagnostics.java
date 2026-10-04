@@ -41,6 +41,7 @@ public final class Pd2LaunchDiagnostics {
         Pd2SessionLog.archivePrevious(context);
         String id = UUID.randomUUID().toString();
         JSONObject report = new JSONObject().put("launchId", id).put("startedAt", System.currentTimeMillis())
+                .put("controllerRuntime", Pd2ControllerRuntime.status(context))
                 .put("renderer", container.getGraphicsDriver()).put("arguments", arguments)
                 .put("cpuPreset", container.getBox64Preset()).put("environment", container.getEnvVars())
                 .put("wineVersion", container.getWineVersion()).put("winePath", "/opt/wine")

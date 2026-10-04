@@ -73,6 +73,7 @@ import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.pd2.Pd2InputRouter;
 import com.winlator.pd2.Pd2ControllerDialogs;
+import com.winlator.pd2.Pd2ControllerRuntime;
 import com.winlator.pd2.Pd2Activity;
 import com.winlator.pd2.Pd2LaunchDiagnostics;
 import com.winlator.math.Mathf;
@@ -887,6 +888,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         JSONObject report = winHandler.controllerDiagnostics.snapshot();
         StringBuilder message = new StringBuilder("Layout: ")
                 .append(pd2MouseKeyboard ? "Mouse / keyboard" : "Native controller")
+                .append("\nController notifications: ").append(Pd2ControllerRuntime.enabled(this) ? "Enabled" : "Disabled")
                 .append("\n\nDetected controllers:");
         JSONArray devices = report.optJSONArray("devices");
         int accepted = 0;
@@ -904,6 +906,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 .append("\nStick events received: ").append(counts.optLong("handledMotionEvents"))
                 .append("\nGame discovery replies: ").append(counts.optLong("deviceReplies"))
                 .append("\nGame state replies: ").append(counts.optLong("stateReplies"));
+        if (counts != null) message.append("\nWindows gamepad discovery requests: ")
+                .append(counts.optLong("hidDiscoveryRequests7950"))
+                .append("\nWindows gamepad discovery replies: ")
+                .append(counts.optLong("hidDeviceReplies7950"))
+                .append("\nWindows gamepad state replies: ").append(counts.optLong("hidStateReplies7950"));
         message.append("\n\nInput pauses while this menu is open. Close it, enter a single-player game using touch if needed, then press a controller button. PD2 switches back to mouse controls when you move or click the mouse.")
                 .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
         AlertDialog status = new AlertDialog.Builder(this).setTitle("Controller status")

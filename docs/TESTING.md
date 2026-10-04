@@ -1,17 +1,21 @@
-# 0.1.5 controller detection test
+# 0.1.6 controller notification test
 
-The user reached the PD2 title screen with 0.1.4, but the controller was not detected. Launcher startup, runtime preparation, import, and client appearance remain accepted. The 0.1.5 preview changes Java controller discovery/response handling and diagnostics; its device result remains unqualified. It preserves Wine 9.2/rootfs 24 and the accepted prefix.
+Title startup remains accepted. The 0.1.5 bundle confirms accepted Android controller input and legacy replies, but native PD2 activation still failed. The 0.1.6 preview adds the Wine HID notification path and matching Java producer. Its device result is unqualified; Wine 9.2/rootfs 24 and the accepted prefix are preserved.
 
 ## Controller retest
 
-1. Install **0.1.5 over 0.1.4** without uninstalling or clearing storage. **Reuse the accepted runtime/prefix/game files. Do not Prepare runtime or re-import.**
-2. Keep **Turnip + Zink · Glide (GameNative arguments)** and **CPU mode → Stability (default)**, then press Play. Do not cycle through renderers or repeat Interpreter.
+1. Install **0.1.6 over 0.1.5** without uninstalling or clearing storage. **Reuse the accepted runtime/prefix/game files. Do not Prepare runtime or re-import.**
+2. Keep **Turnip + Zink · Glide (GameNative arguments)**, **CPU mode → Stability (default)**, and **Launch settings → Controller → Controller notifications enabled (default)**. Press Play; the verified backend installs automatically before the game starts. Do not cycle through renderers or repeat Interpreter.
 3. Use **Mouse / keyboard layout** only as needed to enter a temporary offline character. Title/menu controller navigation is unverified; check native input inside the game.
 4. Select **Native controller**, close the quick menu, and press a controller button. Check left-stick movement and independent right-stick aiming, then buttons/triggers. Avoid mouse movement/clicks while checking native input: PD2 can switch back to mouse/keyboard on mouse input.
-5. Open **Controller status** after the attempt. Record the accepted pad count and input/discovery/state-reply counters. Gameplay input is paused while the menu is open; close it before testing the sticks again.
+5. Open **Controller status** after the attempt. Record the accepted pad count and legacy/HID input/discovery/state-reply counters. Gameplay input is paused while the menu is open; close it before testing the sticks again. Counters alone do not qualify game input.
 6. Return to the launcher and **Export support logs**, then upload the ZIP whether native input worked or failed. Report whether the title appeared, whether the offline character opened, and which button/stick actions worked.
 
-If the client unexpectedly stops reaching the title, stop the attempt and export its logs. Preserve the working runtime and import while that regression is investigated.
+If the client unexpectedly stops reaching the title, export that attempt first. To restore the original controller backend:
+
+1. Stop the client and choose **Launch settings → Controller → Controller notifications disabled**.
+2. Force-stop **PD2 Android** in Android app settings, reopen it, and press Play. The verified original Wine backend is restored before launch.
+3. Export this new attempt separately. Do not Prepare runtime, re-import, uninstall, or clear storage for rollback.
 
 If the whole Android app closes:
 
@@ -24,6 +28,7 @@ Support export retains the current runtime log and up to four archived attempts,
 
 - XInput/raw-input traces for the controller path; traces and replies do not establish that PD2 accepted input.
 - `controller.json` (at most 64 KiB) with Android device/bridge diagnostics for the matching launch, plus `inputMode` in `support.json`. Stale/invalid controller reports are skipped.
+- HID discovery/device/state counters on port 7950 alongside the legacy counters, plus controller backend enable/revision/install status in the launch/support records.
 - Wine/rootfs/runtime-revision identity for the replacement baseline in support and launch records.
 - Selected installation/version/trace registry settings in `launch.json`.
 - PE stack reserve/commit sizes and bounded core-file hashes in `installation-files.json`.
@@ -35,7 +40,7 @@ The current runtime trace enables XInput/raw-input diagnostics instead of Fog ex
 
 Use your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
 
-Title startup is already accepted. The current step is native controller activation inside an offline game, followed by the controls/save checklist below. Do not prepare or re-import for the 0.1.5 upgrade.
+Title startup is already accepted. The current step is native controller activation inside an offline game, followed by the controls/save checklist below. Do not prepare or re-import for the 0.1.6 upgrade.
 
 Export support information after the controller result before changing graphics settings. Further comparisons should follow diagnosis of that result.
 
@@ -43,7 +48,7 @@ Export support information after the controller result before changing graphics 
 
 Use a temporary offline character. PD2's controller mode activates on controller input; after selecting Native and closing the quick menu, press a controller button before checking movement/aiming.
 
-The Wine 9.2 baseline uses its matching legacy controller bridge with one active gamepad. XInput triggers are digital rather than proportional, and rumble is not supported by this donor DLL. Both sticks and normal button/trigger actions still require physical qualification.
+The Wine 9.2 baseline keeps its legacy XInput bridge and adds a HID notification path for the same single selected gamepad. XInput triggers remain digital, and rumble is not supported by this donor DLL. Both sticks and normal button/trigger actions still require physical qualification.
 
 1. Move using the left stick, then aim independently using the right stick.
 2. Check face buttons, shoulders, triggers, D-pad, inventory navigation, and a skill assigned through PD2's normal controller settings.
@@ -100,4 +105,4 @@ An import success is not a gameplay success. APK build/CI success is not physica
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
 
-Local 0.1.5 verification passed all 49 Android 13/API 33 Robolectric tests, the 47 import/11 crash-recovery/26 session-log checks, input-router checks, and the ARM64 APK build. Packaged native libraries/runtime archives match 0.1.4. Published 0.1.5 CI remains pending. Automated checks do not qualify PD2 controller activation on the Thor. Full results and the accepted 0.1.4 title startup are recorded in [Handoff](HANDOFF.md).
+Local 0.1.6 verification passed all 76 API 33 Robolectric tests, three native controller tests, the 47 import/11 crash/26 session-log checks, input-router checks, native source/artifact/ABI checks, and final APK assembly/signature/payload checks. Published CI and the physical test remain pending. The host harness does not establish complete Wine/HID/PD2 integration or qualify activation on the Thor. Full results and accepted title startup are recorded in [Handoff](HANDOFF.md).

@@ -1,0 +1,39 @@
+{
+  "asset": "pd2/controller/winebus.so",
+  "base_sha256": "4ca5b1dd5f2d56ae9ca3090f356b700f4e5282b6915a195719d0a1ab66128117",
+  "bytes": 31064,
+  "compiler": "13.3.0",
+  "license": "LGPL-2.1-or-later",
+  "ntdll_link_sha256": "1f4710323d6d768771a1c58beb87e428c3189839715af94a9d44abd783393a06",
+  "producer_reference": "brunodev85/wine-10.10-custom@2b9afc38d9531d384f038bbaaf3f637e515fb297:dlls/winebus.sys/bus_winlator.c",
+  "revision": "wine9-hid-1",
+  "sha256": "541523c1e21059a386cfd60f6f18354c05b28ca2457faf867221911b545c4b0e",
+  "source_sha256": {
+    "build-controller-runtime.py": "a2d667d2425b77a55df3a9382dc4e139ec63f6d96ce803e8e44c930d87076ab7",
+    "pd2_bus.c": "bb626fb8f0c8d186c7be6e544d097885acddff2880cd9ca5380390c112299ec4",
+    "pd2_protocol.h": "2336c1a7aa06637a8ea4a3282126058d0bf29754edd2521352c5e3c284e238de"
+  },
+  "validation": {
+    "exports": [
+      "__wine_unix_call_funcs"
+    ],
+    "glibc_max": "2.17",
+    "machine": "ELF64-AMD64",
+    "needed": [
+      "ntdll.so",
+      "libc.so.6"
+    ],
+    "wine9_abi": {
+      "bus_event_bytes": 1608,
+      "device_create_device_offset": 1592,
+      "device_create_params_bytes": 1600,
+      "device_desc_bytes": 1588,
+      "device_desc_manufacturer_offset": 28,
+      "entries": 17,
+      "input_report_buffer_offset": 18,
+      "wchar_bytes": 2
+    }
+  },
+  "vendor_commit": "a4ef2bf8963fe4bfab390eebf73336364ce209bc",
+  "vendor_source": "brunodev85/wine-9.2-custom"
+}

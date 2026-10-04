@@ -38,6 +38,8 @@ public class GamepadHandler {
     private final List<Integer> legacyGamepadClients = new CopyOnWriteArrayList<>();
     private final HashSet<Integer> legacyXInputProcesses = new HashSet<>();
     private volatile GamepadSlot legacyGamepad;
+    private volatile GamepadSlot hidGamepad;
+    private volatile boolean hidSubscribed;
     private byte dinputMapperType = DINPUT_MAPPER_TYPE_XINPUT;
     private final GamepadSlot[] gamepadSlots = new GamepadSlot[GAMEPAD_MAX_COUNT];
     private final ArrayList<ExternalController> connectedControllers = new ArrayList<>(GAMEPAD_MAX_COUNT);
@@ -71,16 +73,12 @@ public class GamepadHandler {
         for (byte i = 0; i < GAMEPAD_MAX_COUNT; i++) {
             final byte slot = i;
             if (gamepadSlots[i] != null) gamepadSlots[i].getGamepadState().copy(neutral);
-            for (final int port : gamepadClients) winHandler.addControllerAction(() -> {
-                ByteBuffer buffer = winHandler.sendData;
-                buffer.rewind();
-                buffer.put(RequestCodes.GET_GAMEPAD_STATE);
-                buffer.put(slot);
-                writeStateToBuffer(buffer, neutral);
-                winHandler.sendPacket(port);
-            });
+            final byte mapper = dinputMapperType;
+            for (final int port : gamepadClients) winHandler.addControllerAction(() ->
+                    winHandler.sendPacket(port, ModernGamepadProtocol.state(slot, mapper, neutral)));
         }
         sendLegacyState(neutral);
+        if (hidSubscribed) sendHidState(neutral);
     }
 
     public static class GamepadModel {
@@ -182,65 +180,40 @@ public class GamepadHandler {
             return;
         }
 
+        handleModernGetGamepadRequest(port);
+    }
+
+    /** Shared response path after Android device discovery; packets snapshot metadata immediately. */
+    void handleModernGetGamepadRequest(int port) {
+        if (port == ModernGamepadProtocol.HID_PORT) {
+            GamepadSlot selected = null;
+            for (GamepadSlot slot : gamepadSlots) if (slot != null) { selected = slot; break; }
+            hidGamepad = selected;
+            hidSubscribed = selected != null;
+            winHandler.controllerDiagnostics.setSelectedDevice(selected != null ? selected.getName() : null);
+            final byte[] device = ModernGamepadProtocol.hidDevice(selected);
+            final GamepadState state = selected != null ? snapshot(selected) : new GamepadState();
+            final long generation = inputGeneration;
+            winHandler.addControllerAction(() -> {
+                winHandler.sendPacket(port, device);
+                if (device[1] == 1) winHandler.sendPacket(port, ModernGamepadProtocol.state(0,
+                        DINPUT_MAPPER_TYPE_XINPUT,
+                        inputEnabled && generation == inputGeneration ? state : new GamepadState()));
+            });
+            return;
+        }
+
         int clientIndex = gamepadClients.indexOf(port);
         if (isAnyGamepadConnected()) {
             if (clientIndex == -1) gamepadClients.add(port);
         }
         else if (clientIndex != -1) gamepadClients.remove(clientIndex);
 
-        winHandler.addControllerAction(() -> {
-            final ByteBuffer buffer = winHandler.sendData;
-            buffer.rewind();
-            buffer.put(RequestCodes.GET_GAMEPAD);
-
-            int buttonCount = 0;
-            int axisMode = -1;
-
-            if (dinputMapperType == DINPUT_MAPPER_TYPE_XINPUT) {
-                buttonCount = 10;
-                axisMode = AXIS_MODE_X_Y_RX_RY_Z_RZ;
-            }
-            else if (dinputMapperType == DINPUT_MAPPER_TYPE_STANDARD) {
-                buttonCount = 12;
-                axisMode = AXIS_MODE_X_Y_Z_RZ;
-            }
-
-            for (byte i = 0; i < GAMEPAD_MAX_COUNT; i++) {
-                buffer.position(i * 60 + 1);
-                if (gamepadSlots[i] != null) {
-                    buffer.put((byte)1);
-                    buffer.put((byte)buttonCount);
-                    buffer.put((byte)axisMode);
-                    buffer.put((byte)(gamepadPlayerConfigs != null && gamepadPlayerConfigs[i].vibration ? 1 : 0));
-
-                    if (gamepadModelIds.length == 2) {
-                        buffer.putShort(gamepadModelIds[0]);
-                        buffer.putShort(gamepadModelIds[1]);
-                    }
-                    else {
-                        buffer.putShort(gamepadSlots[i].getVendorId());
-                        buffer.putShort(gamepadSlots[i].getProductId());
-                    }
-
-                    String name = gamepadSlots[i].getName();
-                    byte[] bytes = name.getBytes();
-                    byte nameLength = (byte)Math.min((byte)bytes.length, 48);
-                    buffer.put(nameLength);
-                    buffer.put(bytes, 0, nameLength);
-                }
-                else {
-                    buffer.put((byte)0);
-                    buffer.put((byte)0);
-                    buffer.put((byte)0);
-                    buffer.put((byte)0);
-                    buffer.putShort((short)0);
-                    buffer.putShort((short)0);
-                    buffer.put((byte)0);
-                }
-            }
-
-            winHandler.sendPacket(port);
-        });
+        boolean[] vibration = new boolean[GAMEPAD_MAX_COUNT];
+        for (int slot = 0; slot < GAMEPAD_MAX_COUNT; slot++)
+            vibration[slot] = gamepadPlayerConfigs != null && gamepadPlayerConfigs[slot].vibration;
+        final byte[] packet = ModernGamepadProtocol.devices(gamepadSlots, dinputMapperType, gamepadModelIds, vibration);
+        winHandler.addControllerAction(() -> winHandler.sendPacket(port, packet));
     }
 
     private boolean isLegacyClient(int port) {
@@ -309,52 +282,39 @@ public class GamepadHandler {
                         inputEnabled && generation == inputGeneration ? state : new GamepadState())));
     }
 
-    private void writeStateToBuffer(ByteBuffer buffer, GamepadState state) {
-        if (dinputMapperType == DINPUT_MAPPER_TYPE_XINPUT) {
-            buffer.putShort(state.buttons);
-            buffer.put(state.getPovHat());
-            buffer.putShort((short)(state.thumbLX * Short.MAX_VALUE));
-            buffer.putShort((short)(state.thumbLY * Short.MAX_VALUE));
-            buffer.putShort((short)(state.thumbRX * Short.MAX_VALUE));
-            buffer.putShort((short)(state.thumbRY * Short.MAX_VALUE));
-            buffer.putShort((short)(state.triggerL * Short.MAX_VALUE));
-            buffer.putShort((short)(state.triggerR * Short.MAX_VALUE));
-        }
-        else if (dinputMapperType == DINPUT_MAPPER_TYPE_STANDARD) {
-            short buttons = state.buttons;
-            if (state.triggerL > 0) buttons |= (1<<ExternalController.IDX_BUTTON_L2);
-            if (state.triggerR > 0) buttons |= (1<<ExternalController.IDX_BUTTON_R2);
-            buffer.putShort(buttons);
-            buffer.put(state.getPovHat());
-            buffer.putShort((short)(state.thumbLX * Short.MAX_VALUE));
-            buffer.putShort((short)(state.thumbLY * Short.MAX_VALUE));
-            buffer.putShort((short)(state.thumbRX * Short.MAX_VALUE));
-            buffer.putShort((short)(state.thumbRY * Short.MAX_VALUE));
-        }
+    private void sendHidState(GamepadState state) {
+        final long generation = inputGeneration;
+        winHandler.addControllerAction(() -> winHandler.sendPacket(ModernGamepadProtocol.HID_PORT,
+                ModernGamepadProtocol.state(0, DINPUT_MAPPER_TYPE_XINPUT,
+                        inputEnabled && generation == inputGeneration ? state : new GamepadState())));
     }
 
     public void sendGamepadState(final GamepadSlot gamepadSlot) {
         // Preserve release edges, even if a previous packet is still queued.
-        if (!inputEnabled || (gamepadClients.isEmpty() && legacyGamepadClients.isEmpty())) return;
+        if (!inputEnabled || (gamepadClients.isEmpty() && legacyGamepadClients.isEmpty() && !hidSubscribed)) return;
         final byte slot = (byte)ArrayUtils.indexOf(gamepadSlots, gamepadSlot);
         if (slot == ArrayUtils.INDEX_NOT_FOUND) return;
         final GamepadState state = snapshot(gamepadSlot);
         if (gamepadSlot == legacyGamepad) sendLegacyState(state);
+        if (hidSubscribed && gamepadSlot == hidGamepad) sendHidState(state);
         final long generation = inputGeneration;
-        final ByteBuffer buffer = winHandler.sendData;
+        final byte mapper = dinputMapperType;
 
         for (final int port : gamepadClients) {
             winHandler.addControllerAction(() -> {
-                buffer.rewind();
-                buffer.put(RequestCodes.GET_GAMEPAD_STATE);
-                buffer.put(slot);
-                writeStateToBuffer(buffer, inputEnabled && generation == inputGeneration ? state : new GamepadState());
-                winHandler.sendPacket(port);
+                winHandler.sendPacket(port, ModernGamepadProtocol.state(slot, mapper,
+                        inputEnabled && generation == inputGeneration ? state : new GamepadState()));
             });
         }
     }
 
     public void handleReleaseGamepadRequest(int port) {
+        if (port == ModernGamepadProtocol.HID_PORT) {
+            hidSubscribed = false;
+            hidGamepad = null;
+            winHandler.controllerDiagnostics.setSelectedDevice(legacyGamepad != null ? legacyGamepad.getName() : null);
+            return;
+        }
         if (isLegacyClient(port)) {
             legacyGamepadClients.remove(Integer.valueOf(port));
             if (legacyGamepadClients.isEmpty()) {
@@ -369,6 +329,7 @@ public class GamepadHandler {
     }
 
     public void handleSetGamepadStateRequest(int port) {
+        if (port == ModernGamepadProtocol.HID_PORT) return; // The first HID producer has no rumble endpoint.
         final ByteBuffer buffer = winHandler.receiveData;
         byte slot = buffer.get();
         if (slot < 0 || slot >= GAMEPAD_MAX_COUNT) return;
