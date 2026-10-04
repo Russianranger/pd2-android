@@ -97,17 +97,23 @@ public class ContainerManager {
 
     public void createContainerAsync(final JSONObject data, Callback<Container> callback) {
         final Handler handler = new Handler();
+        if (!com.winlator.pd2.Pd2ContainerMaintenance.beginContainerWork()) { handler.post(() -> callback.call(null)); return; }
         Executors.newSingleThreadExecutor().execute(() -> {
-            final Container container = createContainer(data);
-            handler.post(() -> callback.call(container));
+            try {
+                final Container container = createContainer(data);
+                handler.post(() -> callback.call(container));
+            } finally { com.winlator.pd2.Pd2ContainerMaintenance.endContainerWork(); }
         });
     }
 
     public void duplicateContainerAsync(Container container, Runnable callback) {
         final Handler handler = new Handler();
+        if (!com.winlator.pd2.Pd2ContainerMaintenance.beginContainerWork()) { handler.post(callback); return; }
         Executors.newSingleThreadExecutor().execute(() -> {
-            duplicateContainer(container);
-            handler.post(callback);
+            try {
+                duplicateContainer(container);
+                handler.post(callback);
+            } finally { com.winlator.pd2.Pd2ContainerMaintenance.endContainerWork(); }
         });
     }
 

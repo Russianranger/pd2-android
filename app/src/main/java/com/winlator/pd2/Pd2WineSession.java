@@ -7,6 +7,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -15,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.nio.charset.StandardCharsets;
 
 /** Stop the exact PD2 prefix, including Wine services which outlive explorer.exe. */
 public final class Pd2WineSession {
@@ -32,6 +34,7 @@ public final class Pd2WineSession {
     interface Runner {
         int run(List<String> command, Map<String, String> environment, File directory) throws IOException, InterruptedException;
         boolean portsFree() throws IOException;
+        default String output() { return ""; }
     }
 
     public static final class Result {
@@ -40,14 +43,22 @@ public final class Pd2WineSession {
         public final boolean portsFree, passed;
         public final long elapsedMillis;
         public final String error;
+        public final String killOutput, waitOutput;
 
         Result(String phase, int killStatus, int waitStatus, boolean portsFree, long elapsedMillis, String error) {
+            this(phase, killStatus, waitStatus, portsFree, elapsedMillis, error, "", "");
+        }
+
+        Result(String phase, int killStatus, int waitStatus, boolean portsFree, long elapsedMillis, String error,
+               String killOutput, String waitOutput) {
             this.phase = phase;
             this.killStatus = killStatus;
             this.waitStatus = waitStatus;
             this.portsFree = portsFree;
             this.elapsedMillis = elapsedMillis;
             this.error = error;
+            this.killOutput = killOutput;
+            this.waitOutput = waitOutput;
             // Wine returns 1 when -k finds no running server, including a clean first launch.
             passed = (killStatus == 0 || killStatus == 1) && waitStatus == 0 && portsFree && error.isEmpty();
         }
@@ -56,8 +67,19 @@ public final class Pd2WineSession {
             return new JSONObject().put("phase", phase).put("killStatus", killStatus)
                     .put("waitStatus", waitStatus).put("controllerPortsFree", portsFree)
                     .put("passed", passed).put("elapsedMillis", elapsedMillis).put("error", error)
+                    .put("killOutput", killOutput).put("waitOutput", waitOutput)
                     .put("scope", "Exact captured PD2 Wine prefix shutdown and loopback ports 7949/7950; no process-name or PID-range kill");
         }
+    }
+
+    /** Temporary files are cleared after preflight; recreate these immediately before guest startup. */
+    public static void prepareLaunchDirectories(File root) throws IOException {
+        File runtime = root.getCanonicalFile();
+        File sharedMemory = new File(runtime, "tmp/shm");
+        if (!sharedMemory.getCanonicalFile().getPath().startsWith(runtime.getPath() + File.separator))
+            throw new IOException("Runtime shared-memory directory is outside the private runtime");
+        if (!sharedMemory.isDirectory() && !sharedMemory.mkdirs())
+            throw new IOException("Cannot create the runtime shared-memory directory");
     }
 
     public Pd2WineSession(File root, String winePath, EnvVars variables) throws IOException {
@@ -112,10 +134,15 @@ public final class Pd2WineSession {
         int kill = -1, wait = -1;
         boolean free = false;
         String error = "";
+        String killOutput = "", waitOutput = "";
         try {
             // Stop client already requires saving/exiting. Avoid Wine's 10.5s SIGINT escalation delay.
             kill = runner.run(command("-k9"), environment, root);
-            if (kill == 0 || kill == 1) wait = runner.run(command("-w"), environment, root);
+            killOutput = runner.output();
+            if (kill == 0 || kill == 1) {
+                wait = runner.run(command("-w"), environment, root);
+                waitOutput = runner.output();
+            }
             if ((kill == 0 || kill == 1) && wait == 0) {
                 // The server lock can disappear just before Unix HID clients release their sockets.
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
@@ -125,14 +152,17 @@ public final class Pd2WineSession {
                     Thread.sleep(25);
                 } while (true);
             }
-            if (!free) error = "Wine shutdown or controller-port release is incomplete";
+            if (!free) error = kill != 0 && kill != 1 ? "Wine shutdown command failed (status " + kill + ")"
+                    : wait != 0 ? "Wine shutdown wait failed (status " + wait + ")"
+                    : "Controller ports 7949/7950 are still occupied after Wine shutdown";
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             error = "Wine shutdown was interrupted";
         } catch (IOException failure) {
             error = "Wine shutdown could not run: " + failure.getClass().getSimpleName();
         }
-        return new Result(phase, kill, wait, free, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), error);
+        return new Result(phase, kill, wait, free, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), error,
+                killOutput, waitOutput);
     }
 
     private List<String> command(String option) {
@@ -142,16 +172,29 @@ public final class Pd2WineSession {
     }
 
     private static final class ProcessRunner implements Runner {
+        private String lastOutput = "";
+        public String output() { return lastOutput; }
+
         public int run(List<String> command, Map<String, String> environment, File directory)
                 throws IOException, InterruptedException {
+            lastOutput = "";
             ProcessBuilder builder = new ProcessBuilder(command).directory(directory)
-                    .redirectErrorStream(true).redirectOutput(new File("/dev/null"));
+                    .redirectErrorStream(true);
             builder.environment().putAll(environment);
             Process process = builder.start();
+            BoundedOutput output = new BoundedOutput();
+            Thread drain = new Thread(() -> output.read(process.getInputStream()), "pd2-wine-cleanup-output");
+            drain.setDaemon(true);
+            drain.start();
             try {
                 return process.waitFor(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS) ? process.exitValue() : -2;
             } finally {
                 if (process.isAlive()) process.destroyForcibly();
+                try { drain.join(250); }
+                finally {
+                    lastOutput = output.text();
+                    try { process.getInputStream().close(); } catch (IOException ignored) { }
+                }
             }
         }
 
@@ -163,6 +206,34 @@ public final class Pd2WineSession {
                 hid.bind(new InetSocketAddress(loopback, 7950));
                 return true;
             } catch (java.net.BindException busy) { return false; }
+        }
+    }
+
+    /** Drain all helper output to avoid pipe deadlocks while retaining only a bounded diagnostic tail. */
+    private static final class BoundedOutput {
+        private final byte[] tail = new byte[4096];
+        private int next, size;
+
+        void read(InputStream input) {
+            byte[] buffer = new byte[1024];
+            try {
+                int count;
+                while ((count = input.read(buffer)) != -1) append(buffer, count);
+            } catch (IOException ignored) { }
+        }
+
+        private synchronized void append(byte[] bytes, int count) {
+            for (int i = 0; i < count; i++) {
+                tail[next] = bytes[i]; next = (next + 1) % tail.length;
+                if (size < tail.length) size++;
+            }
+        }
+
+        synchronized String text() {
+            byte[] bytes = new byte[size];
+            int start = (next - size + tail.length) % tail.length;
+            for (int i = 0; i < size; i++) bytes[i] = tail[(start + i) % tail.length];
+            return new String(bytes, StandardCharsets.UTF_8).replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
         }
     }
 }

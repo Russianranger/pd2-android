@@ -182,6 +182,54 @@ public final class Pd2WineSessionTest {
         }
     }
 
+    @Test public void launchRecreatesSharedMemoryAfterThePostPreflightTemporaryClear() throws Exception {
+        Fixture f = fixture();
+        Pd2WineSession session = f.session(new RecordingRunner(1, 0));
+        File tmp = new File(f.root, "tmp");
+        File shm = new File(tmp, "shm");
+        try {
+            Pd2WineSession.prepareLaunchDirectories(f.root);
+            assertTrue(session.beforeLaunch().passed);
+            // The display startup clears runtime tmp after cleanup releases old Wine clients.
+            Files.delete(shm.toPath());
+            Files.delete(tmp.toPath());
+            assertFalse(shm.exists());
+            Pd2WineSession.prepareLaunchDirectories(f.root);
+            Map<String, String> variables = new LinkedHashMap<>();
+            variables.put("PD2_EXPECTED_SHM", shm.getPath());
+            int status = processRunner().run(Arrays.asList("/bin/sh", "-c", "test -d \"$PD2_EXPECTED_SHM\""), variables, f.root);
+            assertEquals("Shared-memory directory must exist when the guest is executed", 0, status);
+            assertArrayEquals(new byte[]{9, 8, 7}, Files.readAllBytes(f.save.toPath()));
+        } finally { session.stop(); }
+    }
+
+    @Test public void launchDirectoryCreationRejectsASymlinkOutsideTheRuntime() throws Exception {
+        Fixture f = fixture();
+        File outside = directory.newFolder();
+        File marker = new File(outside, "retained.txt");
+        Files.write(marker.toPath(), new byte[]{4});
+        Files.createSymbolicLink(new File(f.root, "tmp").toPath(), outside.toPath());
+        try {
+            Pd2WineSession.prepareLaunchDirectories(f.root);
+            fail("A linked temporary directory must not escape the runtime");
+        } catch (IOException expected) {
+            assertFalse(new File(outside, "shm").exists());
+            assertArrayEquals(new byte[]{4}, Files.readAllBytes(marker.toPath()));
+        }
+    }
+
+    @Test(timeout = 10000) public void cleanupOutputIsDrainedAndBoundedWithoutLosingTheFailureTail() throws Exception {
+        Pd2WineSession.Runner runner = processRunner();
+        int status = runner.run(Arrays.asList("/bin/sh", "-c",
+                "i=0; while [ $i -lt 12000 ]; do echo cleanup-noise; i=$((i+1)); done; echo final-loader-error >&2; exit 3"),
+                new LinkedHashMap<>(), directory.getRoot());
+        assertEquals(3, status);
+        assertTrue(runner.output().endsWith("final-loader-error\n"));
+        assertTrue("Helper diagnostics must remain bounded", runner.output().getBytes(StandardCharsets.UTF_8).length <= 4096);
+        assertEquals(0, runner.run(Arrays.asList("/bin/sh", "-c", "exit 0"), new LinkedHashMap<>(), directory.getRoot()));
+        assertEquals("A later command cannot retain an old failure", "", runner.output());
+    }
+
     @Test(timeout = 10000) public void busyNativePortPreventsAcquisitionUntilTheOldReceiverCloses() throws Exception {
         Fixture f = fixture();
         RecordingRunner runner = new RecordingRunner(0, 0);

@@ -1,4 +1,41 @@
-# 0.1.12 same-app Wine session cleanup
+# 0.1.13 startup repair and container management
+
+Install **0.1.13 over the existing app** and keep the accepted Wine 9.2/rootfs 24, imported installation, prefix, Turnip + Zink / Glide (GameNative arguments), Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.**
+
+The 0.1.12 physical report says Play immediately returned to the launcher. No support ZIP was supplied for that attempt. Source and accepted runtime binary inspection found that preflight creates `rootfs/tmp/shm`, the subsequent temporary-file clear deletes it, and cached launch-environment reuse does not recreate it. 0.1.13 restores the directory immediately before guest execution. This fixes that source regression; the exact device failure branch remains unconfirmed until retest/logs.
+
+## First check: Play
+
+1. Open the updated app and press **Play**. Confirm it reaches the PD2 frontend and the same offline character.
+2. If Play still returns, record the visible launcher message and **Export support logs immediately**. Do not reset the runtime or delete containers as a workaround. New bounded cleanup helper output and launch-failure fields distinguish preflight refusal from Windows runtime exit.
+3. If it opens, continue the controller gate below. LT/thumb and shoulder behavior are accepted; no repeated binding qualification is requested.
+
+## Containers
+
+Open **Advanced runtime settings → Containers**. Each row identifies **Current PD2 · protected**, **Older PD2**, or **Additional container**, with its number and Wine identifier. The current label uses the same ready managed-container selection as Play. Reading the list does not create/migrate a prefix or change the selected preference.
+
+The current/persisted-selected/runtime-selected container is protected. With the client fully stopped and other operations finished, an eligible older container's three-dot menu offers **Delete container…**. Confirmation explains that its private C: drive is removed; back up any personal files kept only in that old container first. Imported PD2 files/saves and mapped-drive targets remain. Links are unlinked without traversal. The worker rechecks current selection, active runtime state and path/inode identity before removal; deletion blocks startup, creation and duplication until it finishes. If the current selection cannot be identified safely, all containers are kept.
+
+- Verify the current row is clearly labeled and its deletion action unavailable.
+- An older row may be protected while its prefix remains selected by the runtime; this is shown as **Deletion unavailable**.
+- Delete only an older container you no longer need. Confirm it disappears, the current row remains, and Play still opens the same character.
+- If deletion reports an error, refresh the list and export support logs. A storage/I/O failure can leave part of the older container; the app does not claim success or remove shared targets.
+
+## Controller gate retained from 0.1.12
+
+1. Fresh app launch → Play → same offline character: check initial Native movement and a face-button action.
+2. Save/Quit → use Menu cursor to re-enter → select Native, wait about one second, press/release a face button and check movement.
+3. Export the first support ZIP **before Stop**, labeled after Save/Quit.
+4. Save/exit normally → Stop client → wait for cleanup → Play again **without force-stopping Android** → enter the same character and test Native.
+5. Export the second ZIP labeled after same-app Stop/Play. If cleanup/launch is refused, export immediately.
+
+If full Stop/Play restores Native, accept that restart repair while in-place Save/Quit remains separate. If it fails after clean cleanup, investigate surviving backend/process/device ownership using the records rather than repeating blind reconnect/focus experiments.
+
+The older reference/checklists below preserve accepted behavior and historical boundaries.
+
+---
+
+# 0.1.12 historical cleanup gate
 
 The 0.1.11 device result accepts the LT/thumb combination and shoulder-button behavior. Native still fails after Save/Quit, and remains unavailable after stopping and relaunching Diablo II in the same Android app process. Force-stopping the Android app restores it. [Current evidence](evidence/2026-10-04-wine-session-cleanup.md) separates these two failure scopes.
 

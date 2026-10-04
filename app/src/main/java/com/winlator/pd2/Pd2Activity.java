@@ -62,12 +62,16 @@ public final class Pd2Activity extends AppCompatActivity {
     private SharedPreferences preferences;
     private TextView status;
     private Button play, prepare, folder, zip, settings, stop;
-    private boolean runtimePreparing;
-    private boolean containerPreparing;
+    private static volatile boolean runtimePreparing;
+    private static volatile boolean containerPreparing;
     private long lastStickNavigation;
     private final Runnable refresh = new Runnable() {
         @Override public void run() { updateUi(); handler.postDelayed(this, 500); }
     };
+
+    public static boolean isOperationInProgress() {
+        return busy || runtimePreparing || containerPreparing || Pd2ContainerMaintenance.isContainerWorkInProgress();
+    }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -91,7 +95,9 @@ public final class Pd2Activity extends AppCompatActivity {
         if (!busy) runOperation("Checking installation", false, () -> {
             Pd2Installer.recover(getApplicationContext());
             installation = Pd2InstallValidator.validate(Pd2Installer.installedDirectory(getApplicationContext()));
-            operation = getIntent().hasExtra("pd2_runtime_exit_status")
+            operation = getIntent().hasExtra("pd2_launch_failure")
+                    ? launchFailureMessage(getIntent().getStringExtra("pd2_launch_failure"))
+                    : getIntent().hasExtra("pd2_runtime_exit_status")
                     ? runtimeExitMessage(getIntent().getIntExtra("pd2_runtime_exit_status", 0))
                     : installation.valid ? "Installation ready. Prepare the runtime, then Play." : installation.message;
         });
@@ -177,17 +183,24 @@ public final class Pd2Activity extends AppCompatActivity {
         boolean runtime = Pd2Runtime.hasRuntime(this);
         if (runtime) runtimePreparing = false;
         boolean session = XServerDisplayActivity.hasPd2Session();
-        boolean locked = busy || runtimePreparing || containerPreparing;
+        boolean locked = isOperationInProgress() || Pd2ContainerMaintenance.isDeletionInProgress()
+                || (!session && XServerDisplayActivity.isPd2RuntimeWorkInProgress());
         play.setText(session ? "Resume client" : "Play");
         play.setEnabled(!locked && (session || (runtime && installation != null && installation.valid)));
         stop.setEnabled(session && !locked);
         folder.setEnabled(!locked && !session); zip.setEnabled(!locked && !session);
         settings.setEnabled(!locked && !session); prepare.setEnabled(!locked && !session && !runtime);
         status.setText((session ? "Client running" : runtime ? "Runtime ready" : "Runtime not prepared") + "\n" +
-            (runtimePreparing ? "Preparing bundled runtime files…" : containerPreparing ? "Preparing the PD2 Wine container…" : operation));
+            (Pd2ContainerMaintenance.isDeletionInProgress() ? "Deleting an older container…"
+                    : runtimePreparing ? "Preparing bundled runtime files…" : containerPreparing ? "Preparing the PD2 Wine container…" : operation));
     }
     private void prepareRuntime() {
-        runtimePreparing = true; updateUi();
+        synchronized (Pd2ContainerMaintenance.class) {
+            if (isOperationInProgress() || Pd2ContainerMaintenance.isDeletionInProgress()
+                    || XServerDisplayActivity.isPd2RuntimeWorkInProgress()) return;
+            runtimePreparing = true;
+        }
+        updateUi();
         RootFSInstaller.installIfNeeded(this);
         // A failed extractor can be retried when its progress dialog closes.
         handler.postDelayed(() -> {
@@ -199,12 +212,17 @@ public final class Pd2Activity extends AppCompatActivity {
         }, 5 * 60 * 1000L);
     }
     private void play() {
+        if (Pd2ContainerMaintenance.isDeletionInProgress()) return;
         if (XServerDisplayActivity.resumePd2Session(this)) return;
-        if (busy || containerPreparing || !Pd2Runtime.hasRuntime(this) || installation == null || !installation.valid) return;
-        containerPreparing = true; updateUi();
+        synchronized (Pd2ContainerMaintenance.class) {
+            if (isOperationInProgress() || Pd2ContainerMaintenance.isDeletionInProgress()
+                    || XServerDisplayActivity.isPd2RuntimeWorkInProgress()
+                    || !Pd2Runtime.hasRuntime(this) || installation == null || !installation.valid) return;
+            containerPreparing = true;
+        }
+        updateUi();
         Pd2Runtime.getOrCreateContainer(this, container -> {
-            containerPreparing = false;
-            if (container == null) { operation = "Cannot prepare the Wine container. Check free storage and retry."; updateUi(); return; }
+            if (container == null) { containerPreparing = false; operation = "Cannot prepare the Wine container. Check free storage and retry."; updateUi(); return; }
             try {
                 Pd2Runtime.configure(this, container, preferences.getString("pd2_renderer", "turnip,zink"));
                 File game = new File(Pd2Installer.installedDirectory(this), installation.gameExecutableRelativePath);
@@ -217,8 +235,12 @@ public final class Pd2Activity extends AppCompatActivity {
                 Intent intent = new Intent(this, XServerDisplayActivity.class)
                     .putExtra("pd2_session", true).putExtra("container_id", container.id)
                     .putExtra("pd2_launch_id", launchId).putExtra("exec_path", game.getPath()).putExtra("exec_args", arguments);
+                XServerDisplayActivity.setPd2LaunchPending(true);
                 startActivity(intent);
-            } catch (Exception e) { operation = "Launch setup failed: " + e.getMessage(); appendLauncherLog(operation); }
+            } catch (Exception e) {
+                XServerDisplayActivity.setPd2LaunchPending(false);
+                operation = "Launch setup failed: " + e.getMessage(); appendLauncherLog(operation);
+            } finally { containerPreparing = false; }
             updateUi();
         });
     }
@@ -263,13 +285,22 @@ public final class Pd2Activity extends AppCompatActivity {
         operation = runtimeExitMessage(status);
         appendLauncherLog(context, operation);
     }
+    public static void recordLaunchFailure(android.content.Context context, String message) {
+        operation = launchFailureMessage(message);
+        appendLauncherLog(context, operation);
+    }
+    private static String launchFailureMessage(String message) {
+        return "Client launch stopped: " + (message == null ? "runtime startup failed" : message)
+                + ". Export support logs.";
+    }
     private static String runtimeExitMessage(int status) {
         return "Windows runtime exited (status " + status + "). If the title screen did not appear, export support logs.";
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (result != RESULT_OK || data == null || data.getData() == null || (request != IMPORT_FOLDER && request != IMPORT_ZIP)) return;
-        if (busy || XServerDisplayActivity.hasPd2Session()) { operation = "Stop the client before importing."; return; }
+        if (isOperationInProgress() || Pd2ContainerMaintenance.isDeletionInProgress()
+                || XServerDisplayActivity.isPd2RuntimeWorkInProgress()) { operation = "Finish runtime work before importing."; return; }
         Uri uri = data.getData();
         try { getContentResolver().takePersistableUriPermission(uri, data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION); }
         catch (SecurityException ignored) { }
@@ -285,7 +316,10 @@ public final class Pd2Activity extends AppCompatActivity {
         runOperation(title, true, job);
     }
     private void runOperation(String title, boolean protect, Job job) {
-        synchronized (Pd2Activity.class) { if (busy) return; busy = true; }
+        synchronized (Pd2ContainerMaintenance.class) {
+            if (busy || Pd2ContainerMaintenance.isDeletionInProgress()) return;
+            busy = true;
+        }
         operation = title;
         Runnable execute = () -> WORKER.execute(() -> {
             try { job.run(); }

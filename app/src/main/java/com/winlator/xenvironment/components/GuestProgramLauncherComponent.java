@@ -34,12 +34,20 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private Pd2WineSession pd2WineSession;
     private EnvVars launchEnvironment;
     private boolean pd2CleanupRecorded;
+    private String pd2LaunchFailure;
     private EnvVars envVars;
     private String box64Preset = Box64Preset.CONSERVATIVE;
     private Callback<Integer> terminationCallback;
     private final Object lock = new Object();
 
     public void setPd2LaunchId(String id) { pd2LaunchId = id; }
+    public String getPd2LaunchFailure() { return pd2LaunchFailure; }
+
+    private void recordLaunchFailure(String message) {
+        pd2LaunchFailure = message;
+        Pd2LaunchDiagnostics.failed(environment.getContext(), pd2LaunchId, message);
+        Pd2Activity.recordLaunchFailure(environment.getContext(), message);
+    }
 
     /** Worker-thread barrier, before root/tmp is cleared or runtime sockets start. */
     public boolean preparePd2Session() {
@@ -53,9 +61,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 pd2WineSession = new Pd2WineSession(rootFS.getRootDir(), rootFS.getWinePath(), launchEnvironment);
                 Pd2WineSession.Result result = pd2WineSession.beforeLaunch();
                 recordCleanup(result);
+                if (!result.passed) recordLaunchFailure(result.error);
                 return result.passed;
             } catch (java.io.IOException error) {
-                Pd2Activity.appendLauncherLog(environment.getContext(), "Cannot verify PD2 Wine shutdown: " + error.getClass().getSimpleName());
+                recordLaunchFailure("Cannot verify PD2 Wine shutdown: " + error.getMessage());
                 return false;
             }
         }
@@ -76,6 +85,14 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             killRootProcess();
             extractBox64File();
             copyDefaultBox64RCFile();
+            if (pd2LaunchId != null) {
+                try { Pd2WineSession.prepareLaunchDirectories(environment.getRootFS().getRootDir()); }
+                catch (java.io.IOException failure) {
+                    recordLaunchFailure(failure.getMessage());
+                    if (terminationCallback != null) terminationCallback.call(-1);
+                    return;
+                }
+            }
             final long generation = ++processGeneration;
             pid = execGuestProgram(generation);
             if (pid == -1 && terminationCallback != null) terminationCallback.call(-1);

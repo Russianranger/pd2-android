@@ -55,7 +55,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.11-preview.apk` and a
+The current output is `app/build/distributions/PD2-Android-0.1.13-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -101,7 +101,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum. If this preview is published through that path, use the immutable tag `v0.1.11`.
+GitHub prerelease with the APK and checksum. If this preview is published through that path, use an immutable version tag; no 0.1.13 tag was requested or published.
 
 ## Startup verification boundary
 
@@ -171,7 +171,7 @@ The native module is unchanged. APK size is 171,296,970 bytes; SHA-256:
 `d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
 Published 0.1.7 CI run 37169294205 passed. The user rejected the physical menu test; re-entry remains unqualified.
 
-Install 0.1.11 over the existing accepted preview with the same signing key/application ID to retain
+Install 0.1.13 over the existing accepted preview with the same signing key/application ID to retain
 imported files. The targeted controller update reuses rootfs version 24 and the current
 `wine-9.2-pd2-1` managed prefix; **no Prepare runtime or re-import is needed**.
 The backend installs automatically on Play. To restore the original, select
