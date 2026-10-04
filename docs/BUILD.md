@@ -53,7 +53,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.9-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.10-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -99,7 +99,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum; the native-recovery preview tag is `v0.1.9`.
+GitHub prerelease with the APK and checksum. If this preview is published through that path, use the immutable tag `v0.1.10`.
 
 ## Startup verification boundary
 
@@ -169,7 +169,7 @@ The native module is unchanged. APK size is 171,296,970 bytes; SHA-256:
 `d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
 Published 0.1.7 CI run 37169294205 passed. The user rejected the physical menu test; re-entry remains unqualified.
 
-Install 0.1.9 over the existing accepted preview with the same signing key/application ID to retain
+Install 0.1.10 over the existing accepted preview with the same signing key/application ID to retain
 imported files. The targeted controller update reuses rootfs version 24 and the current
 `wine-9.2-pd2-1` managed prefix; **no Prepare runtime or re-import is needed**.
 The backend installs automatically on Play. To restore the original, select
@@ -197,4 +197,16 @@ ARM64 assembly completed in 1 minute 35 seconds. The final APK is `com.pd2.thor`
 
 Of the 35 Android native libraries, 26 match 0.1.8 byte-for-byte and eight rebuilt libraries differ only in their GNU build IDs. VirGL's rebuilt string pool and address references reflect the changed scratch build path: all normalized strings and referenced targets match, without opcode/register/control-flow changes. Native source files are unchanged.
 
-APK size: 174,020,117 bytes. SHA-256: `e6b1a0215b3502b3fe6fc57d915bdeb1d66b136db89720cde65162c9db5d9e16`. Published 0.1.9 CI and physical-device qualification remain pending. Automated checks do not qualify Native support in PD2's title/character menus or gameplay recovery after re-entry. Follow [Testing](TESTING.md) without runtime preparation or re-import.
+APK size: 174,020,117 bytes. SHA-256: `e6b1a0215b3502b3fe6fc57d915bdeb1d66b136db89720cde65162c9db5d9e16`. [Published 0.1.9 CI run 37191608087](https://github.com/Russianranger/pd2-android/actions/runs/37191608087) passed. The subsequent device check failed Native input after Save/Exit and character re-entry; Menu cursor remained usable. Automated checks do not qualify physical recovery. Follow [Testing](TESTING.md) without runtime preparation or re-import.
+
+## 0.1.10 Native reconnect and white cursor control
+
+0.1.10/code 11 adds Java-side HID soft reconnect on every explicit Native selection, including reselecting Native as a retry. The existing absent/present protocol holds an absence interval of at least 600 ms, with legacy XInput connected and neutral. The request begins once Native regains its active input/focus gate; modal/lifecycle changes alone do not request reconnects. Foreground recovery is retained.
+
+The saved **Hide white cursor** gear toggle defaults Off. It changes app root-cursor rendering while preserving the game's cursor and input. No Wine/controller/game DLL or runtime/prefix migration is part of this preview.
+
+All 105 unique automated tests across 15 suites passed with zero failures, errors, or skips: 100 Android 13/API 33 Robolectric tests and five plain cursor-rendering tests. The full run passed 104 tests; a focused 20-test legacy-controller rerun passed with the final added neutral-attach failure test. Nine real-router scenarios, 12 menu-pointer/native-focus scenarios with 156 checks, three native-controller host tests including production UDP/replug under ASan/UBSan, and all 206 pinned dependency checks passed.
+
+Final ARM64 packaging and APK identity/signature/payload checks passed: `com.pd2.thor`, 0.1.10/code 11, min SDK 26, target SDK 28, ARM64 only, retaining the preview certificate. All 72 runtime assets and 35 Android native libraries match the verified 0.1.9 APK byte-for-byte.
+
+Local APK size: 174,025,221 bytes. SHA-256: `e2f8ea363b5f2d6c3b332998bad91b612bdd348d12e1c6f920b6af1186ce5440`. Published 0.1.10 source CI and physical reconnect qualification remain pending. See [Testing](TESTING.md) and [Handoff](HANDOFF.md); update over the existing app without Prepare runtime or re-import.

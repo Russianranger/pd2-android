@@ -24,6 +24,6 @@ Install over the existing app without uninstalling, clearing storage, Prepare ru
 4. Repeat the cycle once, then check controls after gear open/close and **Back to Launcher Menu → Resume client**.
 5. Export support logs. Report Native menu and gameplay results separately, plus the new icon/dark menu appearance.
 
-Local verification passed all 93 API 33 tests, host input/focus regression checks, runtime checks, and ARM64 assembly. Signature/identity, ZIP integrity/alignment, and comparison of all 72 runtime assets passed. Published 0.1.9 CI and physical-device recovery remain pending. See [Testing](TESTING.md), [Handoff](HANDOFF.md), and the [evidence note](evidence/2026-10-04-native-foreground.md).
+Local verification passed all 93 API 33 tests, host input/focus regression checks, runtime checks, and ARM64 assembly. Signature/identity, ZIP integrity/alignment, and comparison of all 72 runtime assets passed. [Published 0.1.9 CI run 37191608087](https://github.com/Russianranger/pd2-android/actions/runs/37191608087) passed. The subsequent device check failed Native after Save/Exit and character re-entry; Menu cursor remained usable. See the [0.1.10 evidence note](evidence/2026-10-04-native-reconnect.md). See [Testing](TESTING.md), [Handoff](HANDOFF.md), and the [evidence note](evidence/2026-10-04-native-foreground.md).
 
-Local APK SHA-256: `e6b1a0215b3502b3fe6fc57d915bdeb1d66b136db89720cde65162c9db5d9e16`. The independently built CI release APK has its own digest in the release's `SHA256SUMS`.
+Local APK SHA-256: `e6b1a0215b3502b3fe6fc57d915bdeb1d66b136db89720cde65162c9db5d9e16`. An independently built CI APK has its own digest in its accompanying `SHA256SUMS`.

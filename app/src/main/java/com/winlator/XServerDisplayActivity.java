@@ -156,6 +156,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean pd2MouseKeyboard;
     private boolean pd2MenuCursor;
     private boolean pd2MenuOpen;
+    private boolean pd2NativeReconnectPending;
     private boolean pd2Paused;
     private boolean pd2HasWindowFocus = true;
     private volatile boolean pd2StopRequested;
@@ -426,6 +427,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     public void onPause() {
         if (pd2Session) {
             pd2Paused = true;
+            pd2NativeReconnectPending = false;
             pd2LeftThumbDown = pd2RightThumbDown = pd2ChordConsumed = false;
             pd2LeftThumbDeferred = pd2RightThumbDeferred = false;
             releasePd2Input();
@@ -451,6 +453,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     protected synchronized void onDestroy() {
         if (pd2Session) {
             pd2StopRequested = true;
+            pd2NativeReconnectPending = false;
             if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
             if (pd2ActiveSession.get() == this) pd2ActiveSession.clear();
@@ -554,6 +557,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pd2Session) {
             if (pd2StopRequested) return;
             pd2StopRequested = true;
+            pd2NativeReconnectPending = false;
             if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
             winHandler.stop();
@@ -734,6 +738,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         xServerView = new XServerView(this, xServer);
         final GLRenderer renderer = xServerView.getRenderer();
         renderer.setCursorVisible(false);
+        if (pd2Session) renderer.setRootCursorVisible(!preferences.getBoolean("pd2_hide_white_cursor", false));
         renderer.setCursorColor(preferences.getInt("cursor_color", 0xffffff));
         renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
         renderer.setForceWindowsFullscreen(shortcut != null && shortcut.getExtra("forceFullscreen", "0").equals("1"));
@@ -842,9 +847,18 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             else pd2MenuPointer.deactivate();
         }
         xServerView.getRenderer().setForceRootCursor(menuPointerActive);
+        xServerView.getRenderer().setRootCursorVisible(!preferences.getBoolean("pd2_hide_white_cursor", false));
         boolean nativeActive = !pd2PointerControls() && inputAvailable;
         pd2NativeFocusRecovery.setActive(nativeActive);
         winHandler.gamepadHandler.setInputEnabled(nativeActive);
+        // A dialog can dismiss before Android returns window focus. Consume the explicit
+        // Native selection only once its normal input gate is active, never on mere resume.
+        if (nativeActive && pd2NativeReconnectPending) {
+            pd2NativeReconnectPending = false;
+            if (winHandler.gamepadHandler.reconnectNativeDevice())
+                Toast.makeText(this, "Native controller · reconnecting. Wait one second, then press a controller button.", Toast.LENGTH_LONG).show();
+            else Toast.makeText(this, "Native controller · gamepad not ready to reconnect. Check Controller status.", Toast.LENGTH_LONG).show();
+        }
         capturePd2PointerContext(true);
         winHandler.controllerDiagnostics.save();
         // Touch remains usable for inventory, login and text in every mode.
@@ -882,7 +896,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (!force && now - pd2LastPointerContextAt < 1000) return;
         pd2LastPointerContextAt = now;
         JSONObject state = new JSONObject(pd2MenuPointer.captureContext());
-        try { state.put("forceRoot", xServerView.getRenderer().isForceRootCursor()); }
+        try {
+            state.put("forceRoot", xServerView.getRenderer().isForceRootCursor());
+            state.put("rootCursorVisible", xServerView.getRenderer().isRootCursorVisible());
+        }
         catch (org.json.JSONException ignored) { }
         winHandler.controllerDiagnostics.recordPointerContext(state);
     }
@@ -906,7 +923,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             "Runtime settings and logs",
             "Back to Launcher Menu",
             "Stop game",
-            "Controller status"
+            "Controller status",
+            "Hide white cursor: " + (preferences.getBoolean("pd2_hide_white_cursor", false) ? "On ✓" : "Off")
         };
         pd2QuickDialog = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme)
             .setTitle("PD2 quick menu · " + current)
@@ -918,8 +936,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                         releasePd2Input();
                         pd2MenuCursor = which == 2;
                         pd2MouseKeyboard = which == 3;
+                        pd2NativeReconnectPending = which == 1;
                         preferences.edit().putBoolean("pd2_mouse_keyboard", pd2MouseKeyboard).apply();
-                        Toast.makeText(this, pd2MenuCursor ? "Menu cursor · choose Native controller after entering your character" : pd2InputModeLabel(), Toast.LENGTH_SHORT).show();
+                        if (which != 1) Toast.makeText(this, pd2MenuCursor ? "Menu cursor · choose Native controller after entering your character" : pd2InputModeLabel(), Toast.LENGTH_SHORT).show();
                         break;
                     case 4: new Handler(Looper.getMainLooper()).post(() -> AppUtils.showKeyboard(this)); break;
                     case 5:
@@ -948,6 +967,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                         break;
                     case 11: exit(); break;
                     case 12: new Handler(Looper.getMainLooper()).post(this::showPd2ControllerStatus); break;
+                    case 13:
+                        boolean hideWhiteCursor = !preferences.getBoolean("pd2_hide_white_cursor", false);
+                        preferences.edit().putBoolean("pd2_hide_white_cursor", hideWhiteCursor).apply();
+                        xServerView.getRenderer().setRootCursorVisible(!hideWhiteCursor);
+                        Toast.makeText(this, hideWhiteCursor ? "White cursor hidden" : "White cursor shown", Toast.LENGTH_SHORT).show();
+                        break;
                 }
             }).create();
         pd2QuickDialog.setOnDismissListener(dialog -> {
@@ -1006,7 +1031,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pointerOutput != null) message.append("\nMenu input requests: ").append(pointerOutput.optLong("moveEvents"))
                 .append(" moves, ").append(pointerOutput.optLong("buttonEvents")).append(" button events")
                 .append("\nWindows cursor feedback: ").append(pointerOutput.optLong("feedbackEvents"));
-        message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. After entering your character, choose Native controller, close the quick menu, and press a controller button.")
+        message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. After entering your character, choose Native controller to reconnect the gamepad, wait one second, and press a face button. Select Native controller again to retry.")
                 .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
         AlertDialog status = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme).setTitle("Controller status")
                 .setMessage(message.toString()).setPositiveButton("Done", null).create();

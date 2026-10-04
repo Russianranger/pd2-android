@@ -1,22 +1,26 @@
-# 0.1.9 Native recovery after Save/Exit
+# 0.1.10 Native reconnect after Save/Exit
 
-Native input inside a character and the 0.1.8 Menu cursor are accepted by user report. Native still fails after Save/Exit. This preview restores Game.exe foreground focus when Native resumes and during game-window changes. The failure's exact cause and PD2's native support at title/character menus remain unconfirmed. Keep the accepted Wine/HID runtime, prefix, import, and graphics settings.
+Native initially works inside a character, and Menu cursor is accepted. The user rejected 0.1.9 Native recovery both after Save/Exit and after character re-entry. This preview requests a brief HID reconnect whenever **Native controller** is explicitly selected, including selecting it again as a retry. Foreground recovery remains active. The exact cause and Native support in title/character menus remain unconfirmed.
 
 ## Focused test
 
-1. Install **0.1.9 over the existing app**. Do not uninstall, clear storage, Prepare runtime, or re-import. Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and controller notifications enabled.
-2. Enter your offline character and verify Native controller still responds.
-3. Save/Exit while Native is selected. Check whether the controller operates the title and character-selection menus; record each screen separately. Open/close the gear with Native selected and check again.
-4. If Native cannot navigate those menus, use **L3 + R3 → Menu cursor**, close the quick menu, and use the accepted pointer/**A** click to re-enter the same character. A Native menu failure alone does not establish that Native gameplay remains broken after re-entry.
-5. Wait until the character has loaded, select **Native controller**, close the quick menu, and press/release a controller button. Check left-stick movement and normal gameplay actions. Check saved progress and that no pointer/key remains held.
-6. Repeat Save/Exit and character re-entry once. With Native working in the character, open/close the gear, then use **Back to Launcher Menu → Resume client**. Check controls after each return.
-7. Export support logs on success or failure. Report **initial Native gameplay**, **Native title/character-menu input**, **Native gameplay after re-entry**, and **Native after gear/launcher resume** separately. Include the first failed screen/action and whether Menu cursor or touch still works there. Do not repeat runtime setup or change resolution for this comparison.
+1. Install **0.1.10 over the existing app**. Do not uninstall, clear storage, Prepare runtime, or re-import. Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and controller notifications enabled.
+2. Enter the same offline character. Press/release a controller face button, then verify initial Native movement and normal gameplay actions.
+3. Save/Exit. Record whether Native responds at the title/character menus, then use the accepted **L3 + R3 → Menu cursor** to re-enter the same character if needed.
+4. After the character loads, release all sticks/buttons. Open the gear and explicitly choose **Native controller**, even if Native already has a checkmark. The menu closes and requests a brief reconnect. Wait about **one second**, press/release a **face button**, then check left-stick movement, aiming, and gameplay actions. Stick motion alone is not the activation check.
+5. If Native still does not respond, select **Native controller** again once, wait one second, and press/release a face button before retesting. Report whether the first selection or this retry worked.
+6. If gameplay responds, repeat Save/Exit and character re-entry once. Then check controls after opening/closing the gear and after **Back to Launcher Menu → Resume client**. If needed, explicitly select Native again and report that recovery separately.
+7. Export support logs on success or failure. Report **initial Native gameplay**, **Native at menus**, **Native after re-entry**, **explicit Native retry**, and **gear/launcher resume** separately. Include the first failed action and whether Menu cursor/touch remains usable. Keep the accepted runtime and graphics settings for this comparison.
 
-The icon should show **PD2** over fire with a devilish skull. The gear menu and its dialogs should use dark surfaces with readable text and controls. Report any clipped or unreadable controls.
+## White cursor check
 
-Menu pointer movement, click requests, and returned Windows cursor feedback are recorded separately. Request counts are not proof that PD2 accepted an input. Up to 16 filtered cursor/window contexts and per-mode handled-input counts help locate a failure.
+Open the gear and set **Hide white cursor: On**. The app's white pointer should disappear while PD2's own cursor, such as its gauntlet, remains visible when the game supplies it. Confirm movement/clicks still work. Return to the launcher and resume, then relaunch later to check that the choice persists. The option defaults to **Off**; if Menu cursor loses its visible pointer, turn it Off for navigation.
 
-`controller.json.nativeFocusRecovery` records queued foreground request counts, last request time/reason, and scope. These diagnostics do not acknowledge that Windows foreground changed or that PD2 consumed native input.
+The fiery PD2/skull icon and dark gear menu are retained. Report any clipped or unreadable controls.
+
+Menu movement, click requests, and returned Windows cursor feedback are recorded separately. Request counts do not prove that PD2 accepted an input. `controller.json.nativeFocusRecovery` records queued foreground requests, without acknowledging Windows foreground or PD2 input consumption. Reconnect diagnostics likewise require a physical result; a requested reconnect is not proof of recovery.
+
+`nativeReconnect` records Java-side reconnect phases and packet sends; `nativeStateDelivery` separates successful neutral/non-neutral HID and legacy state sends. Neither confirms Windows PnP completion or PD2 input acceptance. If the Native selection says **gamepad not ready to reconnect**, check Controller status and include that message in the report.
 
 ## Menu cursor bindings
 
@@ -62,7 +66,7 @@ The current runtime trace enables XInput/raw-input diagnostics instead of Fog ex
 
 Use your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
 
-Title startup, native input inside a character, and Menu cursor navigation are accepted by user report. The current step distinguishes Native menu support from Native gameplay recovery after re-entry, followed by the detailed controls/save checklist below. Do not prepare or re-import for the 0.1.9 upgrade.
+Title startup, initial Native input inside a character, and Menu cursor navigation are accepted by user report. Native failed after character re-entry on 0.1.9. The current step tests the explicit Native reconnect and a face-button activation before checking sticks. Do not prepare or re-import for the 0.1.10 upgrade.
 
 Export support information after the controller result before changing graphics settings. Further comparisons should follow diagnosis of that result.
 
@@ -129,4 +133,4 @@ Support export contains diagnostics and log tails, not game files or offline-sav
 
 Earlier local checks and published CI passed for 0.1.6, 0.1.7, and 0.1.8. The user accepted native in-character input on 0.1.6, rejected Menu cursor on 0.1.7, then accepted Menu cursor on 0.1.8 while reporting that Native remained unresponsive after Save/Exit. [0.1.8 CI run 37172243169](https://github.com/Russianranger/pd2-android/actions/runs/37172243169) succeeded. Automated checks do not qualify Native title-menu support, physical recovery after re-entry, complete controller bindings, saves, or online play. Full evidence and current validation are recorded in [Handoff](HANDOFF.md).
 
-Local 0.1.9 verification passed all 93 API 33 tests and host input/focus regression checks, runtime verification, ARM64 assembly, and APK signature/identity checks. Published 0.1.9 CI and physical Native recovery remain pending; see [Handoff](HANDOFF.md) for exact results.
+Local 0.1.9 verification passed all 93 API 33 tests and host input/focus regression checks, runtime verification, ARM64 assembly, and APK signature/identity checks. [Published 0.1.9 CI run 37191608087](https://github.com/Russianranger/pd2-android/actions/runs/37191608087) passed; the subsequent physical Native recovery failed by user report. Local 0.1.10 verification passed 105 unique automated tests and host input/reconnect checks, pinned dependencies, final ARM64 packaging, and APK identity/signature/payload comparison. Published 0.1.10 source CI and physical reconnect qualification remain pending; see [Handoff](HANDOFF.md) for exact results.

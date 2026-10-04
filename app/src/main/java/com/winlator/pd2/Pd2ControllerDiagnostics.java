@@ -43,6 +43,11 @@ public final class Pd2ControllerDiagnostics {
     private long lastHandledMotionAt, lastHandledKeyAt, lastHidReplyAt, lastXInputReplyAt;
     private long nativeFocusRequests, lastNativeFocusRequestAt;
     private String lastNativeFocusReason = "";
+    private long reconnectRequests, reconnectDetachSent, reconnectAttachSent, reconnectCompleted;
+    private long reconnectCancelled, reconnectUnavailable, reconnectSendFailures, reconnectTimedOut, lastReconnectAt;
+    private String lastReconnectPhase = "";
+    private long hidNonNeutralStateSent, hidNeutralStateSent, xinputNonNeutralStateSent, xinputNeutralStateSent;
+    private long nativeStateSendFailures, lastNonNeutralStateSentAt;
     private boolean gateKnown, windowFocus, paused, quickMenu, drawer;
     private final ArrayDeque<JSONObject> recentTransitions = new ArrayDeque<>();
     private final ArrayDeque<JSONObject> recentPointerContexts = new ArrayDeque<>();
@@ -144,6 +149,36 @@ public final class Pd2ControllerDiagnostics {
         lastNativeFocusReason = reason;
     }
 
+    public synchronized void recordNativeReconnect(String phase) {
+        if (phase == null) return;
+        switch (phase) {
+            case "requested": reconnectRequests = increment(reconnectRequests); break;
+            case "detachSent": reconnectDetachSent = increment(reconnectDetachSent); break;
+            case "attachSent": reconnectAttachSent = increment(reconnectAttachSent); break;
+            case "completed": reconnectCompleted = increment(reconnectCompleted); break;
+            case "cancelled": reconnectCancelled = increment(reconnectCancelled); break;
+            case "unavailable": reconnectUnavailable = increment(reconnectUnavailable); break;
+            case "sendFailure": reconnectSendFailures = increment(reconnectSendFailures); break;
+            case "timedOut": reconnectTimedOut = increment(reconnectTimedOut); break;
+            default: return;
+        }
+        lastReconnectPhase = phase;
+        lastReconnectAt = System.currentTimeMillis();
+    }
+
+    public synchronized void recordNativeStateDelivery(int port, boolean nonNeutral, boolean success) {
+        if (port != 7950 && port != 7949) return;
+        if (!success) { nativeStateSendFailures = increment(nativeStateSendFailures); return; }
+        if (port == 7950) {
+            if (nonNeutral) hidNonNeutralStateSent = increment(hidNonNeutralStateSent);
+            else hidNeutralStateSent = increment(hidNeutralStateSent);
+        } else {
+            if (nonNeutral) xinputNonNeutralStateSent = increment(xinputNonNeutralStateSent);
+            else xinputNeutralStateSent = increment(xinputNeutralStateSent);
+        }
+        if (nonNeutral) lastNonNeutralStateSentAt = System.currentTimeMillis();
+    }
+
     public synchronized void recordRequest(byte code, int port) {
         if (code == 8) {
             if (port == 7948) dinputRequests = increment(dinputRequests);
@@ -210,7 +245,7 @@ public final class Pd2ControllerDiagnostics {
             JSONObject clean = new JSONObject();
             for (String name : new String[]{"screenWidth", "screenHeight"}) copyInteger(state, clean, name, 0, 65536);
             for (String name : new String[]{"pointerX", "pointerY"}) copyInteger(state, clean, name, -65536, 65536);
-            for (String name : new String[]{"relative", "gameCursorVisible", "forceRoot"}) {
+            for (String name : new String[]{"relative", "gameCursorVisible", "forceRoot", "rootCursorVisible"}) {
                 Object value = state.opt(name);
                 if (value instanceof Boolean) clean.put(name, value);
             }
@@ -266,6 +301,18 @@ public final class Pd2ControllerDiagnostics {
                         .put("nativeFocusRecovery", new JSONObject().put("requests", nativeFocusRequests)
                                 .put("lastRequestAt", lastNativeFocusRequestAt).put("lastReason", lastNativeFocusReason)
                                 .put("scope", "Queued Game.exe foreground requests; Windows acceptance is not acknowledged"))
+                        .put("nativeReconnect", new JSONObject().put("requests", reconnectRequests)
+                                .put("detachSent", reconnectDetachSent).put("attachSent", reconnectAttachSent)
+                                .put("completed", reconnectCompleted).put("cancelled", reconnectCancelled)
+                                .put("unavailable", reconnectUnavailable).put("sendFailures", reconnectSendFailures)
+                                .put("timedOut", reconnectTimedOut)
+                                .put("lastPhase", lastReconnectPhase).put("lastPhaseAt", lastReconnectAt)
+                                .put("scope", "Explicit HID discovery absent/present packets; Windows PnP acceptance is not acknowledged"))
+                        .put("nativeStateDelivery", new JSONObject().put("hidNonNeutralSent", hidNonNeutralStateSent)
+                                .put("hidNeutralSent", hidNeutralStateSent).put("xinputNonNeutralSent", xinputNonNeutralStateSent)
+                                .put("xinputNeutralSent", xinputNeutralStateSent).put("sendFailures", nativeStateSendFailures)
+                                .put("lastNonNeutralSentAt", lastNonNeutralStateSentAt)
+                                .put("scope", "Successful UDP state sends by neutral/nonneutral category; no values or game acceptance"))
                         .put("recentPointerContexts", pointerContexts)
                         .put("inputGate", new JSONObject().put("known", gateKnown).put("windowFocus", windowFocus)
                                 .put("paused", paused).put("quickMenu", quickMenu).put("drawer", drawer))
@@ -273,7 +320,7 @@ public final class Pd2ControllerDiagnostics {
                                 .put("handledKeyAt", lastHandledKeyAt).put("hidStateReplyAt", lastHidReplyAt)
                                 .put("xinputStateReplyAt", lastXInputReplyAt))
                         .put("nativeBridge", "legacy_xinput_7949_and_hid_7950")
-                        .put("bridgeRevision", "java-hid-7950-v1")
+                        .put("bridgeRevision", "java-hid-7950-v2")
                         .put("nativeInputEnabled", nativeInputEnabled)
                         .put("socketReady", socketReady).put("winHandlerInitReceived", initReceived)
                         .put("selectedDevice", selectedDevice == null ? JSONObject.NULL : selectedDevice)

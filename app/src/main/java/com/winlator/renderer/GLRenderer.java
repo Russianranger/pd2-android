@@ -56,6 +56,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     protected boolean viewportNeedsUpdate = true;
     private boolean cursorVisible = true;
     private volatile boolean forceRootCursor;
+    private volatile boolean rootCursorVisible = true;
     private float cursorScale = 1.0f;
     private int cursorBackColor = 0xffffff;
     private int cursorForeColor = 0x000000;
@@ -263,11 +264,16 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             short x = xServer.pointer.getClampedX();
             short y = xServer.pointer.getClampedY();
 
-            if (forceRootCursor) renderCursorDrawable(rootCursorDrawable, x, y);
-            else if (cursor != null) {
-                if (cursor.isVisible()) renderCursorDrawable(cursor.cursorImage, x - cursor.hotSpotX, y - cursor.hotSpotY);
+            switch (cursorSource(cursor, forceRootCursor, rootCursorVisible)) {
+                case ROOT:
+                    renderCursorDrawable(rootCursorDrawable, x, y);
+                    break;
+                case GUEST:
+                    renderCursorDrawable(cursor.cursorImage, x - cursor.hotSpotX, y - cursor.hotSpotY);
+                    break;
+                case NONE:
+                    break;
             }
-            else renderCursorDrawable(rootCursorDrawable, x, y);
         }
 
         quadVertices.disable();
@@ -369,6 +375,24 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
 
     public boolean isForceRootCursor() {
         return forceRootCursor;
+    }
+
+    /** Hide only the app's fallback arrow; guest cursors and pointer input are unaffected. */
+    public void setRootCursorVisible(boolean rootCursorVisible) {
+        this.rootCursorVisible = rootCursorVisible;
+        xServerView.requestRender();
+    }
+
+    public boolean isRootCursorVisible() {
+        return rootCursorVisible;
+    }
+
+    enum CursorSource { ROOT, GUEST, NONE }
+
+    static CursorSource cursorSource(Cursor cursor, boolean forceRootCursor, boolean rootCursorVisible) {
+        if (rootCursorVisible && (forceRootCursor || cursor == null)) return CursorSource.ROOT;
+        if (cursor != null && cursor.isVisible()) return CursorSource.GUEST;
+        return CursorSource.NONE;
     }
 
     public float getCursorScale() {

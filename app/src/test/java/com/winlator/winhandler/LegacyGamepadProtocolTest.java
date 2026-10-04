@@ -1,6 +1,7 @@
 package com.winlator.winhandler;
 
 import android.app.Application;
+import android.os.Looper;
 
 import com.winlator.inputcontrols.GamepadSlot;
 import com.winlator.inputcontrols.GamepadState;
@@ -10,20 +11,24 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.LooperMode;
 
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.*;
+import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 33, application = Application.class)
+@LooperMode(LooperMode.Mode.PAUSED)
 public final class LegacyGamepadProtocolTest {
     @Test public void devicePacketMatchesReleasedWine9OffsetsAndFixedReceiverSize() {
         byte[] packet = LegacyGamepadProtocol.device(1, (byte)1, "Thor");
@@ -325,6 +330,146 @@ public final class LegacyGamepadProtocolTest {
         for (int index = 1; index < absent.length; index++) assertEquals(0, absent[index]);
     }
 
+    @Test public void explicitReconnectExpiresQueuedControlsAndHeartbeatCannotReconnectBeforeSentRemovalGap() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        slot.state.buttons = 1; slot.state.thumbLX = 1;
+        handler.gamepadHandler.sendGamepadState(slot);
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950); // Old positive metadata waiting in queue.
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice());
+        // The interval starts at the actual removal send, not at request or queue time.
+        advanceReconnect(1000); assertTrue(handler.packets.isEmpty());
+        handler.drain();
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8));
+        assertBlackoutPackets(handler.packets);
+        handler.packets.clear();
+        slot.state.buttons = 1; slot.state.thumbLX = 1;
+        handler.gamepadHandler.sendGamepadState(slot);
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        handler.drain(); assertBlackoutPackets(handler.packets);
+        handler.packets.clear();
+        advanceReconnect(599); handler.drain(); assertTrue(handler.packets.isEmpty());
+        // Queue another heartbeat in the detached phase, then transition to attach before draining it.
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950);
+        advanceReconnect(1); handler.drain();
+        assertEquals(2, handler.packets.size());
+        assertEquals(8, handler.packets.get(0).bytes[0]); assertEquals(1, handler.packets.get(0).bytes[1]);
+        assertEquals(9, handler.packets.get(1).bytes[0]); assertNeutral(handler.packets.get(1));
+        // Nothing from the blackout may replay after the attach-completion callback.
+        handler.gamepadHandler.sendGamepadState(slot); advanceReconnect(0); handler.drain();
+        assertNeutral(handler.packets.get(2)); assertNeutral(handler.packets.get(3));
+        handler.packets.clear();
+        slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(0).bytes).getShort(6));
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(2));
+        org.json.JSONObject reconnect = handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect");
+        assertEquals(1, reconnect.getLong("detachSent")); assertEquals(1, reconnect.getLong("attachSent"));
+        assertEquals(1, reconnect.getLong("completed")); assertEquals(0, reconnect.getLong("sendFailures"));
+        advanceReconnect(3000); assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("timedOut"));
+    }
+
+    @Test public void modalCancellationReAdvertisesOnlyNeutralStateAndExpiresAttachTimer() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain(); handler.packets.clear();
+        slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot);
+        handler.gamepadHandler.setInputEnabled(false); handler.drain();
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        for (Packet packet : handler.packets) if (packet.bytes[0] == 9) assertNeutral(packet);
+        int sent = handler.packets.size(); advanceReconnect(3000); handler.drain();
+        assertEquals(sent, handler.packets.size());
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("cancelled"));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("attachSent"));
+        handler.gamepadHandler.setInputEnabled(true); handler.packets.clear();
+        slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(2));
+    }
+
+    @Test public void stopAndUnavailableHidCannotSendLateReconnectPacketsOrFakeControls() throws Exception {
+        FixtureHandler absent = new FixtureHandler(); connect(absent, false);
+        assertFalse(absent.gamepadHandler.reconnectNativeDevice()); absent.drain(); assertTrue(absent.packets.isEmpty());
+        assertEquals(1, absent.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("unavailable"));
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain(); handler.packets.clear();
+        handler.gamepadHandler.stop();
+        slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot);
+        advanceReconnect(3000); handler.drain(); assertTrue(handler.packets.isEmpty());
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("attachSent"));
+    }
+
+    @Test public void delayedQueueAndFailedRemovalAreBoundedWithoutLeavingNativeInputBlackened() throws Exception {
+        FixtureHandler queued = new FixtureHandler(); FixtureSlot queuedSlot = connectHid(queued);
+        assertTrue(queued.gamepadHandler.reconnectNativeDevice());
+        advanceReconnect(2500); queued.drain();
+        assertEquals(1, queued.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("timedOut"));
+        for (Packet packet : queued.packets) if (packet.port == 7950 && packet.bytes[0] == 8) assertEquals(1, packet.bytes[1]);
+        queued.packets.clear(); queuedSlot.state.buttons = 1; queued.gamepadHandler.sendGamepadState(queuedSlot); queued.drain();
+        assertEquals(1, littleEndian(queued.packets.get(1).bytes).getShort(2));
+        FixtureHandler failed = new FixtureHandler(); FixtureSlot failedSlot = connectHid(failed);
+        assertTrue(failed.gamepadHandler.reconnectNativeDevice());
+        failed.failNextDiscovery = true; failed.drain(); advanceReconnect(0); failed.drain();
+        assertEquals(1, failed.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("sendFailures"));
+        assertEquals(0, failed.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect").getLong("detachSent"));
+        failed.packets.clear(); failedSlot.state.buttons = 1; failed.gamepadHandler.sendGamepadState(failedSlot); failed.drain();
+        assertEquals(1, littleEndian(failed.packets.get(1).bytes).getShort(2));
+    }
+
+    @Test public void supersededReconnectCannotReattachBeforeTheLatestSentRemovalInterval() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain();
+        advanceReconnect(300); assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain();
+        handler.packets.clear(); advanceReconnect(599); handler.drain(); assertTrue(handler.packets.isEmpty());
+        advanceReconnect(1); handler.drain(); advanceReconnect(0);
+        assertEquals(2, handler.packets.size());
+        assertEquals(8, handler.packets.get(0).bytes[0]); assertEquals(1, handler.packets.get(0).bytes[1]);
+        assertNeutral(handler.packets.get(1));
+        org.json.JSONObject reconnect = handler.controllerDiagnostics.snapshot().getJSONObject("nativeReconnect");
+        assertEquals(2, reconnect.getLong("requests")); assertEquals(2, reconnect.getLong("detachSent"));
+        assertEquals(1, reconnect.getLong("attachSent")); assertEquals(1, reconnect.getLong("completed"));
+    }
+
+    @Test public void failedNeutralAttachReportDoesNotClaimCompletedAndRestoresAUsableNeutralDevice() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain();
+        advanceReconnect(600); handler.failNextHidState = true;
+        handler.drain(); advanceReconnect(0); handler.drain();
+        org.json.JSONObject report = handler.controllerDiagnostics.snapshot();
+        assertEquals(1, report.getJSONObject("nativeReconnect").getLong("attachSent"));
+        assertEquals(0, report.getJSONObject("nativeReconnect").getLong("completed"));
+        assertEquals(1, report.getJSONObject("nativeReconnect").getLong("sendFailures"));
+        assertEquals(1, report.getJSONObject("nativeReconnect").getLong("cancelled"));
+        assertEquals(1, report.getJSONObject("nativeStateDelivery").getLong("sendFailures"));
+        handler.packets.clear(); slot.state.buttons = 1;
+        handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(2));
+    }
+
+    private static void advanceReconnect(long millis) {
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(millis));
+    }
+
+    private static FixtureSlot connectHid(FixtureHandler handler) throws Exception {
+        FixtureSlot slot = connect(handler, false);
+        handler.gamepadHandler.handleModernGetGamepadRequest(7950); handler.drain(); handler.packets.clear();
+        return slot;
+    }
+
+    private static void assertBlackoutPackets(List<Packet> packets) {
+        for (Packet packet : packets) {
+            if (packet.bytes[0] == 9) assertNeutral(packet);
+            else if (packet.port == 7950 && packet.bytes[0] == 8) assertEquals(0, packet.bytes[1]);
+        }
+    }
+
+    private static void assertNeutral(Packet packet) {
+        assertEquals(9, packet.bytes[0]);
+        int start = packet.port == 7950 ? 2 : 6;
+        int hat = packet.port == 7950 ? 4 : 8;
+        for (int index = start; index < 17; index++) assertEquals("offset " + index,
+                index == hat ? (byte)-1 : 0, packet.bytes[index]);
+        if (packet.port == 7949) {
+            assertEquals(1, packet.bytes[1]); assertEquals(1, littleEndian(packet.bytes).getInt(2));
+        }
+    }
+
     private static String repeat(String value, int count) {
         StringBuilder output = new StringBuilder();
         for (int index = 0; index < count; index++) output.append(value);
@@ -371,9 +516,12 @@ public final class LegacyGamepadProtocolTest {
         final ArrayDeque<Runnable> actions = new ArrayDeque<>();
         final ArrayList<Packet> packets = new ArrayList<>();
         final boolean interceptActions;
+        boolean failNextDiscovery;
+        boolean failNextHidState;
         FixtureHandler() { this(true); }
         FixtureHandler(boolean interceptActions) { super(null); this.interceptActions = interceptActions; initReceived = true; }
         @Override String getWineIdentifier() { return "wine-9.2-custom"; }
+        @Override public boolean isInputReady() { return true; }
         @Override protected void addAction(Runnable action) {
             if (interceptActions) actions.add(action); else super.addAction(action);
         }
@@ -381,6 +529,8 @@ public final class LegacyGamepadProtocolTest {
             if (interceptActions) actions.add(action); else super.addControllerAction(action);
         }
         @Override protected boolean sendPacket(int port, byte[] packet) {
+            if (failNextDiscovery && port == 7950 && packet[0] == 8) { failNextDiscovery = false; return false; }
+            if (failNextHidState && port == 7950 && packet[0] == 9) { failNextHidState = false; return false; }
             packets.add(new Packet(port, packet.clone())); return true;
         }
         @Override protected boolean sendPacket(int port) {

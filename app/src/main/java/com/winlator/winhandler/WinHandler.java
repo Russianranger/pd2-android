@@ -359,6 +359,7 @@ public class WinHandler {
 
     public void stop() {
         running = false;
+        gamepadHandler.stop();
         setSocketReady(false);
         controllerDiagnostics.save();
 

@@ -32,6 +32,34 @@ import static org.junit.Assert.*;
 public final class Pd2ControllerDiagnosticsTest {
     @Before public void clearDevices() { InputDevices.devices.clear(); }
 
+    @Test public void reconnectAndStateDeliveryCountersSeparateRequestsFromSuccessfulPacketsAndFilterUnknownDetails() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        diagnostics.recordNativeReconnect(null); diagnostics.recordNativeReconnect("private-controller-id");
+        for (String phase : new String[]{"requested", "detachSent", "attachSent", "completed", "cancelled", "unavailable", "sendFailure", "timedOut"})
+            diagnostics.recordNativeReconnect(phase);
+        diagnostics.recordNativeStateDelivery(7950, true, false);
+        diagnostics.recordNativeStateDelivery(7950, true, true);
+        diagnostics.recordNativeStateDelivery(7950, false, true);
+        diagnostics.recordNativeStateDelivery(7949, true, true);
+        diagnostics.recordNativeStateDelivery(7949, false, true);
+        diagnostics.recordNativeStateDelivery(1234, true, false);
+        org.json.JSONObject report = diagnostics.snapshot();
+        org.json.JSONObject reconnect = report.getJSONObject("nativeReconnect");
+        for (String field : new String[]{"requests", "detachSent", "attachSent", "completed", "cancelled", "unavailable", "sendFailures", "timedOut"})
+            assertEquals(field, 1, reconnect.getLong(field));
+        assertEquals("timedOut", reconnect.getString("lastPhase"));
+        assertTrue(reconnect.getLong("lastPhaseAt") > 0);
+        assertTrue(reconnect.getString("scope").contains("not acknowledged"));
+        org.json.JSONObject states = report.getJSONObject("nativeStateDelivery");
+        for (String field : new String[]{"hidNonNeutralSent", "hidNeutralSent", "xinputNonNeutralSent", "xinputNeutralSent", "sendFailures"})
+            assertEquals(field, 1, states.getLong(field));
+        assertTrue(states.getLong("lastNonNeutralSentAt") > 0);
+        assertFalse(report.toString().contains("private-controller-id"));
+        reconnect.put("requests", 900); states.put("hidNonNeutralSent", 800);
+        assertEquals(1, diagnostics.snapshot().getJSONObject("nativeReconnect").getLong("requests"));
+        assertEquals(1, diagnostics.snapshot().getJSONObject("nativeStateDelivery").getLong("hidNonNeutralSent"));
+    }
+
     @Test public void nativeFocusRecoveryReportsOnlyBoundedRequestReasonsAndNeverClaimsWindowsAcceptance() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
         diagnostics.recordNativeFocusRequest(null);
@@ -178,7 +206,7 @@ public final class Pd2ControllerDiagnosticsTest {
                 .put("menuWindow", window).put("relative", false).put("gameCursorVisible", true).put("forceRoot", false);
         for (int index = 0; index < 24; index++) {
             diagnostics.setMode(index % 2 == 0 ? "native" : "menu_cursor", true);
-            state.put("pointerX", index).put("pointerY", -index);
+            state.put("pointerX", index).put("pointerY", -index).put("rootCursorVisible", index % 2 == 0);
             diagnostics.recordPointerContext(state);
         }
         window.put("id", 999).put("class", "tampered-input");
@@ -189,9 +217,11 @@ public final class Pd2ControllerDiagnosticsTest {
         JSONObject last = report.getJSONArray("recentPointerContexts").getJSONObject(15);
         assertEquals(8, first.getInt("pointerX"));
         assertEquals("native", first.getString("mode"));
+        assertTrue(first.getBoolean("rootCursorVisible"));
         assertEquals(23, last.getInt("pointerX"));
         assertEquals(-23, last.getInt("pointerY"));
         assertEquals("menu_cursor", last.getString("mode"));
+        assertFalse(last.getBoolean("rootCursorVisible"));
         assertTrue(last.getLong("at") > 0);
         assertEquals(77, last.getJSONObject("focusWindow").getInt("id"));
         assertEquals("Diablo II", last.getJSONObject("menuWindow").getString("class"));
@@ -215,7 +245,7 @@ public final class Pd2ControllerDiagnosticsTest {
         JSONObject state = new JSONObject().put("screenWidth", 1280).put("screenHeight", -1)
                 .put("pointerX", 1000000).put("pointerY", -7).put("focusWindow", window)
                 .put("pointWindow", new JSONObject().put("class", "/private/window/path"))
-                .put("relative", "false").put("forceRoot", true)
+                .put("relative", "false").put("forceRoot", true).put("rootCursorVisible", "false")
                 .put("title", "character-name-private").put("keyCode", 123).put("axisValue", 0.5)
                 .put("at", 1).put("mode", "private-fake-mode").put("hugeUnknownField", privateText.toString());
         diagnostics.recordPointerContext(state);
@@ -229,7 +259,7 @@ public final class Pd2ControllerDiagnosticsTest {
         assertEquals(1280, clean.getInt("screenWidth"));
         assertEquals(-7, clean.getInt("pointerY"));
         assertTrue(clean.getBoolean("forceRoot"));
-        for (String name : new String[]{"screenHeight", "pointerX", "relative", "pointWindow", "title", "keyCode", "axisValue", "hugeUnknownField"})
+        for (String name : new String[]{"screenHeight", "pointerX", "relative", "rootCursorVisible", "pointWindow", "title", "keyCode", "axisValue", "hugeUnknownField"})
             assertFalse(name, clean.has(name));
         JSONObject cleanWindow = clean.getJSONObject("focusWindow");
         assertEquals(0xffffffffL, cleanWindow.getLong("id"));
@@ -359,7 +389,7 @@ public final class Pd2ControllerDiagnosticsTest {
         diagnostics.recordReply((byte)9, 7950, false);
         JSONObject report = diagnostics.snapshot();
         assertEquals("legacy_xinput_7949_and_hid_7950", report.getString("nativeBridge"));
-        assertEquals("java-hid-7950-v1", report.getString("bridgeRevision"));
+        assertEquals("java-hid-7950-v2", report.getString("bridgeRevision"));
         JSONObject counts = report.getJSONObject("counts");
         assertEquals(1, counts.getLong("hidDiscoveryRequests7950"));
         assertEquals(1, counts.getLong("hidDeviceReplies7950"));
