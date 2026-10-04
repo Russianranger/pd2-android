@@ -32,6 +32,8 @@ APK: `PD2-Android-0.1.13-preview.apk`, **174,187,752 bytes**, SHA-256 `a36214874
 
 Published implementation source (tree identical to the locally compiled source): [ed45c929e423c191f5001b17ae303d9edd6cfd8e](https://github.com/Russianranger/pd2-android/commit/ed45c929e423c191f5001b17ae303d9edd6cfd8e). This documentation checkpoint adds only final source/binary provenance; the offered local APK digest still identifies the tested implementation. Direct main publication was blocked by automatic approval review; changes are preserved on a separate review branch/PR, pending explicit merge authorization.
 
+[Independent PR CI 37244069821](https://github.com/Russianranger/pd2-android/actions/runs/37244069821) passed on `8c6438909d3ed3143aa23657d27af48e81caa3a6` at 23:36:44 UTC October 4. This final documentation-only checkpoint does not change the compiled source or local APK. CI built its own separate preview artifact (11319050385); do not assign it the recorded local APK digest. No tagged release or merge to main occurred; PR #1 remains draft pending explicit merge authorization.
+
 Physical startup and Native recovery remain pending independently of automated checks. The user owns any deliberate older-container deletion and must accept its C-drive confirmation.
 
 ## 0.1.12 historical continuation
