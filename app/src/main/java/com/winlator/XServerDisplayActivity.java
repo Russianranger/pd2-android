@@ -173,6 +173,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private AlertDialog pd2QuickDialog;
     private Button pd2Gear;
     private static WeakReference<XServerDisplayActivity> pd2ActiveSession = new WeakReference<>(null);
+    // Worker-only lock: cleanup must finish closing shared audio/display sockets before replacement startup.
+    private static final Object PD2_ENVIRONMENT_LOCK = new Object();
 
     public static boolean hasPd2Session() {
         XServerDisplayActivity activity = pd2ActiveSession.get();
@@ -186,6 +188,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     public static boolean resumePd2Session(Context context) {
         if (!hasPd2Session()) return false;
+        if (pd2ActiveSession.get().pd2StopRequested) {
+            Toast.makeText(context, "Client cleanup is still finishing.", Toast.LENGTH_SHORT).show();
+            return true;
+        }
         Intent intent = new Intent(context, XServerDisplayActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         if (!(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -449,16 +455,22 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     @Override
     protected synchronized void onDestroy() {
+        boolean ownsSession = pd2ActiveSession.get() == this;
         if (pd2Session) {
             pd2StopRequested = true;
             pd2NativeReconnectPending = false;
             if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
-            if (pd2ActiveSession.get() == this) pd2ActiveSession.clear();
+            if (ownsSession) pd2ActiveSession.clear();
         }
         winHandler.stop();
-        if (environment != null) environment.stopEnvironmentComponents();
-        ForegroundService.stopSession(this);
+        XEnvironment stoppedEnvironment = environment;
+        environment = null;
+        if (stoppedEnvironment != null) {
+            if (pd2Session) Executors.newSingleThreadExecutor().execute(() -> stopPd2Environment(stoppedEnvironment));
+            else stoppedEnvironment.stopEnvironmentComponents();
+        }
+        if (!pd2Session || ownsSession) ForegroundService.stopSession(this);
         super.onDestroy();
     }
 
@@ -559,15 +571,23 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
             winHandler.stop();
-            if (environment != null) environment.stopEnvironmentComponents();
+            XEnvironment stoppedEnvironment = environment;
             environment = null;
-            pd2ActiveSession.clear();
-            ForegroundService.stopSession(this);
-            Intent launcher = new Intent().setClassName(getPackageName(), "com.winlator.pd2.Pd2Activity")
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            if (pd2RuntimeExitStatus != null) launcher.putExtra("pd2_runtime_exit_status", pd2RuntimeExitStatus.intValue());
-            startActivity(launcher);
-            finish();
+            Toast.makeText(this, "Stopping client and its Wine services…", Toast.LENGTH_SHORT).show();
+            Executors.newSingleThreadExecutor().execute(() -> {
+                try {
+                    if (stoppedEnvironment != null) stopPd2Environment(stoppedEnvironment);
+                } finally { runOnUiThread(() -> {
+                    if (isDestroyed() || pd2ActiveSession.get() != this) return;
+                    pd2ActiveSession.clear();
+                    ForegroundService.stopSession(this);
+                    Intent launcher = new Intent().setClassName(getPackageName(), "com.winlator.pd2.Pd2Activity")
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    if (pd2RuntimeExitStatus != null) launcher.putExtra("pd2_runtime_exit_status", pd2RuntimeExitStatus.intValue());
+                    startActivity(launcher);
+                    finish();
+                }); }
+            });
             return;
         }
         winHandler.stop();
@@ -582,6 +602,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
         else AppUtils.restartApplication(this);
         ForegroundService.stopSession(this);
+    }
+
+    private static void stopPd2Environment(XEnvironment environment) {
+        synchronized (PD2_ENVIRONMENT_LOCK) {
+            try {
+                GuestProgramLauncherComponent guest = environment.getComponent(GuestProgramLauncherComponent.class);
+                // Retain display/audio sockets until the exact-prefix Wine shutdown has finished.
+                if (guest != null) guest.stop();
+            } finally { environment.stopEnvironmentComponents(); }
+        }
     }
 
     private void setupWineSystemFiles() {
@@ -634,7 +664,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (containerDataChanged) container.saveData();
     }
 
-    private synchronized void setupXEnvironment() {
+    private void setupXEnvironment() {
         if (pd2StopRequested || isFinishing()) return;
         String rootPath = rootFS.getRootDir().getPath();
         envVars.put("MESA_DEBUG", "silent");
@@ -646,7 +676,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         String wineDebugChannels = preferences.getString("wine_debug_channels", SettingsFragment.DEFAULT_WINE_DEBUG_CHANNELS);
         envVars.put("WINEDEBUG", enableWineDebug && !wineDebugChannels.isEmpty() ? "+"+wineDebugChannels.replace(",", ",+") : "-all");
 
-        FileUtils.clear(rootFS.getTmpDir());
+        if (!pd2Session) FileUtils.clear(rootFS.getTmpDir());
 
         GuestProgramLauncherComponent guestProgramLauncherComponent = new GuestProgramLauncherComponent();
 
@@ -664,17 +694,17 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             guestProgramLauncherComponent.setBox64Preset(shortcut != null ? shortcut.getExtra("box64Preset", container.getBox64Preset()) : container.getBox64Preset());
         }
 
-        environment = new XEnvironment(this, rootFS);
-        environment.addComponent(new SysVSharedMemoryComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.SYSVSHM_SERVER_PATH)));
-        environment.addComponent(new XServerComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.XSERVER_PATH)));
-        environment.addComponent(new NetworkInfoUpdateComponent());
+        XEnvironment pendingEnvironment = new XEnvironment(this, rootFS);
+        pendingEnvironment.addComponent(new SysVSharedMemoryComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.SYSVSHM_SERVER_PATH)));
+        pendingEnvironment.addComponent(new XServerComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.XSERVER_PATH)));
+        pendingEnvironment.addComponent(new NetworkInfoUpdateComponent());
 
         if (audioDriver.equals(AudioDrivers.ALSA)) {
             envVars.put("ANDROID_ALSA_SERVER", rootPath+UnixSocketConfig.ALSA_SERVER_PATH);
             envVars.put("ANDROID_ASERVER_USE_SHM", ALSAClient.USE_SHARED_MEMORY ? "true" : "false");
 
             ALSAClient.Options options = ALSAClient.Options.fromKeyValueSet(audioDriverConfig);
-            environment.addComponent(new ALSAServerComponent(UnixSocketConfig.create(rootPath, UnixSocketConfig.ALSA_SERVER_PATH), options));
+            pendingEnvironment.addComponent(new ALSAServerComponent(UnixSocketConfig.create(rootPath, UnixSocketConfig.ALSA_SERVER_PATH), options));
         }
         else if (audioDriver.equals(AudioDrivers.PULSEAUDIO)) {
             PulseAudioComponent pulseAudioComponent = new PulseAudioComponent(UnixSocketConfig.create(rootPath, UnixSocketConfig.PULSE_SERVER_PATH));
@@ -686,19 +716,20 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 pulseAudioComponent.setPerformanceMode(audioDriverConfig.getInt("performanceMode", AudioDriverConfigDialog.DEFAULT_PERFORMANCE_MODE));
             }
             else envVars.put("PULSE_LATENCY_MSEC", AudioDriverConfigDialog.DEFAULT_LATENCY_MILLIS);
-            environment.addComponent(pulseAudioComponent);
+            pendingEnvironment.addComponent(pulseAudioComponent);
         }
 
         if (graphicsDriver[0].equals(GraphicsDrivers.VORTEK)) {
             VortekRendererComponent.Options options = VortekRendererComponent.Options.fromKeyValueSet(this, graphicsDriverConfig[0]);
             VortekRendererComponent vortekRendererComponent = new VortekRendererComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options);
-            environment.addComponent(vortekRendererComponent);
+            pendingEnvironment.addComponent(vortekRendererComponent);
         }
         if (graphicsDriver[1].equals(GraphicsDrivers.VIRGL)) {
-            environment.addComponent(new VirGLRendererComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.VIRGL_SERVER_PATH)));
+            pendingEnvironment.addComponent(new VirGLRendererComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.VIRGL_SERVER_PATH)));
         }
 
         guestProgramLauncherComponent.setEnvVars(envVars);
+        if (pd2Session) guestProgramLauncherComponent.setPd2LaunchId(getIntent().getStringExtra("pd2_launch_id"));
         guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
             if (pd2Session && !pd2StopRequested) {
                 pd2RuntimeExitStatus = status;
@@ -709,19 +740,43 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
             exit();
         }));
-        environment.addComponent(guestProgramLauncherComponent);
+        pendingEnvironment.addComponent(guestProgramLauncherComponent);
 
         if (isGenerateWineprefix()) {
             wineInfo = getIntent().getParcelableExtra("wine_info");
-            if (wineInfo != null) WineInstaller.generateWineprefix(wineInfo, environment);
+            if (wineInfo != null) WineInstaller.generateWineprefix(wineInfo, pendingEnvironment);
         }
         if (overrideEnvVars != null) {
             envVars.putAll(overrideEnvVars);
             overrideEnvVars = null;
         }
-        environment.startEnvironmentComponents();
-
-        winHandler.start();
+        synchronized (PD2_ENVIRONMENT_LOCK) {
+          if (pd2StopRequested || isFinishing() || isDestroyed()) return;
+          if (pd2Session) {
+            if (!guestProgramLauncherComponent.preparePd2Session()) {
+                Pd2Activity.appendLauncherLog(this, "Client launch refused: previous Wine services or controller ports have not closed. Export support logs.");
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "Client cleanup did not finish. Export support logs before retrying.", Toast.LENGTH_LONG).show();
+                    exit();
+                });
+                return;
+            }
+            FileUtils.clear(rootFS.getTmpDir());
+          }
+          boolean cancelled;
+          synchronized (this) {
+              cancelled = pd2StopRequested || isFinishing() || isDestroyed();
+              if (!cancelled) environment = pendingEnvironment;
+          }
+          if (cancelled) { guestProgramLauncherComponent.stop(); return; }
+          try { pendingEnvironment.startEnvironmentComponents(); }
+          catch (RuntimeException failure) {
+              Pd2Activity.appendLauncherLog(this, "Runtime startup failed: " + failure.getClass().getSimpleName());
+              runOnUiThread(this::exit);
+              return;
+          }
+          synchronized (this) { if (!pd2StopRequested && !isFinishing() && !isDestroyed()) winHandler.start(); }
+        }
         envVars.clear();
         graphicsDriver = null;
         dxwrapperConfig = null;

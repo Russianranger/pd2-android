@@ -19,36 +19,84 @@ import com.winlator.widget.LogView;
 import com.winlator.xconnector.UnixSocketConfig;
 import com.winlator.xenvironment.EnvironmentComponent;
 import com.winlator.xenvironment.RootFS;
+import com.winlator.pd2.Pd2WineSession;
+import com.winlator.pd2.Pd2LaunchDiagnostics;
+import com.winlator.pd2.Pd2Activity;
 
 import java.io.File;
 import java.util.List;
 
 public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private String guestExecutable;
-    private static int pid = -1;
+    private int pid = -1;
+    private long processGeneration;
+    private String pd2LaunchId;
+    private Pd2WineSession pd2WineSession;
+    private EnvVars launchEnvironment;
+    private boolean pd2CleanupRecorded;
     private EnvVars envVars;
     private String box64Preset = Box64Preset.CONSERVATIVE;
     private Callback<Integer> terminationCallback;
-    private static final Object lock = new Object();
+    private final Object lock = new Object();
+
+    public void setPd2LaunchId(String id) { pd2LaunchId = id; }
+
+    /** Worker-thread barrier, before root/tmp is cleared or runtime sockets start. */
+    public boolean preparePd2Session() {
+        synchronized (lock) {
+            try {
+                extractBox64File();
+                copyDefaultBox64RCFile();
+                launchEnvironment = createLaunchEnvironment();
+                launchEnvironment.put("WINEPREFIX", new File(launchEnvironment.get("WINEPREFIX")).getCanonicalPath());
+                RootFS rootFS = environment.getRootFS();
+                pd2WineSession = new Pd2WineSession(rootFS.getRootDir(), rootFS.getWinePath(), launchEnvironment);
+                Pd2WineSession.Result result = pd2WineSession.beforeLaunch();
+                recordCleanup(result);
+                return result.passed;
+            } catch (java.io.IOException error) {
+                Pd2Activity.appendLauncherLog(environment.getContext(), "Cannot verify PD2 Wine shutdown: " + error.getClass().getSimpleName());
+                return false;
+            }
+        }
+    }
+
+    private void recordCleanup(Pd2WineSession.Result result) {
+        Context context = environment.getContext();
+        try { Pd2LaunchDiagnostics.wineCleanup(context, pd2LaunchId, result.json()); }
+        catch (org.json.JSONException ignored) { }
+        Pd2Activity.appendLauncherLog(context, "PD2 Wine cleanup " + result.phase + ": passed=" + result.passed
+                + "; kill=" + result.killStatus + "; wait=" + result.waitStatus
+                + "; portsFree=" + result.portsFree + "; elapsedMs=" + result.elapsedMillis);
+    }
 
     @Override
     public void start() {
         synchronized (lock) {
-            stop();
+            killRootProcess();
             extractBox64File();
             copyDefaultBox64RCFile();
-            pid = execGuestProgram();
+            final long generation = ++processGeneration;
+            pid = execGuestProgram(generation);
+            if (pid == -1 && terminationCallback != null) terminationCallback.call(-1);
         }
     }
 
     @Override
     public void stop() {
         synchronized (lock) {
-            if (pid != -1) {
-                Process.killProcess(pid);
-                pid = -1;
+            processGeneration++;
+            if (pd2WineSession != null) {
+                Pd2WineSession.Result result = pd2WineSession.stop();
+                if (!pd2CleanupRecorded) { recordCleanup(result); pd2CleanupRecorded = true; }
+                if (result.passed) pid = -1;
             }
+            killRootProcess();
         }
+    }
+
+    private void killRootProcess() {
+        if (pid != -1) { Process.killProcess(pid); pid = -1; }
     }
 
     public Callback<Integer> getTerminationCallback() {
@@ -83,7 +131,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         this.box64Preset = box64Preset;
     }
 
-    private int execGuestProgram() {
+    private EnvVars createLaunchEnvironment() {
         RootFS rootFS = environment.getRootFS();
         File rootDir = rootFS.getRootDir();
 
@@ -105,10 +153,18 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         File shmDir = new File(rootDir, "/tmp/shm");
         if (!shmDir.isDirectory()) shmDir.mkdirs();
 
+        return envVars;
+    }
+
+    private int execGuestProgram(long generation) {
+        RootFS rootFS = environment.getRootFS();
+        File rootDir = rootFS.getRootDir();
+        EnvVars effective = launchEnvironment != null ? launchEnvironment : createLaunchEnvironment();
         String command = rootDir+"/usr/local/bin/box64 "+guestExecutable;
 
-        return ProcessHelper.exec(command, envVars, rootDir, (status) -> {
+        return ProcessHelper.exec(command, effective, rootDir, (status) -> {
             synchronized (lock) {
+                if (generation != processGeneration) return;
                 pid = -1;
             }
             if (terminationCallback != null) terminationCallback.call(status);

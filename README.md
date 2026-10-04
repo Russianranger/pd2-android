@@ -1,20 +1,8 @@
 # PD2 Android
 
-A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruction installation with Project Diablo 2. The first preview targets the AYN Thor's ARM64/Adreno hardware and imports an existing working installation into the app's private storage.
+Current preview: **0.1.12**. The 0.1.11 device test accepts LT/thumb and shoulder input. Native still fails after Save/Quit and a full client restart within the same Android process. This pass fixes the confirmed restart teardown defect: Wine services retained controller port 7950 after the old root-only Stop. The app now waits for exact-prefix cleanup and port release before replacement startup. Same-Wine Save/Quit recovery remains unresolved.
 
-The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 9.2 (Custom) from official Winlator 10.1, retaining Box64 0.4.4 and the current Android display/input and graphics components. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
-
-**Status: 0.1.11 controller and cursor preview.** Initial Native gameplay and Menu cursor navigation are accepted. Native still fails on Save/Quit by the latest user report; recovery after character re-entry remains unresolved. The reported LT + L3 combination and shoulder tab switching also require device qualification.
-
-This preview corrects independent trigger handling and held Native L3/R3 input, prevents disabled or zero-distance captured mouse forwarding, and expands **Hide white cursor** to the app and Wine/X11 pointer layers. Explicit Native selection now briefly disconnects both HID and legacy XInput together as a recovery experiment. The [research evidence](docs/evidence/2026-10-04-controller-research.md) explains the findings and limits. Save/Quit recovery is not yet proven.
-
-## Next 0.1.11 check
-
-Install 0.1.11 over the existing app. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.** Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and controller notifications enabled.
-
-Enter the same offline character and check initial Native gameplay, **hold LT while pressing/releasing L3**, and test each shoulder separately in the in-game tabs. Then Save/Quit and record the Save/Quit screen, title/character menus, and gameplay re-entry separately. Use **L3 + R3 → Menu cursor** to re-enter if needed. After loading, release the controls, explicitly select **Native controller**, wait about one second, and press/release a face button before checking movement and the same combinations. Test **Hide white cursor: On** in the main menu and in-game, then export support logs. [Testing](docs/TESTING.md) gives the focused sequence and [control tables](docs/TESTING.md#menu-cursor-bindings).
-
-If the whole Android app closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Java crash capture does not cover every possible process exit.
+Install over the existing app; keep runtime, import and saves. Check initial Native, Save/Quit/re-entry, then Save/exit → Stop client → Play while keeping Android open. Export before Stop if the first session fails, then again after the second check. [Focused testing](docs/TESTING.md), [release notes](docs/RELEASE-0.1.12.md) and [evidence](docs/evidence/2026-10-04-wine-session-cleanup.md) contain the exact sequence. No Prepare runtime or re-import is requested.
 
 ## First preview
 
@@ -43,7 +31,7 @@ Private game files and saves survive APK updates using the same signing identity
 
 ## Controls and display
 
-**Native controller** forwards the physical controller through the Wine 9.2-compatible bridge. This baseline exposes one active gamepad; its XInput triggers are digital and its Wine DLL does not support rumble. PD2 remains responsible for movement, aiming, and its controller bindings. Each explicit Native selection requests a synchronized HID and legacy XInput disconnect/reconnect with an absence interval of at least 600 ms. Press/release a face button after the reconnect before testing sticks. Immediate Native L3/R3 edges preserve held combinations; the first thumb press can reach the game before pressing the second thumb opens the reserved **L3 + R3** quick menu. Recovery after re-entry, menu support, aiming, triggers, and shoulder tab navigation still need physical checks.
+**Native controller** forwards the physical controller through the Wine 9.2-compatible bridge. This baseline exposes one active gamepad; its XInput triggers are digital and its Wine DLL does not support rumble. PD2 remains responsible for movement, aiming, and its controller bindings. Each explicit Native selection requests a synchronized HID and legacy XInput disconnect/reconnect with an absence interval of at least 600 ms. Press/release a face button after the reconnect before testing sticks. Immediate Native L3/R3 edges preserve held combinations; the first thumb press can reach the game before pressing the second thumb opens the reserved **L3 + R3** quick menu. Menu cursor, LT/thumb combinations and shoulder behavior are accepted. Native recovery after Save/Quit and same-app restart is the current physical gate; detailed aiming remains unqualified.
 
 Controller notifications are enabled by default. To restore the original Wine backend, stop the client, select **Launch settings → Controller → Controller notifications disabled**, force-stop the Android app, reopen it, and press Play. Changing this option takes effect on the next fresh game launch.
 
@@ -68,6 +56,6 @@ GameNative once your game files are imported.
 The targeted Wine 9 HID backend is built from the included source and pinned
 Wine 9 headers; [Build instructions](docs/BUILD.md) describe its artifact/ABI checks.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.11 release notes](docs/RELEASE-0.1.11.md) describe the controller/cursor changes, and the [research report](docs/evidence/2026-10-04-controller-research.md) records primary sources and diagnosis limits. Earlier release notes retain the preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.12 release notes](docs/RELEASE-0.1.12.md) describe the controller/cursor changes, and the [research report](docs/evidence/2026-10-04-controller-research.md) records primary sources and diagnosis limits. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

@@ -1,0 +1,302 @@
+package com.winlator.pd2;
+
+import com.winlator.core.EnvVars;
+
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.Assert.*;
+
+/** Exercise real cleanup ownership, prefix capture, process bounds and exclusive UDP probes. */
+public final class Pd2WineSessionTest {
+    @Rule public TemporaryFolder directory = new TemporaryFolder();
+
+    @Test public void absentServerIsAcceptedAndUsesTheCapturedRuntimeEnvironment() throws Exception {
+        Fixture f = fixture();
+        RecordingRunner runner = new RecordingRunner(1, 0);
+        Pd2WineSession session = f.session(runner);
+        try {
+            Pd2WineSession.Result result = session.beforeLaunch();
+            assertTrue(result.error, result.passed);
+            assertEquals("beforeLaunch", result.phase);
+            assertEquals(1, result.killStatus);
+            assertEquals(0, result.waitStatus);
+            assertTrue(result.portsFree);
+            assertEquals(Arrays.asList("-k9", "-w"), runner.options);
+            assertEquals(f.root.getCanonicalFile(), runner.directories.get(0));
+            assertEquals(Arrays.asList(new File(f.root, "usr/local/bin/box64").getCanonicalPath(),
+                    new File(f.root, "opt/wine/bin/wineserver").getCanonicalPath(), "-k9"), runner.commands.get(0));
+            Map<String, String> variables = runner.environments.get(0);
+            assertEquals(f.prefix.getCanonicalPath(), variables.get("WINEPREFIX"));
+            assertEquals(new File(f.root, "usr/lib").getPath(), variables.get("LD_LIBRARY_PATH"));
+            assertEquals(new File(f.root, "lib/x86_64-linux-gnu").getPath(), variables.get("BOX64_LD_LIBRARY_PATH"));
+            assertEquals(new File(f.root, "tmp").getPath(), variables.get("TMPDIR"));
+            assertEquals("1", variables.get("WINEESYNC"));
+            assertEquals("-all", variables.get("WINEDEBUG"));
+            assertArrayEquals(new byte[]{9, 8, 7}, Files.readAllBytes(f.save.toPath()));
+        } finally { session.stop(); }
+    }
+
+    @Test public void killFailureAndTimeoutCannotAcquireTheSessionOrRunTheWaitCommand() throws Exception {
+        for (int killStatus : new int[]{2, -2}) {
+            Fixture f = fixture();
+            RecordingRunner runner = new RecordingRunner(killStatus, 0);
+            Pd2WineSession session = f.session(runner);
+            try {
+                Pd2WineSession.Result result = session.beforeLaunch();
+                assertFalse(result.passed);
+                assertEquals(killStatus, result.killStatus);
+                assertEquals(-1, result.waitStatus);
+                assertEquals(Arrays.asList("-k9"), runner.options);
+                assertEquals(0, runner.portProbes);
+                assertEquals("stopSkipped", session.stop().phase);
+                assertEquals(1, runner.commands.size());
+                assertFreshSessionCanAcquire(f);
+            } finally { session.stop(); }
+        }
+    }
+
+    @Test public void waitFailureAndTimeoutCannotAcquireTheSessionOrProbeControllerPorts() throws Exception {
+        for (int waitStatus : new int[]{1, -2}) {
+            Fixture f = fixture();
+            RecordingRunner runner = new RecordingRunner(0, waitStatus);
+            Pd2WineSession session = f.session(runner);
+            try {
+                Pd2WineSession.Result result = session.beforeLaunch();
+                assertFalse(result.passed);
+                assertEquals(waitStatus, result.waitStatus);
+                assertEquals(Arrays.asList("-k9", "-w"), runner.options);
+                assertEquals(0, runner.portProbes);
+                assertEquals("stopSkipped", session.stop().phase);
+                assertFreshSessionCanAcquire(f);
+            } finally { session.stop(); }
+        }
+    }
+
+    @Test public void unavailableCleanupExecutableCannotAcquireTheSession() throws Exception {
+        Fixture f = fixture();
+        RecordingRunner runner = new RecordingRunner(0, 0);
+        runner.failure = new IOException("missing executable");
+        Pd2WineSession session = f.session(runner);
+        try {
+            Pd2WineSession.Result result = session.beforeLaunch();
+            assertFalse(result.passed);
+            assertTrue(result.error.contains("IOException"));
+            assertEquals(-1, result.killStatus);
+            assertEquals(0, runner.portProbes);
+            assertEquals("stopSkipped", session.stop().phase);
+            assertFreshSessionCanAcquire(f);
+        } finally { session.stop(); }
+    }
+
+    @Test public void symlinkRetargetDoesNotChangeThePrefixUsedByEitherCleanupBoundary() throws Exception {
+        Fixture f = fixture();
+        File firstHome = new File(f.root, "home/xuser-1");
+        File secondHome = new File(f.root, "home/xuser-2");
+        assertTrue(new File(firstHome, ".wine").mkdirs());
+        assertTrue(new File(secondHome, ".wine").mkdirs());
+        File homeLink = new File(f.root, "home/xuser");
+        Files.createSymbolicLink(homeLink.toPath(), firstHome.toPath());
+        f.variables.put("WINEPREFIX", new File(homeLink, ".wine").getPath());
+        RecordingRunner runner = new RecordingRunner(0, 0);
+        Pd2WineSession session = f.session(runner);
+        // Container activation changes this symlink after the session captures its target.
+        Files.delete(homeLink.toPath());
+        Files.createSymbolicLink(homeLink.toPath(), secondHome.toPath());
+        try {
+            assertTrue(session.beforeLaunch().passed);
+            assertTrue(session.stop().passed);
+            assertEquals(4, runner.environments.size());
+            for (Map<String, String> variables : runner.environments)
+                assertEquals(new File(firstHome, ".wine").getCanonicalPath(), variables.get("WINEPREFIX"));
+        } finally { session.stop(); }
+    }
+
+    @Test public void oldStopIsIdempotentAndCannotStopTheReplacementOwner() throws Exception {
+        Fixture f = fixture();
+        RecordingRunner firstRunner = new RecordingRunner(0, 0);
+        RecordingRunner nextRunner = new RecordingRunner(1, 0);
+        Pd2WineSession first = f.session(firstRunner);
+        Pd2WineSession next = f.session(nextRunner);
+        try {
+            assertTrue(first.beforeLaunch().passed);
+            assertFalse("An acquired session must not rerun launch cleanup", first.beforeLaunch().passed);
+            assertEquals(2, firstRunner.commands.size());
+            assertFalse(next.beforeLaunch().passed);
+            assertTrue("An owner rejection must not execute cleanup", nextRunner.commands.isEmpty());
+            Pd2WineSession.Result firstStop = first.stop();
+            assertTrue(firstStop.passed);
+            assertEquals(4, firstRunner.commands.size());
+            assertTrue(next.beforeLaunch().passed);
+            assertSame(firstStop, first.stop());
+            assertFalse("A stopped session must never reacquire the replacement prefix", first.beforeLaunch().passed);
+            assertEquals(4, firstRunner.commands.size());
+            assertEquals(2, nextRunner.commands.size());
+            assertTrue(next.stop().passed);
+            assertEquals(4, nextRunner.commands.size());
+        } finally { first.stop(); next.stop(); }
+    }
+
+    @Test public void anUnpreparedOldSessionCannotStopAnActiveReplacement() throws Exception {
+        Fixture f = fixture();
+        RecordingRunner rejectedRunner = new RecordingRunner(-2, 0);
+        RecordingRunner nextRunner = new RecordingRunner(0, 0);
+        Pd2WineSession rejected = f.session(rejectedRunner);
+        Pd2WineSession next = f.session(nextRunner);
+        try {
+            assertFalse(rejected.beforeLaunch().passed);
+            assertTrue(next.beforeLaunch().passed);
+            assertEquals("stopSkipped", rejected.stop().phase);
+            assertEquals(1, rejectedRunner.commands.size());
+            assertEquals(2, nextRunner.commands.size());
+            assertTrue(next.stop().passed);
+        } finally { rejected.stop(); next.stop(); }
+    }
+
+    @Test public void realPortProbeRejectsEitherOccupiedEndpointAndReleasesItsOwnSocket() throws Exception {
+        Pd2WineSession.Runner real = processRunner();
+        InetAddress loopback = InetAddress.getByName("127.0.0.1");
+        for (int port : new int[]{7949, 7950}) {
+            try (DatagramSocket occupied = new DatagramSocket(null)) {
+                occupied.bind(new InetSocketAddress(loopback, port));
+                assertFalse("Occupied native endpoint " + port, real.portsFree());
+            }
+            // A failed HID bind must close the probe's earlier successful XInput bind.
+            assertTrue("Probe must release its temporary native sockets", real.portsFree());
+        }
+    }
+
+    @Test(timeout = 10000) public void busyNativePortPreventsAcquisitionUntilTheOldReceiverCloses() throws Exception {
+        Fixture f = fixture();
+        RecordingRunner runner = new RecordingRunner(0, 0);
+        runner.portRunner = processRunner();
+        Pd2WineSession session = f.session(runner);
+        DatagramSocket occupied = new DatagramSocket(null);
+        occupied.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 7950));
+        try {
+            Pd2WineSession.Result blocked = session.beforeLaunch();
+            assertFalse(blocked.passed);
+            assertFalse(blocked.portsFree);
+            assertTrue("Cleanup must wait briefly for an exiting Wine receiver", runner.portProbes > 1);
+            assertTrue(blocked.elapsedMillis >= 1500);
+            assertEquals("stopSkipped", session.stop().phase);
+            occupied.close();
+            assertTrue(session.beforeLaunch().passed);
+            assertTrue(session.stop().passed);
+        } finally { occupied.close(); session.stop(); }
+    }
+
+    @Test(timeout = 12000) public void realRunnerBoundsAndTerminatesAnUnresponsiveCommand() throws Exception {
+        File pidFile = directory.newFile("cleanup-pid.txt");
+        Map<String, String> variables = new LinkedHashMap<>();
+        variables.put("PD2_TIMEOUT_PID_FILE", pidFile.getPath());
+        List<String> command = Arrays.asList("/bin/sh", "-c", "echo $$ > \"$PD2_TIMEOUT_PID_FILE\"; exec sleep 30");
+        long started = System.nanoTime();
+        int status = processRunner().run(command, variables, directory.getRoot());
+        long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        assertEquals(-2, status);
+        assertTrue("Command must time out after its configured wait", elapsed >= 3000);
+        assertTrue("An unresponsive helper must not block relaunch indefinitely", elapsed < 8000);
+        long pid = Long.parseLong(new String(Files.readAllBytes(pidFile.toPath()), StandardCharsets.UTF_8).trim());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (processAlive(pid) && System.nanoTime() < deadline)
+            Thread.sleep(10);
+        assertFalse("Timeout must terminate the cleanup process", processAlive(pid));
+    }
+
+    private boolean processAlive(long pid) throws IOException {
+        File stat = new File("/proc/" + pid + "/stat");
+        if (!stat.exists()) return false;
+        try {
+            String value = new String(Files.readAllBytes(stat.toPath()), StandardCharsets.UTF_8);
+            char state = value.charAt(value.lastIndexOf(')') + 2);
+            return state != 'Z' && state != 'X';
+        } catch (java.nio.file.NoSuchFileException exited) { return false; }
+    }
+
+    private void assertFreshSessionCanAcquire(Fixture f) throws Exception {
+        Pd2WineSession fresh = f.session(new RecordingRunner(1, 0));
+        try { assertTrue("Failed preparation must not claim ownership", fresh.beforeLaunch().passed); }
+        finally { fresh.stop(); }
+    }
+
+    private Fixture fixture() throws Exception {
+        File root = directory.newFolder();
+        File prefix = new File(root, "prefix/.wine");
+        assertTrue(prefix.mkdirs());
+        File save = new File(prefix, "character.d2s");
+        Files.write(save.toPath(), new byte[]{9, 8, 7});
+        EnvVars variables = new EnvVars().put("WINEPREFIX", prefix.getPath())
+                .put("LD_LIBRARY_PATH", new File(root, "usr/lib").getPath())
+                .put("BOX64_LD_LIBRARY_PATH", new File(root, "lib/x86_64-linux-gnu").getPath())
+                .put("TMPDIR", new File(root, "tmp").getPath())
+                .put("WINEDEBUG", "+xinput").put("WINEESYNC", "1");
+        return new Fixture(root, prefix, save, variables);
+    }
+
+    private static Pd2WineSession.Runner processRunner() throws Exception {
+        Class<?> type = Class.forName("com.winlator.pd2.Pd2WineSession$ProcessRunner");
+        Constructor<?> constructor = type.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return (Pd2WineSession.Runner) constructor.newInstance();
+    }
+
+    private static final class Fixture {
+        final File root, prefix, save;
+        final EnvVars variables;
+
+        Fixture(File root, File prefix, File save, EnvVars variables) {
+            this.root = root; this.prefix = prefix; this.save = save; this.variables = variables;
+        }
+
+        Pd2WineSession session(Pd2WineSession.Runner runner) throws IOException {
+            return new Pd2WineSession(root, "/opt/wine", variables, runner);
+        }
+    }
+
+    private static final class RecordingRunner implements Pd2WineSession.Runner {
+        final int killStatus, waitStatus;
+        final List<List<String>> commands = new ArrayList<>();
+        final List<String> options = new ArrayList<>();
+        final List<Map<String, String>> environments = new ArrayList<>();
+        final List<File> directories = new ArrayList<>();
+        int portProbes;
+        IOException failure;
+        Pd2WineSession.Runner portRunner;
+
+        RecordingRunner(int killStatus, int waitStatus) {
+            this.killStatus = killStatus; this.waitStatus = waitStatus;
+        }
+
+        @Override public int run(List<String> command, Map<String, String> environment, File directory) throws IOException {
+            commands.add(new ArrayList<>(command));
+            environments.add(new LinkedHashMap<>(environment));
+            directories.add(directory);
+            String option = command.get(2);
+            options.add(option);
+            if (failure != null) throw failure;
+            return option.equals("-k9") ? killStatus : waitStatus;
+        }
+
+        @Override public boolean portsFree() throws IOException {
+            portProbes++;
+            return portRunner == null || portRunner.portsFree();
+        }
+    }
+}

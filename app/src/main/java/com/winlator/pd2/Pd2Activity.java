@@ -304,7 +304,7 @@ public final class Pd2Activity extends AppCompatActivity {
     private void appendLauncherLog(String text) {
         appendLauncherLog(this, text);
     }
-    static void appendLauncherLog(android.content.Context context, String text) {
+    public static void appendLauncherLog(android.content.Context context, String text) {
         try {
             File file = new File(context.getFilesDir(), "pd2/logs/launcher.log"); file.getParentFile().mkdirs();
             if (file.length() > 1024 * 1024) file.delete();

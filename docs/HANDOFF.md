@@ -8,9 +8,17 @@ The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current implementation is **0.1.11, a controller and cursor preview**, version code 12. Initial Native gameplay and Menu cursor navigation are accepted. The latest 0.1.10 report still rejects Native on Save/Quit and adds unreliable LT + L3 and shoulder-tab navigation. Earlier 0.1.9 recovery also failed after gameplay re-entry. The matching 0.1.10 log shows two actual Wine HID detach/attach cycles and continuing game-side controller calls; it does not establish accepted controller values or game actions. The full recovery cause remains unconfirmed.
+The current implementation is **0.1.12, a same-app Wine cleanup preview**, version code 13. The 0.1.11 physical follow-up accepts LT/thumb combinations and shoulder behavior, rejects Native after Save/Quit, and demonstrates that Stop/Play within the same Android process also fails. The second launch cannot bind HID port 7950. This pass repairs full-session cleanup; in-place Save/Quit remains unresolved. See [current evidence](evidence/2026-10-04-wine-session-cleanup.md) and [0.1.12 notes](RELEASE-0.1.12.md). Preserve all accepted controller results; do not repeat the LT/shoulder qualification.
+
+The preceding 0.1.11 preview was version code 12. Initial Native gameplay and Menu cursor navigation are accepted. The latest 0.1.10 report still rejects Native on Save/Quit and adds unreliable LT + L3 and shoulder-tab navigation. Earlier 0.1.9 recovery also failed after gameplay re-entry. The matching 0.1.10 log shows two actual Wine HID detach/attach cycles and continuing game-side controller calls; it does not establish accepted controller values or game actions. The full recovery cause remains unconfirmed.
 
 Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep GameNative-arguments Glide, Stability, and controller notifications enabled. See [Testing](TESTING.md), [0.1.11 release notes](RELEASE-0.1.11.md), and the [controller research evidence](evidence/2026-10-04-controller-research.md).
+
+## 0.1.12 continuation
+
+The next physical gate compares Save/Quit/re-entry and full Stop/Play in the same Android app process. Install over the app, reuse runtime/import, save/exit before Stop, and export before stopping if Native first fails. New exact-prefix Wine cleanup, server wait, controller-port release, worker serialization and callback guards are implemented without changing controller binaries. Startup refuses an incomplete cleanup. Current [Testing](TESTING.md) replaces the earlier 0.1.11 binding-retreat request; its LT/shoulder fixes are accepted.
+
+Local validation passed: 132 unit tests in 17 suites, no failures/errors/skips (122 existing Android/Robolectric tests plus 10 cleanup/ownership/socket/subprocess tests); all eight import/input/pointer/crash/log host scripts; pinned runtime/controller checks; ARM64 assembly and packaging. The APK is `com.pd2.thor`, 0.1.12/code 13, min SDK 26/target SDK 28 and retains the preview signer. All 72 assets match 0.1.11 byte-for-byte. Native sources are unchanged; 26 JNI libraries are identical, eight differ only in build IDs and VirGL has build-path/address relocation differences. APK size 174,036,401 bytes, SHA-256 `6b32b9b8bd978dc58192332419e2da98b9944397ad698103f8ae07215d20dd58`. These host checks do not qualify ARM64 Box64/Wine integration. Same-app restart recovery and in-place Native remain physically unqualified.
 
 ## 0.1.11 scope
 
@@ -275,7 +283,7 @@ Published 0.1.7 CI run 37169294205 passed. The user rejected its physical menu t
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Native failure after Save/Exit/character re-entry remain unconfirmed.
 
-The next physical step checks 0.1.11 combinations, cursor layers, and synchronized explicit Native reconnect on the accepted Wine 9.2/HID setup. Runtime preparation and import are not repeated:
+The current physical step is the 0.1.12 Save/Quit-versus-Stop/Play comparison described above. The table preserves historical gates with the latest accepted LT/shoulder result. Runtime preparation and import are not repeated:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
@@ -286,15 +294,15 @@ The next physical step checks 0.1.11 combinations, cursor layers, and synchroniz
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
 | Native controller | In-character input accepted on 0.1.6 | User report; detailed independent aiming/buttons/triggers still pending |
 | Menu cursor | Accepted on 0.1.8 | User report; retain this navigation path |
-| Native after Save/Quit/re-entry | Re-entry failed on 0.1.9; Save/Quit still fails in latest 0.1.10 report | Record Save/Quit UI, title/character menus, and gameplay re-entry separately on 0.1.11; cause unconfirmed |
-| Native combinations / shoulder tabs | LT + L3 and shoulder-tab problems reported on 0.1.10 | Qualify independent triggers and immediate thumb edges; shoulder-specific fix not established |
+| Native after Save/Quit/re-entry | Failed through 0.1.11; full Stop/Play also fails until Android is killed | 0.1.12 fixes the confirmed leftover Wine/HID receiver on restart; same-Wine Save/Quit remains unconfirmed |
+| Native combinations / shoulder tabs | Accepted by user on 0.1.11 | Preserve LT/thumb and shoulder behavior; no repeated qualification requested |
 | White cursor toggle | Main-menu white cursor persists in latest report | Check expanded hiding in main menu and in-game independently of Native response |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
 | Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
 | Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |
 | Online play | Pending | User authenticates and enters a normal PD2 online game |
 
-The immediate qualification step checks LT + L3 and individual shoulder/tab edges in initial Native gameplay, then Save/Quit and re-entry using the accepted Menu cursor if needed. Explicitly select Native, wait, press/release a face button, and repeat the same controls. Test the white-cursor toggle in the main menu and in-game separately. Rendering/audio, lifecycle, saved progress, and online gates remain pending beyond accepted initial Native input and Menu cursor.
+The current qualification step checks initial Native, Save/Quit/re-entry, then saved/closed game → full Stop client → Play within the same Android process. Keep Menu cursor as the accepted navigation path and export the first failure before Stop. LT/thumb and shoulders are accepted; broader rendering/audio, lifecycle and online gates retain their earlier boundaries.
 
 ## Next work after the first device test
 

@@ -35,7 +35,7 @@ public final class Pd2LaunchDiagnostics {
                     .getBytes(StandardCharsets.UTF_8);
     private Pd2LaunchDiagnostics() {}
 
-    public static String begin(Context context, Container container, String arguments) throws IOException, JSONException {
+    public static synchronized String begin(Context context, Container container, String arguments) throws IOException, JSONException {
         File logs = logs(context);
         if (!logs.isDirectory() && !logs.mkdirs()) throw new IOException("Cannot create diagnostic directory");
         Pd2SessionLog.archivePrevious(context);
@@ -55,7 +55,7 @@ public final class Pd2LaunchDiagnostics {
         return id;
     }
 
-    public static void exited(Context context, String id, int status) {
+    public static synchronized void exited(Context context, String id, int status) {
         try {
             File reportFile = new File(logs(context), "launch.json");
             if (!reportFile.isFile() || reportFile.length() > 128 * 1024) return;
@@ -65,6 +65,20 @@ public final class Pd2LaunchDiagnostics {
             if (!id.equals(report.optString("launchId"))) return;
             report.put("runtimeExitedAt", System.currentTimeMillis()).put("runtimeExitStatus", status);
             write(reportFile, report);
+        } catch (IOException | JSONException ignored) { }
+    }
+
+    public static synchronized void wineCleanup(Context context, String id, JSONObject cleanup) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (!file.isFile() || file.length() > 128 * 1024) return;
+            JSONObject report = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            if (id == null || !id.equals(report.optString("launchId"))) return;
+            JSONObject phases = report.optJSONObject("wineSessionCleanup");
+            if (phases == null) phases = new JSONObject();
+            phases.put(cleanup.getString("phase"), cleanup);
+            report.put("wineSessionCleanup", phases);
+            write(file, report);
         } catch (IOException | JSONException ignored) { }
     }
 

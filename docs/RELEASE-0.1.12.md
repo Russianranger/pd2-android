@@ -1,0 +1,13 @@
+# 0.1.12 same-app Wine session cleanup
+
+The latest device test accepts LT/thumb and shoulder behavior but rejects Native after Save/Quit and after a full client restart within the same Android process. The second launch logs `PD2 HID could not bind loopback port 7950`, while Java input events and nonneutral sends continue without failures.
+
+This preview fixes the demonstrated restart teardown defect. Stop closes the exact PD2 Wine prefix with the bundled `wineserver -k9`, waits with `-w`, and checks both controller ports are released. Startup performs the same bounded preflight before clearing temporary files or starting shared sockets. Cleanup runs on a worker, and complete audio/display teardown is serialized with replacement startup. Unknown/busy ports refuse startup rather than accepting a broken bridge. Root PIDs are per component with generation guards, and old teardown is idempotent. Startup refusal and cleanup evidence are recorded in `launch.json` and launcher logs.
+
+All 0.1.11 input fixes, Menu cursor, Wine 9.2/rootfs 24/wine9-hid-1, current prefix/import/saves, graphics settings, icon/theme and preview signing identity remain. No Wine/HID binary or imported game DLL is changed. Version 0.1.12/code 13 retains com.pd2.thor, min SDK 26 and target SDK 28.
+
+Same-Wine Save/Quit recovery remains unresolved. The focused check compares re-entry first, then full Stop/Play in the same app process, without force-killing Android. [Testing](TESTING.md) gives the sequence and [evidence](evidence/2026-10-04-wine-session-cleanup.md) records the diagnosis. Install over the current app; no Prepare runtime or re-import is required. Save/exit before Stop as usual.
+
+Local validation passed: 132 unit tests across 17 suites, with no failures, errors or skips (122 existing Android/Robolectric tests and 10 new plain-Java cleanup, ownership, socket and subprocess tests); all eight import/input/pointer/crash/log host scripts; pinned runtime and controller-backend verification; ARM64 assembly, packaging and APK identity/signature checks. All 72 APK assets match 0.1.11 byte-for-byte. Native source is unchanged: 26 of 35 JNI libraries are identical, eight differ only in build IDs, and VirGL's rebuilt path strings and associated address immediates account for the remaining differences. These checks do not run Box64/Wine on the Thor. Physical restart recovery is pending.
+
+APK: `PD2-Android-0.1.12-preview.apk`, 174,036,401 bytes. SHA-256: `6b32b9b8bd978dc58192332419e2da98b9944397ad698103f8ae07215d20dd58`. Application ID `com.pd2.thor`, version 0.1.12/code 13, min SDK 26/target SDK 28, unchanged preview signer `a61297bef1be2652b53b763730275e1f0e0975222294602ed8ffa5f8147ddb1e`.
