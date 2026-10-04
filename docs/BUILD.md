@@ -53,7 +53,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.7-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.8-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -99,7 +99,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum; the menu-control preview tag is `v0.1.7`.
+GitHub prerelease with the APK and checksum; the menu-control preview tag is `v0.1.8`.
 
 ## Startup verification boundary
 
@@ -167,7 +167,7 @@ All 35 Android native libraries and 70 baseline assets match the verified 0.1.5
 APK byte-for-byte; both custom controller assets match tracked 0.1.6 source.
 The native module is unchanged. APK size is 171,296,970 bytes; SHA-256:
 `d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
-Published 0.1.7 CI and the physical Menu cursor/re-entry test remain pending.
+Published 0.1.7 CI run 37169294205 passed. The user rejected the physical menu test; re-entry remains unqualified.
 
 Install 0.1.7 over 0.1.6 with the same signing key/application ID to retain
 imported files. The targeted controller update reuses rootfs version 24 and the current
@@ -180,3 +180,9 @@ runtime preparation. The menu-transition test and remaining qualification sequen
 are in [Testing](TESTING.md).
 
 Preview certificate SHA-256: `A6:12:97:BE:F1:BE:26:52:B5:3B:76:37:30:27:5E:1F:0E:09:75:22:22:94:60:2E:D8:FF:A5:F8:14:7D:DB:1E`.
+
+## 0.1.8 menu-pointer verification
+
+Local 0.1.8 verification passed: 86 Android 13/API 33 Robolectric tests across 13 suites, with no failures, errors or skips; 9 real-router scenarios; and 11 menu-pointer scenarios with 145 checks. These include the actual mouse/keyboard datagram layout, queued-action expiry, fresh Windows cursor synchronization, lost-feedback retry, resize/clipping, and balanced controls. ARM64 assembly and APK identity/signature checks passed: `com.pd2.thor`, 0.1.8/code 9, min SDK 26, target SDK 28, unchanged preview certificate. All 35 Android native libraries and 72 runtime assets match the verified 0.1.7 APK byte-for-byte, including the accepted HID module. APK size: 171,307,574 bytes. SHA-256: `53cec30a4ee97ef6bb30453ee694c618631572eb853c86dfcc2944e2e4d4c550`. Packaging drift rejection and correct-version artifact fixtures passed. Published 0.1.8 CI and the physical menu/re-entry test remain pending. The accepted Wine/HID backend is unchanged. Install over the existing app without runtime preparation or re-import; see [Testing](TESTING.md).
+
+The packaging script rejects metadata that differs from the configured version before copying the APK. If an incremental build reports this mismatch, remove `app/build/outputs/apk/debug/output-metadata.json` and rerun `:app:packageDebug :app:assembleDebug`, then package again. APK manifest metadata was independently checked with `aapt` for this preview.

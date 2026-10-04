@@ -264,6 +264,42 @@ public class RouterTest {
   check(sink.events.isEmpty() && sink.pointerMoves==0 && Handler.queue.isEmpty(),"rejected input reached the game");
   router.releaseAll();
  }
+ static void injectedMenuBackendKeepsFallbackSeparateAndBalancesOwner() {
+  XServer sink = new XServer();
+  class MenuBackend implements Pd2InputRouter.MenuInput {
+   final java.util.ArrayList<String> events = new java.util.ArrayList<>();
+   int moves;
+   public void move(int x,int y) { moves++; }
+   public void button(Pointer.Button button,boolean down) { events.add((down?"+":"-")+button); }
+   public void key(XKeycode key,boolean down) { events.add((down?"+":"-")+key); }
+  }
+  MenuBackend backend = new MenuBackend(); Pd2InputRouter router = new Pd2InputRouter(sink,backend);
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_X,true));
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,true));
+  router.setMenuControls(true);
+  check(sink.keys.isEmpty() && sink.buttons.isEmpty(),"menu change did not release original X11 owner");
+  check(backend.events.isEmpty(),"X11 releases were sent to the new menu backend");
+  sink.events.clear();
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,true));
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_SELECT,true));
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,false));
+  check(!backend.events.contains("-KEY_ESC"),"menu backend lost shared Esc ownership");
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_START,true));
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_X,1)); Handler.tick();
+  check(backend.moves==1 && backend.events.contains("+BUTTON_LEFT")
+    && backend.events.contains("+KEY_ESC") && backend.events.contains("+KEY_ENTER"),"menu events missed injected Windows backend");
+  check(sink.events.isEmpty() && sink.pointerMoves==0,"menu backend leaked X11 mouse or key injection");
+  router.setMenuControls(false);
+  check(backend.events.contains("-BUTTON_LEFT") && backend.events.contains("-KEY_ESC")
+    && backend.events.contains("-KEY_ENTER") && Handler.queue.isEmpty(),"mode change did not balance original menu backend/timer");
+  check(sink.events.isEmpty(),"menu releases were sent to new fallback owner");
+  int menuEvents=backend.events.size();
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,true));
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,false));
+  check(sink.events.contains("+BUTTON_RIGHT") && backend.events.size()==menuEvents,"injected menu backend changed full fallback");
+  router.releaseAll();
+ }
  public static void main(String[] args) {
   fallbackCompatibility();
   menuCursorEitherStickAndRightPriority();
@@ -273,7 +309,8 @@ public class RouterTest {
   modeChangesReleaseHeldInputAndTimers();
   unchangedModeKeepsHeldInput();
   configurationAndRejectedEventsNeverInject();
-  System.out.println("PASS: 8 router scenarios: fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary");
+  injectedMenuBackendKeepsFallbackSeparateAndBalancesOwner();
+  System.out.println("PASS: 9 router scenarios: fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary, injected backend ownership");
  }
 }
 """,

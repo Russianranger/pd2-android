@@ -20,7 +20,7 @@ import java.util.Arrays;
 import java.util.ArrayDeque;
 import java.util.UUID;
 
-/** Device capabilities and aggregate bridge counts, never key presses or axis values. */
+/** Bounded capabilities, bridge counts and pointer routing context; never pressed keys or axis values. */
 public final class Pd2ControllerDiagnostics {
     public static final int MAX_REPORT_BYTES = 64 * 1024;
     public static final int MAX_DEVICES = 32;
@@ -43,6 +43,42 @@ public final class Pd2ControllerDiagnostics {
     private long lastHandledMotionAt, lastHandledKeyAt, lastHidReplyAt, lastXInputReplyAt;
     private boolean gateKnown, windowFocus, paused, quickMenu, drawer;
     private final ArrayDeque<JSONObject> recentTransitions = new ArrayDeque<>();
+    private final ArrayDeque<JSONObject> recentPointerContexts = new ArrayDeque<>();
+    private static final String[] MODES = {"native", "menu_cursor", "mouse_keyboard"};
+    private final ModeInput[] inputByMode = {new ModeInput(), new ModeInput(), new ModeInput()};
+    private final PointerOutput pointerOutput = new PointerOutput();
+
+    private static final class ModeInput {
+        long handledMotionEvents, handledKeyEvents, lastHandledMotionAt, lastHandledKeyAt;
+        final PointerOutput pointerOutput = new PointerOutput();
+
+        JSONObject snapshot() throws JSONException {
+            return new JSONObject().put("handledMotionEvents", handledMotionEvents).put("handledKeyEvents", handledKeyEvents)
+                    .put("lastHandledMotionAt", lastHandledMotionAt).put("lastHandledKeyAt", lastHandledKeyAt)
+                    .put("pointerOutput", pointerOutput.snapshot());
+        }
+    }
+
+    private static final class PointerOutput {
+        long moveEvents, buttonEvents, keyEvents, feedbackEvents;
+        long lastMoveAt, lastButtonAt, lastKeyAt, lastFeedbackAt;
+
+        void record(String kind, long at) {
+            switch (kind) {
+                case "move": moveEvents = increment(moveEvents); lastMoveAt = at; break;
+                case "button": buttonEvents = increment(buttonEvents); lastButtonAt = at; break;
+                case "key": keyEvents = increment(keyEvents); lastKeyAt = at; break;
+                case "feedback": feedbackEvents = increment(feedbackEvents); lastFeedbackAt = at; break;
+            }
+        }
+
+        JSONObject snapshot() throws JSONException {
+            return new JSONObject().put("moveEvents", moveEvents).put("buttonEvents", buttonEvents)
+                    .put("keyEvents", keyEvents).put("feedbackEvents", feedbackEvents)
+                    .put("lastMoveAt", lastMoveAt).put("lastButtonAt", lastButtonAt)
+                    .put("lastKeyAt", lastKeyAt).put("lastFeedbackAt", lastFeedbackAt);
+        }
+    }
 
     public Pd2ControllerDiagnostics(Context context) {
         // WinHandler is an Activity field initialized before attachBaseContext.
@@ -130,13 +166,74 @@ public final class Pd2ControllerDiagnostics {
     }
 
     public synchronized void recordMotion(boolean handled) {
-        if (handled) { handledMotionEvents = increment(handledMotionEvents); lastHandledMotionAt = System.currentTimeMillis(); }
+        if (handled) {
+            handledMotionEvents = increment(handledMotionEvents); lastHandledMotionAt = System.currentTimeMillis();
+            ModeInput selected = inputByMode[modeIndex()];
+            selected.handledMotionEvents = increment(selected.handledMotionEvents);
+            selected.lastHandledMotionAt = lastHandledMotionAt;
+        }
         else motionEvents = increment(motionEvents);
     }
 
     public synchronized void recordKey(boolean handled) {
-        if (handled) { handledKeyEvents = increment(handledKeyEvents); lastHandledKeyAt = System.currentTimeMillis(); }
+        if (handled) {
+            handledKeyEvents = increment(handledKeyEvents); lastHandledKeyAt = System.currentTimeMillis();
+            ModeInput selected = inputByMode[modeIndex()];
+            selected.handledKeyEvents = increment(selected.handledKeyEvents);
+            selected.lastHandledKeyAt = lastHandledKeyAt;
+        }
         else keyEvents = increment(keyEvents);
+    }
+
+    /** Aggregate output categories only: no button code, key code or input value is retained. */
+    public synchronized void recordPointerOutput(String kind) {
+        if (!"move".equals(kind) && !"button".equals(kind) && !"key".equals(kind) && !"feedback".equals(kind)) return;
+        long at = System.currentTimeMillis();
+        pointerOutput.record(kind, at);
+        inputByMode[modeIndex()].pointerOutput.record(kind, at);
+    }
+
+    /** Copy only pointer geometry and fixed routing metadata, dropping titles, paths and other fields. */
+    public synchronized void recordPointerContext(JSONObject state) {
+        if (state == null) return;
+        try {
+            JSONObject clean = new JSONObject();
+            for (String name : new String[]{"screenWidth", "screenHeight"}) copyInteger(state, clean, name, 0, 65536);
+            for (String name : new String[]{"pointerX", "pointerY"}) copyInteger(state, clean, name, -65536, 65536);
+            for (String name : new String[]{"relative", "gameCursorVisible", "forceRoot"}) {
+                Object value = state.opt(name);
+                if (value instanceof Boolean) clean.put(name, value);
+            }
+            for (String name : new String[]{"focusWindow", "pointWindow", "grabWindow", "menuWindow"}) {
+                Object value = state.opt(name);
+                if (value == JSONObject.NULL) clean.put(name, JSONObject.NULL);
+                else if (value instanceof JSONObject) {
+                    JSONObject window = new JSONObject();
+                    JSONObject source = (JSONObject)value;
+                    copyInteger(source, window, "id", Integer.MIN_VALUE, 0xffffffffL);
+                    for (String size : new String[]{"width", "height"}) copyInteger(source, window, size, 0, 65536);
+                    for (String position : new String[]{"x", "y"}) copyInteger(source, window, position, -65536, 65536);
+                    Object windowClass = source.opt("class");
+                    if (windowClass instanceof String && ((String)windowClass).matches("[A-Za-z0-9_. -]{1,96}"))
+                        window.put("class", windowClass);
+                    if (window.length() > 0) clean.put(name, window);
+                }
+            }
+            if (clean.length() == 0) return;
+            clean.put("at", System.currentTimeMillis()).put("mode", mode);
+            if (recentPointerContexts.size() == 16) recentPointerContexts.removeFirst();
+            recentPointerContexts.addLast(clean);
+        } catch (JSONException ignored) { }
+    }
+
+    private int modeIndex() { return "menu_cursor".equals(mode) ? 1 : "mouse_keyboard".equals(mode) ? 2 : 0; }
+
+    private static void copyInteger(JSONObject source, JSONObject target, String name, long min, long max) throws JSONException {
+        Object value = source.opt(name);
+        if (!(value instanceof Number)) return;
+        double numeric = ((Number)value).doubleValue();
+        if (Double.isNaN(numeric) || Double.isInfinite(numeric) || numeric < min || numeric > max || numeric != Math.rint(numeric)) return;
+        target.put(name, (long)numeric);
     }
 
     /** Snapshot is safe to show in the quick menu or include in a support export. */
@@ -146,11 +243,17 @@ public final class Pd2ControllerDiagnostics {
             synchronized (this) {
                 JSONArray history = new JSONArray();
                 for (JSONObject entry : recentTransitions) history.put(new JSONObject(entry.toString()));
+                JSONArray pointerContexts = new JSONArray();
+                for (JSONObject entry : recentPointerContexts) pointerContexts.put(new JSONObject(entry.toString()));
+                JSONObject modes = new JSONObject();
+                for (int index = 0; index < MODES.length; index++) modes.put(MODES[index], inputByMode[index].snapshot());
                 report.put("sessionId", sessionId).put("launchId", launchId).put("createdAt", createdAt)
                         .put("capturedAt", System.currentTimeMillis())
-                        .put("scope", "Android input capabilities, counters, mode history and event times; no pressed keys or axis values")
+                        .put("scope", "Android input capabilities, counters, mode history, pointer geometry and routing; no pressed keys, axis values or window titles")
                         .put("mode", mode).put("inputAvailable", inputAvailable)
                         .put("recentTransitions", history)
+                        .put("inputByMode", modes).put("pointerOutput", pointerOutput.snapshot())
+                        .put("recentPointerContexts", pointerContexts)
                         .put("inputGate", new JSONObject().put("known", gateKnown).put("windowFocus", windowFocus)
                                 .put("paused", paused).put("quickMenu", quickMenu).put("drawer", drawer))
                         .put("lastEvents", new JSONObject().put("handledMotionAt", lastHandledMotionAt)

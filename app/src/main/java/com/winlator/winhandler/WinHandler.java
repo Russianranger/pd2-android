@@ -180,9 +180,17 @@ public class WinHandler {
         });
     }
 
+    public boolean isInputReady() { return initReceived && socketReady && running; }
+
     public void mouseEvent(int flags, int dx, int dy, int wheelDelta) {
+        mouseEvent(flags, dx, dy, wheelDelta, () -> true);
+    }
+
+    /** Temporary menu input can expire while queued, before it reaches Wine. */
+    public void mouseEvent(int flags, int dx, int dy, int wheelDelta, java.util.function.BooleanSupplier allowed) {
         if (!initReceived) return;
         addAction(() -> {
+            if (!allowed.getAsBoolean()) return;
             sendData.rewind();
             sendData.put(RequestCodes.MOUSE_EVENT);
             sendData.putInt(10);
@@ -196,8 +204,13 @@ public class WinHandler {
     }
 
     public void keyboardEvent(byte vkey, int flags) {
+        keyboardEvent(vkey, flags, () -> true);
+    }
+
+    public void keyboardEvent(byte vkey, int flags, java.util.function.BooleanSupplier allowed) {
         if (!initReceived) return;
         addAction(() -> {
+            if (!allowed.getAsBoolean()) return;
             sendData.rewind();
             sendData.put(RequestCodes.KEYBOARD_EVENT);
             sendData.put(vkey);
@@ -411,6 +424,7 @@ public class WinHandler {
                 XServer xServer = activity.getXServer();
                 xServer.pointer.setX(x);
                 xServer.pointer.setY(y);
+                activity.onPd2CursorFeedback(x, y);
                 activity.getXServerView().requestRender();
                 break;
             }

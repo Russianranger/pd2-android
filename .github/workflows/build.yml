@@ -50,6 +50,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_runtime_relocation.py' -v
           ./scripts/test-import.sh
           python3 tests/test_input_router.py
+          python3 tests/test_menu_pointer.py
           python3 tests/test_crash_recovery.py
           python3 tests/test_session_logs.py
       - name: Set up Gradle

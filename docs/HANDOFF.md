@@ -8,9 +8,19 @@ The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current implementation is **0.1.7, a menu-control and transition-diagnostics preview**, version code 8. The user accepted native controller input inside a character on 0.1.6, but reported an unresponsive main menu after Save/Exit. The complete twin-stick/button layout, save persistence/re-entry, and session transitions remain unqualified. The retained log supports continued bridge activity, but its old size cap hides the later transition; it does not establish a controller disconnect or a widescreen/4:3 cause.
+The current implementation is **0.1.8, a temporary menu-pointer recovery preview**, version code 9. The user accepted native input inside a character on 0.1.6, then rejected the 0.1.7 menu test after Save/Exit. The latest capture confirms the user selected Menu cursor and Android focus/input were restored for 9.85 seconds. RawInput/XInput continued after the apparent Save/Exit; no native device removal is recorded. No handled controller key is recorded during that menu interval. The root cause and saved re-entry remain unqualified.
 
-Install over 0.1.6 and reuse the accepted Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep the accepted GameNative-arguments Glide profile, Stability, and controller notifications enabled. Test **Save/Exit → Menu cursor → re-enter character → Native controller** without touching the screen, then export logs on success or failure.
+Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep GameNative-arguments Glide, Stability, and controller notifications enabled. See [Testing](TESTING.md) and [new evidence](evidence/2026-10-04-menu-pointer.md).
+
+## 0.1.8 scope
+
+- Force the app's root cursor image only while Menu cursor owns active input. A hidden game cursor can no longer suppress that menu pointer; native/full fallback rendering is unchanged.
+- Route Menu mouse movement, button clicks, and the supported navigation keys through the existing verified Windows helper. Reacquire Game.exe on menu activation; use current mapped game-window geometry for centering and bounds. Windows cursor feedback is authoritative; no duplicate X11 motion is injected.
+- Keep at most one outstanding menu movement, use a bounded feedback timeout, and invalidate queued presses/moves on mode or focus loss. Balance held controls on release. Existing unguarded runtime input APIs preserve their behavior.
+- Record handled input per mode, menu output request counts/times and returned Windows cursor feedback separately, plus up to 16 filtered geometry/cursor contexts. No key codes, axis values, titles, game binaries or saves are exported in these fields.
+- Preserve the accepted Wine/HID backend and all runtime assets. Do not change aspect-ratio math or modify PD2 DLLs.
+
+Local 0.1.8 verification passed: 86 Android 13/API 33 Robolectric tests across 13 suites, with no failures, errors or skips; 9 real-router scenarios; and 11 menu-pointer scenarios with 145 checks. These include the actual mouse/keyboard datagram layout, queued-action expiry, fresh Windows cursor synchronization, lost-feedback retry, resize/clipping, and balanced controls. ARM64 assembly and APK identity/signature checks passed: `com.pd2.thor`, 0.1.8/code 9, min SDK 26, target SDK 28, unchanged preview certificate. All 35 Android native libraries and 72 runtime assets match the verified 0.1.7 APK byte-for-byte, including the accepted HID module. APK size: 171,307,574 bytes. SHA-256: `53cec30a4ee97ef6bb30453ee694c618631572eb853c86dfcc2944e2e4d4c550`. Packaging drift rejection and correct-version artifact fixtures passed. Published 0.1.8 CI and the physical menu/re-entry test remain pending. Device confirmation is required; no complete native-menu fix is claimed.
 
 ## 0.1.7 scope
 
@@ -20,7 +30,7 @@ Install over 0.1.6 and reuse the accepted Wine 9.2/rootfs 24/prefix/import: **no
 - Remove per-report HID tracing while retaining XInput/raw-input diagnostics. Add up to 32 recent mode/input-gate transitions with timestamps, current focus/pause/menu/drawer gates, and last handled input/reply times. Count pointer-routed input too; `support.json` identifies its input mode as a saved preference, while `controller.json` describes the current session.
 - Preserve Wine 9.2, `wine9-hid-1`, rootfs 24, prefix `wine-9.2-pd2-1`, graphics configuration, imported files/saves, and signing identity.
 
-Final local tests, ARM64 assembly, identity/signature, and payload checks passed. Published 0.1.7 CI and the physical Menu cursor/re-entry result remain pending. See the [menu-transition evidence](evidence/2026-10-04-menu-transition.md).
+Final local tests, ARM64 assembly, identity/signature, and payload checks passed. [Published 0.1.7 CI](https://github.com/Russianranger/pd2-android/actions/runs/37169294205) passed. The user subsequently rejected the physical menu test; re-entry remains unqualified. See the [menu-transition evidence](evidence/2026-10-04-menu-transition.md).
 
 ## 0.1.6 HID notification scope
 
@@ -202,7 +212,7 @@ The completed local 0.1.7 checks are:
 - All 35 packaged Android native libraries and 70 baseline assets match the verified 0.1.5 APK byte-for-byte. Both custom controller assets match tracked 0.1.6 source; the `wine9-hid-1` module retains SHA-256 `541523c1e21059a386cfd60f6f18354c05b28ca2457faf867221911b545c4b0e`. No native module change is included.
 - APK size: 171,296,970 bytes. SHA-256: `d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
 
-Published 0.1.7 CI and the physical menu-transition test remain pending.
+Published 0.1.7 CI run 37169294205 passed. The user rejected its physical menu test; re-entry remains unqualified.
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Save/Exit menu failure cause remain unconfirmed.
 

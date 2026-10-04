@@ -59,6 +59,64 @@ public final class WinHandlerDatagramTest {
         assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("counts").getLong("replyFailures"));
     }
 
+    @Test public void menuMouseAndKeyboardPacketsMatchThePackagedWindowsHandler() throws Exception {
+        RecordingSocket socket = new RecordingSocket();
+        WinHandler handler = configured(socket);
+        handler.initReceived = true;
+        handler.mouseEvent(MouseEventFlags.MOVE, -14, 9, 0, () -> true);
+        handler.mouseEvent(MouseEventFlags.LEFTDOWN, 0, 0, 0, () -> true);
+        handler.mouseEvent(MouseEventFlags.LEFTUP, 0, 0, 0, () -> true);
+        handler.keyboardEvent((byte)0x1b, 0, () -> true);
+        handler.keyboardEvent((byte)0x1b, 2, () -> true);
+        assertEquals(5, handler.drainPendingActions());
+        assertEquals(5, socket.packets.size());
+        java.nio.ByteBuffer move = java.nio.ByteBuffer.wrap(socket.packets.get(0)).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(256, move.capacity());
+        assertEquals(RequestCodes.MOUSE_EVENT, move.get(0));
+        assertEquals(10, move.getInt(1));
+        assertEquals(MouseEventFlags.MOVE, move.getInt(5));
+        assertEquals(-14, move.getShort(9));
+        assertEquals(9, move.getShort(11));
+        assertEquals(0, move.getShort(13));
+        assertEquals(1, move.get(15));
+        assertEquals(MouseEventFlags.LEFTDOWN, java.nio.ByteBuffer.wrap(socket.packets.get(1)).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(5));
+        assertEquals(MouseEventFlags.LEFTUP, java.nio.ByteBuffer.wrap(socket.packets.get(2)).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(5));
+        for (int i = 3; i < 5; i++) {
+            java.nio.ByteBuffer key = java.nio.ByteBuffer.wrap(socket.packets.get(i)).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            assertEquals(RequestCodes.KEYBOARD_EVENT, key.get(0));
+            assertEquals(0x1b, key.get(1));
+            assertEquals(i == 3 ? 0 : 2, key.getInt(2));
+        }
+    }
+
+    @Test public void expiredMenuActionsCannotLeakAfterSwitchButReleasesCanStillBalanceDeliveredPresses() throws Exception {
+        RecordingSocket socket = new RecordingSocket();
+        WinHandler handler = configured(socket); handler.initReceived = true;
+        java.util.concurrent.atomic.AtomicBoolean active = new java.util.concurrent.atomic.AtomicBoolean(true);
+        handler.mouseEvent(MouseEventFlags.MOVE, 14, 0, 0, active::get);
+        handler.mouseEvent(MouseEventFlags.LEFTDOWN, 0, 0, 0, active::get);
+        handler.keyboardEvent((byte)0x0d, 0, active::get);
+        active.set(false);
+        handler.mouseEvent(MouseEventFlags.LEFTUP, 0, 0, 0);
+        handler.keyboardEvent((byte)0x0d, 2);
+        assertEquals(5, handler.drainPendingActions());
+        assertEquals(2, socket.packets.size());
+        assertEquals(MouseEventFlags.LEFTUP, java.nio.ByteBuffer.wrap(socket.packets.get(0)).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(5));
+        assertEquals(2, java.nio.ByteBuffer.wrap(socket.packets.get(1)).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(2));
+    }
+
+    @Test public void menuReadinessRequiresTheLiveSocketRuntimeAndInitTogether() throws Exception {
+        RecordingSocket socket = new RecordingSocket();
+        WinHandler handler = configured(socket);
+        assertFalse(handler.isInputReady());
+        handler.initReceived = true;
+        assertFalse(handler.isInputReady());
+        Field running = WinHandler.class.getDeclaredField("running"); running.setAccessible(true); running.setBoolean(handler, true);
+        assertTrue(handler.isInputReady());
+        handler.setSocketReady(false);
+        assertFalse(handler.isInputReady());
+    }
+
     private static WinHandler configured(RecordingSocket socket) throws Exception {
         WinHandler handler = new WinHandler(null);
         Field socketField = WinHandler.class.getDeclaredField("socket"); socketField.setAccessible(true);

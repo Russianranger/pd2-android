@@ -4,15 +4,15 @@ A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruc
 
 The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 9.2 (Custom) from official Winlator 10.1, retaining Box64 0.4.4 and the current Android display/input and graphics components. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.7 menu-control preview.** The user confirmed native controller input inside a character on 0.1.6. After Save/Exit, the main menu did not respond to the controller. Specific twin-stick actions, save persistence/re-entry, rendering/audio, and online play still need qualification.
+**Status: 0.1.8 menu-pointer recovery preview.** Native controller input inside a character was accepted on 0.1.6. The user reported that the 0.1.7 Menu cursor still did not respond after Save/Exit. The new capture confirms that Menu cursor was selected with Android focus restored; it does not establish an aspect-ratio cause.
 
-This preview adds a temporary **Menu cursor** mode for title and character screens, plus rolling logs and input-gate history for the transition. It preserves the accepted Wine 9.2/HID runtime, prefix, graphics settings, and imported files. The menu failure's cause is unconfirmed; no automatic menu detection or aspect-ratio change is applied. No performance improvement has been measured.
+This preview gives Menu cursor an app-owned visible pointer and routes its mouse/keyboard commands through the existing Windows input helper. It centers and bounds the pointer using the live game window, and records per-mode input, output requests, cursor feedback, and bounded window geometry. The accepted native HID runtime and the full Mouse / keyboard layout are preserved. Device confirmation remains required.
 
-## Next 0.1.7 check
+## Next 0.1.8 check
 
-Install 0.1.7 over 0.1.6 without uninstalling or clearing storage. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.** Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and controller notifications enabled.
+Install 0.1.8 over the existing app without uninstalling or clearing storage. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.** Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and controller notifications enabled.
 
-Use **L3 + R3** to open the quick menu and choose **Menu cursor** to enter a temporary offline character. Choose **Native controller** after the character loads, close the menu, and press a controller button. Save/Exit, choose Menu cursor again, re-enter the same character, then return to Native. Try this without touching the screen and export support logs afterward. [Testing](docs/TESTING.md) lists the bindings and observations to report.
+Enter a character and confirm Native controller still works. Save/Exit, use **L3 + R3 → Menu cursor**, and check whether the visible pointer moves with either stick and whether **A** clicks Single Player/character controls. Re-enter the same character, select **Native controller**, and check input again. Export support logs and distinguish a missing/stationary pointer from a pointer that moves but cannot click. [Testing](docs/TESTING.md) gives the focused sequence.
 
 If the whole Android app closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Java crash capture does not cover every possible process exit.
 
@@ -66,6 +66,6 @@ GameNative once your game files are imported.
 The targeted Wine 9 HID backend is built from the included source and pinned
 Wine 9 headers; [Build instructions](docs/BUILD.md) describe its artifact/ABI checks.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.7 release notes](docs/RELEASE-0.1.7.md) describe Menu cursor and transition diagnostics. Earlier release notes retain the preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.8 release notes](docs/RELEASE-0.1.8.md) describe the revised menu pointer and diagnostics. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

@@ -5,7 +5,7 @@ destination="$project_root/app/build/distributions"
 source_apk="$project_root/app/build/outputs/apk/debug/app-debug.apk"
 metadata="$project_root/app/build/outputs/apk/debug/output-metadata.json"
 # Use the built APK's metadata, so names cannot drift when versions change.
-version="$(python3 - "$source_apk" "$metadata" <<'PYTHON'
+version="$(python3 - "$source_apk" "$metadata" "$project_root/app/build.gradle" <<'PYTHON'
 from pathlib import Path
 from zipfile import ZipFile
 import json
@@ -19,6 +19,13 @@ element = next((item for item in metadata['elements'] if item['outputFile'] == a
 if element is None:
     raise SystemExit('Built APK is missing from output metadata')
 version = element['versionName']
+# AGP can retain an older output-metadata.json in an incremental build. Refuse
+# to overwrite a previous preview with an APK named from that stale metadata.
+config = Path(sys.argv[3]).read_text()
+name = re.search(r"versionName\s+['\"]([^'\"]+)['\"]", config)
+code = re.search(r"versionCode\s+(\d+)", config)
+if name is None or code is None or version != name.group(1) or element['versionCode'] != int(code.group(1)):
+    raise SystemExit('APK metadata differs from configured version; remove output-metadata.json and rebuild before packaging')
 if not re.fullmatch(r'[0-9A-Za-z][0-9A-Za-z._-]{0,79}', version):
     raise SystemExit('Invalid version for artifact filename')
 with ZipFile(apk_path) as apk:

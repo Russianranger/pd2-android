@@ -15,10 +15,20 @@ import java.util.Map;
 
 /** Mouse/keyboard and temporary menu layouts. Native mode uses Wine's gamepad driver. */
 public final class Pd2InputRouter {
+    public interface MenuInput {
+        void move(int dx, int dy);
+        void button(Pointer.Button button, boolean down);
+        void key(XKeycode key, boolean down);
+    }
+
     private final XServer xServer;
+    private final MenuInput x11Input;
+    private final MenuInput menuInput;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String, XKeycode> heldKeys = new HashMap<>();
     private final Map<String, Pointer.Button> heldButtons = new HashMap<>();
+    private final Map<String, MenuInput> keyOwners = new HashMap<>();
+    private final Map<String, MenuInput> buttonOwners = new HashMap<>();
     private float mouseX, mouseY, remainderX, remainderY, cursorSpeed = 1.0f, deadzone = 0.18f;
     private boolean mouseScheduled;
     private boolean menuControls;
@@ -31,13 +41,31 @@ public final class Pd2InputRouter {
             int ix = (int) dx, iy = (int) dy;
             remainderX = dx - ix;
             remainderY = dy - iy;
-            xServer.injectPointerMoveDelta(ix, iy);
+            inputOwner().move(ix, iy);
             mouseScheduled = true;
             handler.postDelayed(this, 16);
         }
     };
 
-    public Pd2InputRouter(XServer xServer) { this.xServer = xServer; }
+    public Pd2InputRouter(XServer xServer) { this(xServer, null); }
+
+    public Pd2InputRouter(XServer xServer, MenuInput menuInput) {
+        this.xServer = xServer;
+        x11Input = new MenuInput() {
+            @Override public void move(int dx, int dy) { xServer.injectPointerMoveDelta(dx, dy); }
+            @Override public void button(Pointer.Button button, boolean down) {
+                if (down) xServer.injectPointerButtonPress(button);
+                else xServer.injectPointerButtonRelease(button);
+            }
+            @Override public void key(XKeycode key, boolean down) {
+                if (down) xServer.injectKeyPress(key);
+                else xServer.injectKeyRelease(key);
+            }
+        };
+        this.menuInput = menuInput != null ? menuInput : x11Input;
+    }
+
+    private MenuInput inputOwner() { return menuControls ? menuInput : x11Input; }
 
     /** The Activity owns routing; this only selects the layout when it forwards an event here. */
     public void setMenuControls(boolean enabled) {
@@ -61,10 +89,12 @@ public final class Pd2InputRouter {
             if (heldKeys.containsKey(source)) return;
             boolean alreadyHeld = heldKeys.containsValue(keycode);
             heldKeys.put(source, keycode);
-            if (!alreadyHeld) xServer.injectKeyPress(keycode);
+            keyOwners.put(source, inputOwner());
+            if (!alreadyHeld) inputOwner().key(keycode, true);
         } else {
             XKeycode previous = heldKeys.remove(source);
-            if (previous != null && !heldKeys.containsValue(previous)) xServer.injectKeyRelease(previous);
+            MenuInput owner = keyOwners.remove(source);
+            if (previous != null && !heldKeys.containsValue(previous)) owner.key(previous, false);
         }
     }
 
@@ -73,10 +103,12 @@ public final class Pd2InputRouter {
             if (heldButtons.containsKey(source)) return;
             boolean alreadyHeld = heldButtons.containsValue(button);
             heldButtons.put(source, button);
-            if (!alreadyHeld) xServer.injectPointerButtonPress(button);
+            buttonOwners.put(source, inputOwner());
+            if (!alreadyHeld) inputOwner().button(button, true);
         } else {
             Pointer.Button previous = heldButtons.remove(source);
-            if (previous != null && !heldButtons.containsValue(previous)) xServer.injectPointerButtonRelease(previous);
+            MenuInput owner = buttonOwners.remove(source);
+            if (previous != null && !heldButtons.containsValue(previous)) owner.button(previous, false);
         }
     }
 
@@ -167,10 +199,12 @@ public final class Pd2InputRouter {
     }
 
     public void releaseAll() {
-        for (XKeycode keycode : heldKeys.values()) xServer.injectKeyRelease(keycode);
-        for (Pointer.Button button : heldButtons.values()) xServer.injectPointerButtonRelease(button);
+        for (Map.Entry<String, XKeycode> held : heldKeys.entrySet()) keyOwners.get(held.getKey()).key(held.getValue(), false);
+        for (Map.Entry<String, Pointer.Button> held : heldButtons.entrySet()) buttonOwners.get(held.getKey()).button(held.getValue(), false);
         heldKeys.clear();
         heldButtons.clear();
+        keyOwners.clear();
+        buttonOwners.clear();
         mouseX = mouseY = remainderX = remainderY = 0;
         handler.removeCallbacks(moveMouse);
         mouseScheduled = false;

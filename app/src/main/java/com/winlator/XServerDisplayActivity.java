@@ -72,6 +72,7 @@ import com.winlator.inputcontrols.ControlsProfile;
 import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.pd2.Pd2InputRouter;
+import com.winlator.pd2.Pd2MenuPointer;
 import com.winlator.pd2.Pd2ControllerDialogs;
 import com.winlator.pd2.Pd2ControllerRuntime;
 import com.winlator.pd2.Pd2Activity;
@@ -161,6 +162,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean pd2LeftThumbDown, pd2RightThumbDown, pd2ChordConsumed;
     private boolean pd2LeftThumbDeferred, pd2RightThumbDeferred;
     private Pd2InputRouter pd2InputRouter;
+    private Pd2MenuPointer pd2MenuPointer;
+    private boolean pd2MenuPointerActive;
+    private long pd2LastPointerContextAt;
     private AlertDialog pd2QuickDialog;
     private Button pd2Gear;
     private static WeakReference<XServerDisplayActivity> pd2ActiveSession = new WeakReference<>(null);
@@ -331,11 +335,18 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
                 if (win32AppWorkarounds != null) win32AppWorkarounds.applyWindowWorkarounds(window);
                 changeFrameRatingVisibility(window, true);
+                postPd2PointerContext();
             }
 
             @Override
             public void onUnmapWindow(Window window) {
                 changeFrameRatingVisibility(window, false);
+                postPd2PointerContext();
+            }
+
+            @Override
+            public void onUpdateWindowGeometry(Window window, boolean resized) {
+                postPd2PointerContext();
             }
         });
 
@@ -759,7 +770,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
         if (pd2Session) {
             hideInputControls();
-            pd2InputRouter = new Pd2InputRouter(xServer);
+            pd2MenuPointer = new Pd2MenuPointer(xServer, winHandler);
+            pd2InputRouter = new Pd2InputRouter(xServer, pd2MenuPointer);
             pd2InputRouter.setCursorSpeed(preferences.getFloat("pd2_cursor_speed", 1.0f));
             pd2InputRouter.setDeadzone(preferences.getFloat("pd2_deadzone", 0.18f));
             pd2Gear = new Button(this);
@@ -802,14 +814,49 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         boolean inputAvailable = !pd2MenuOpen && !pd2Paused && pd2HasWindowFocus && !drawerLayout.isDrawerOpen(GravityCompat.START);
         winHandler.gamepadHandler.setStickDeadzone(pd2InputRouter.getDeadzone());
         pd2InputRouter.setMenuControls(pd2MenuCursor);
-        winHandler.gamepadHandler.setInputEnabled(!pd2PointerControls() && inputAvailable);
         winHandler.controllerDiagnostics.setMode(pd2InputModeName(), inputAvailable);
         winHandler.controllerDiagnostics.setInputGate(pd2HasWindowFocus, pd2Paused, pd2MenuOpen, drawerLayout.isDrawerOpen(GravityCompat.START));
+        boolean menuPointerActive = pd2MenuCursor && inputAvailable;
+        if (pd2MenuPointerActive != menuPointerActive) {
+            pd2InputRouter.releaseAll();
+            pd2MenuPointerActive = menuPointerActive;
+            if (menuPointerActive) pd2MenuPointer.activate();
+            else pd2MenuPointer.deactivate();
+        }
+        xServerView.getRenderer().setForceRootCursor(menuPointerActive);
+        winHandler.gamepadHandler.setInputEnabled(!pd2PointerControls() && inputAvailable);
+        capturePd2PointerContext(true);
         winHandler.controllerDiagnostics.save();
         // Touch remains usable for inventory, login and text in every mode.
         touchpadView.setEnabled(inputAvailable);
         xServerView.getRenderer().setCursorVisible(true);
         if (pd2Gear != null) pd2Gear.setContentDescription("Quick menu. " + pd2InputModeLabel() + " mode");
+    }
+
+    /** Windows cursor feedback is authoritative for the temporary menu pointer. */
+    public void onPd2CursorFeedback(short x, short y) {
+        if (!pd2Session) return;
+        winHandler.controllerDiagnostics.recordPointerOutput("feedback");
+        runOnUiThread(() -> {
+            if (pd2MenuPointer == null || isFinishing() || isDestroyed()) return;
+            pd2MenuPointer.onCursorFeedback(x, y);
+            capturePd2PointerContext(false);
+        });
+    }
+
+    private void postPd2PointerContext() {
+        if (pd2Session) runOnUiThread(() -> capturePd2PointerContext(false));
+    }
+
+    private void capturePd2PointerContext(boolean force) {
+        if (pd2MenuPointer == null || xServerView == null) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (!force && now - pd2LastPointerContextAt < 1000) return;
+        pd2LastPointerContextAt = now;
+        JSONObject state = new JSONObject(pd2MenuPointer.captureContext());
+        try { state.put("forceRoot", xServerView.getRenderer().isForceRootCursor()); }
+        catch (org.json.JSONException ignored) { }
+        winHandler.controllerDiagnostics.recordPointerContext(state);
     }
 
     private void showPd2QuickMenu() {
@@ -927,6 +974,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 .append("\nWindows gamepad discovery replies: ")
                 .append(counts.optLong("hidDeviceReplies7950"))
                 .append("\nWindows gamepad state replies: ").append(counts.optLong("hidStateReplies7950"));
+        JSONObject pointerOutput = report.optJSONObject("pointerOutput");
+        if (pointerOutput != null) message.append("\nMenu input requests: ").append(pointerOutput.optLong("moveEvents"))
+                .append(" moves, ").append(pointerOutput.optLong("buttonEvents")).append(" button events")
+                .append("\nWindows cursor feedback: ").append(pointerOutput.optLong("feedbackEvents"));
         message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. After entering your character, choose Native controller, close the quick menu, and press a controller button.")
                 .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
         AlertDialog status = new AlertDialog.Builder(this).setTitle("Controller status")
@@ -1107,6 +1158,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 winHandler.controllerDiagnostics.recordMotion(false);
                 if (pd2InputRouter.motion(event)) {
                     winHandler.controllerDiagnostics.recordMotion(true);
+                    capturePd2PointerContext(false);
                     return true;
                 }
             }
@@ -1121,6 +1173,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         winHandler.controllerDiagnostics.recordKey(false);
         boolean handled = pd2InputRouter.keyEvent(event);
         if (handled) winHandler.controllerDiagnostics.recordKey(true);
+        capturePd2PointerContext(true);
         return handled;
     }
 

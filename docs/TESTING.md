@@ -1,17 +1,17 @@
-# 0.1.7 Save/Exit and menu-control test
+# 0.1.8 Save/Exit menu-pointer test
 
-The user accepted native controller input inside a character on 0.1.6, then reported an unresponsive main menu after Save/Exit. The retained log does not establish the timing or cause of that transition. Menu cursor is a manual navigation workaround to test, not a confirmed fix for the native menu behavior. Wine 9.2/rootfs 24, the accepted prefix, and the HID backend are preserved.
+Native input inside a character is accepted. The 0.1.7 manual Menu cursor attempt failed after Save/Exit despite correct Android focus and route ownership. The exact cause remains unconfirmed. This preview changes only temporary menu input and its visibility/diagnostics; it keeps the accepted Wine/HID runtime, prefix, import, and graphics settings.
 
 ## Focused test
 
-1. Install **0.1.7 over 0.1.6** without uninstalling or clearing storage. **Do not Prepare runtime or re-import.** Keep the accepted GameNative-arguments Glide choice, Stability, and controller notifications enabled.
-2. Press Play. Open the quick menu with **L3 + R3**, choose **Menu cursor**, and enter a temporary offline character using the controller alone.
-3. After the character loads, open the quick menu, select **Native controller**, close it, and press a controller button. Confirm movement and aiming; avoid mouse input during the native check.
-4. Save/Exit normally. If the menu does not respond natively, use **L3 + R3 → Menu cursor**. Select and re-enter the same character without touching the screen.
-5. Return to **Native controller** after loading. Check that movement/aiming resumes and no click, key, or movement is stuck. Record whether the character's saved progress is retained.
-6. Open **Controller status**, then return to the launcher and **Export support logs**. Upload the ZIP on success or failure. Describe which screen stopped responding, whether the chord opened the quick menu, whether Menu cursor worked, and whether Native worked again after re-entry.
+1. Install **0.1.8 over the existing app**. Do not uninstall, clear storage, Prepare runtime, or re-import. Keep GameNative-arguments Glide, Stability, and controller notifications enabled.
+2. Enter your offline character and verify Native controller still responds.
+3. Save/Exit. Use **L3 + R3 → Menu cursor**, then close the quick menu. A visible app pointer should appear inside the current game window.
+4. Move either stick. Report whether the pointer appears and moves, stays still, or moves outside the game. Move it over **Single Player** and press/release **A** to click. Repeat on the character selection controls.
+5. Re-enter the same character, switch to **Native controller**, close the quick menu, and press a controller button. Check saved progress and that no pointer/key is held.
+6. Export support logs on success or failure. State the first screen and action that failed, and whether touch could still operate that menu. Do not repeat runtime setup or change resolution for this comparison.
 
-Opening the quick menu pauses gameplay input; close it before checking controls. Do not change resolution or cycle through graphics profiles for this comparison. A widescreen/4:3 change is not an established cause.
+Menu pointer movement, click requests, and returned Windows cursor feedback are recorded separately. Request counts are not proof that PD2 accepted an input. Up to 16 filtered cursor/window contexts and per-mode handled-input counts help locate a failure.
 
 ## Menu cursor bindings
 
@@ -122,4 +122,4 @@ An import success is not a gameplay success. APK build/CI success is not physica
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
 
-0.1.6 local verification and [CI run 37167615176](https://github.com/Russianranger/pd2-android/actions/runs/37167615176) passed; its native in-character input was subsequently accepted by the user. Local 0.1.7 verification passed all 78 Robolectric tests (13 suites, zero failures/errors/skips), eight real-Java-router host scenarios, and 749 logging assertions, plus ARM64 assembly, signature/identity, and payload checks. Published 0.1.7 CI and the physical menu-transition test remain pending. Automated checks do not qualify the physical menu transition, complete controller bindings, saves, or online play. Full results are recorded in [Handoff](HANDOFF.md).
+0.1.6 local verification and [CI run 37167615176](https://github.com/Russianranger/pd2-android/actions/runs/37167615176) passed; its native in-character input was subsequently accepted by the user. Local 0.1.7 verification passed all 78 Robolectric tests (13 suites, zero failures/errors/skips), eight real-Java-router host scenarios, and 749 logging assertions, plus ARM64 assembly, signature/identity, and payload checks. [0.1.7 CI run 37169294205](https://github.com/Russianranger/pd2-android/actions/runs/37169294205) passed; the physical menu test failed as reported by the user. Local 0.1.8 verification passed: 86 Android 13/API 33 Robolectric tests across 13 suites, with no failures, errors or skips; 9 real-router scenarios; and 11 menu-pointer scenarios with 145 checks. These include the actual mouse/keyboard datagram layout, queued-action expiry, fresh Windows cursor synchronization, lost-feedback retry, resize/clipping, and balanced controls. ARM64 assembly and APK identity/signature checks passed: `com.pd2.thor`, 0.1.8/code 9, min SDK 26, target SDK 28, unchanged preview certificate. All 35 Android native libraries and 72 runtime assets match the verified 0.1.7 APK byte-for-byte, including the accepted HID module. APK size: 171,307,574 bytes. SHA-256: `53cec30a4ee97ef6bb30453ee694c618631572eb853c86dfcc2944e2e4d4c550`. Packaging drift rejection and correct-version artifact fixtures passed. Published 0.1.8 CI and the physical menu/re-entry test remain pending. Automated checks do not qualify the physical menu transition, complete controller bindings, saves, or online play. Full results are recorded in [Handoff](HANDOFF.md).

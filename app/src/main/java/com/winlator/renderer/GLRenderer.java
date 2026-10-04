@@ -55,6 +55,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private boolean toggleFullscreen = false;
     protected boolean viewportNeedsUpdate = true;
     private boolean cursorVisible = true;
+    private volatile boolean forceRootCursor;
     private float cursorScale = 1.0f;
     private int cursorBackColor = 0xffffff;
     private int cursorForeColor = 0x000000;
@@ -262,7 +263,8 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             short x = xServer.pointer.getClampedX();
             short y = xServer.pointer.getClampedY();
 
-            if (cursor != null) {
+            if (forceRootCursor) renderCursorDrawable(rootCursorDrawable, x, y);
+            else if (cursor != null) {
                 if (cursor.isVisible()) renderCursorDrawable(cursor.cursorImage, x - cursor.hotSpotX, y - cursor.hotSpotY);
             }
             else renderCursorDrawable(rootCursorDrawable, x, y);
@@ -357,6 +359,16 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
 
     public boolean isCursorVisible() {
         return cursorVisible;
+    }
+
+    /** Use the app cursor while a dedicated pointer control mode owns input. */
+    public void setForceRootCursor(boolean forceRootCursor) {
+        this.forceRootCursor = forceRootCursor;
+        xServerView.requestRender();
+    }
+
+    public boolean isForceRootCursor() {
+        return forceRootCursor;
     }
 
     public float getCursorScale() {
