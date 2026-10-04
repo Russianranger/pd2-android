@@ -152,6 +152,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private String screenEffectProfile;
     private boolean pd2Session;
     private boolean pd2MouseKeyboard;
+    private boolean pd2MenuCursor;
     private boolean pd2MenuOpen;
     private boolean pd2Paused;
     private boolean pd2HasWindowFocus = true;
@@ -786,17 +787,29 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
     }
 
+    private boolean pd2PointerControls() { return pd2MouseKeyboard || pd2MenuCursor; }
+
+    private String pd2InputModeName() {
+        return pd2MenuCursor ? "menu_cursor" : pd2MouseKeyboard ? "mouse_keyboard" : "native";
+    }
+
+    private String pd2InputModeLabel() {
+        return pd2MenuCursor ? "Menu cursor" : pd2MouseKeyboard ? "Mouse / keyboard layout" : "Native controller";
+    }
+
     private void updatePd2InputMode() {
         if (!pd2Session || pd2InputRouter == null) return;
         boolean inputAvailable = !pd2MenuOpen && !pd2Paused && pd2HasWindowFocus && !drawerLayout.isDrawerOpen(GravityCompat.START);
         winHandler.gamepadHandler.setStickDeadzone(pd2InputRouter.getDeadzone());
-        winHandler.gamepadHandler.setInputEnabled(!pd2MouseKeyboard && inputAvailable);
-        winHandler.controllerDiagnostics.setMode(pd2MouseKeyboard ? "mouse_keyboard" : "native", inputAvailable);
+        pd2InputRouter.setMenuControls(pd2MenuCursor);
+        winHandler.gamepadHandler.setInputEnabled(!pd2PointerControls() && inputAvailable);
+        winHandler.controllerDiagnostics.setMode(pd2InputModeName(), inputAvailable);
+        winHandler.controllerDiagnostics.setInputGate(pd2HasWindowFocus, pd2Paused, pd2MenuOpen, drawerLayout.isDrawerOpen(GravityCompat.START));
         winHandler.controllerDiagnostics.save();
-        // Touch remains usable for inventory, login and text in either mode.
+        // Touch remains usable for inventory, login and text in every mode.
         touchpadView.setEnabled(inputAvailable);
         xServerView.getRenderer().setCursorVisible(true);
-        if (pd2Gear != null) pd2Gear.setContentDescription("Quick menu. " + (pd2MouseKeyboard ? "Mouse and keyboard" : "Native controller") + " mode");
+        if (pd2Gear != null) pd2Gear.setContentDescription("Quick menu. " + pd2InputModeLabel() + " mode");
     }
 
     private void showPd2QuickMenu() {
@@ -804,16 +817,17 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         releasePd2Input();
         pd2MenuOpen = true;
         updatePd2InputMode();
-        String current = pd2MouseKeyboard ? "Mouse / keyboard" : "Native controller";
+        String current = pd2InputModeLabel();
         String[] items = {
             "Resume game",
-            "Native controller" + (!pd2MouseKeyboard ? " ✓" : ""),
+            "Native controller" + (!pd2PointerControls() ? " ✓" : ""),
+            "Menu cursor" + (pd2MenuCursor ? " ✓" : ""),
             "Mouse / keyboard layout" + (pd2MouseKeyboard ? " ✓" : ""),
             "Show keyboard",
             "Send Esc",
             "Cursor speed: " + pd2InputRouter.getCursorSpeed() + "× (tap to change)",
             "Stick deadzone: " + Math.round(pd2InputRouter.getDeadzone() * 100) + "% (tap to change)",
-            "Mouse / keyboard bindings",
+            "Controller bindings",
             "Runtime settings and logs",
             "Back to Launcher Menu",
             "Stop game",
@@ -825,38 +839,40 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 switch (which) {
                     case 1:
                     case 2:
+                    case 3:
                         releasePd2Input();
-                        pd2MouseKeyboard = which == 2;
+                        pd2MenuCursor = which == 2;
+                        pd2MouseKeyboard = which == 3;
                         preferences.edit().putBoolean("pd2_mouse_keyboard", pd2MouseKeyboard).apply();
-                        Toast.makeText(this, pd2MouseKeyboard ? "Mouse / keyboard layout" : "Native controller", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, pd2MenuCursor ? "Menu cursor · choose Native controller after entering your character" : pd2InputModeLabel(), Toast.LENGTH_SHORT).show();
                         break;
-                    case 3: new Handler(Looper.getMainLooper()).post(() -> AppUtils.showKeyboard(this)); break;
-                    case 4:
+                    case 4: new Handler(Looper.getMainLooper()).post(() -> AppUtils.showKeyboard(this)); break;
+                    case 5:
                         xServer.injectKeyPress(XKeycode.KEY_ESC);
                         xServer.injectKeyRelease(XKeycode.KEY_ESC);
                         break;
-                    case 5:
+                    case 6:
                         float speed = pd2InputRouter.getCursorSpeed();
                         speed = speed >= 2.0f ? 0.5f : speed + 0.5f;
                         pd2InputRouter.setCursorSpeed(speed);
                         preferences.edit().putFloat("pd2_cursor_speed", speed).apply();
                         Toast.makeText(this, "Cursor speed " + speed + "×", Toast.LENGTH_SHORT).show();
                         break;
-                    case 6:
+                    case 7:
                         float deadzone = pd2InputRouter.getDeadzone();
                         deadzone = deadzone >= 0.29f ? 0.10f : deadzone + 0.05f;
                         pd2InputRouter.setDeadzone(deadzone);
                         preferences.edit().putFloat("pd2_deadzone", deadzone).apply();
                         Toast.makeText(this, "Stick deadzone " + Math.round(deadzone * 100) + "%", Toast.LENGTH_SHORT).show();
                         break;
-                    case 7: new Handler(Looper.getMainLooper()).post(this::showPd2Bindings); break;
-                    case 8: new Handler(Looper.getMainLooper()).post(() -> drawerLayout.openDrawer(GravityCompat.START)); break;
-                    case 9:
+                    case 8: new Handler(Looper.getMainLooper()).post(this::showPd2Bindings); break;
+                    case 9: new Handler(Looper.getMainLooper()).post(() -> drawerLayout.openDrawer(GravityCompat.START)); break;
+                    case 10:
                         startActivity(new Intent().setClassName(getPackageName(), "com.winlator.pd2.Pd2Activity")
                                 .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
                         break;
-                    case 10: exit(); break;
-                    case 11: new Handler(Looper.getMainLooper()).post(this::showPd2ControllerStatus); break;
+                    case 11: exit(); break;
+                    case 12: new Handler(Looper.getMainLooper()).post(this::showPd2ControllerStatus); break;
                 }
             }).create();
         pd2QuickDialog.setOnDismissListener(dialog -> {
@@ -874,8 +890,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         releasePd2Input();
         pd2MenuOpen = true;
         updatePd2InputMode();
-        AlertDialog help = new AlertDialog.Builder(this).setTitle("Mouse / keyboard layout")
-                .setMessage(Pd2InputRouter.LAYOUT_HELP).setPositiveButton("Done", null).create();
+        AlertDialog help = new AlertDialog.Builder(this).setTitle(pd2MenuCursor ? "Menu cursor controls" : "Mouse / keyboard layout")
+                .setMessage(pd2MenuCursor ? Pd2InputRouter.MENU_HELP : Pd2InputRouter.LAYOUT_HELP).setPositiveButton("Done", null).create();
         help.setOnDismissListener(dialog -> { pd2MenuOpen = false; updatePd2InputMode(); });
         help.show();
         Pd2ControllerDialogs.enable(help);
@@ -887,7 +903,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         updatePd2InputMode();
         JSONObject report = winHandler.controllerDiagnostics.snapshot();
         StringBuilder message = new StringBuilder("Layout: ")
-                .append(pd2MouseKeyboard ? "Mouse / keyboard" : "Native controller")
+                .append(pd2InputModeLabel())
                 .append("\nController notifications: ").append(Pd2ControllerRuntime.enabled(this) ? "Enabled" : "Disabled")
                 .append("\n\nDetected controllers:");
         JSONArray devices = report.optJSONArray("devices");
@@ -911,7 +927,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 .append("\nWindows gamepad discovery replies: ")
                 .append(counts.optLong("hidDeviceReplies7950"))
                 .append("\nWindows gamepad state replies: ").append(counts.optLong("hidStateReplies7950"));
-        message.append("\n\nInput pauses while this menu is open. Close it, enter a single-player game using touch if needed, then press a controller button. PD2 switches back to mouse controls when you move or click the mouse.")
+        message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. After entering your character, choose Native controller, close the quick menu, and press a controller button.")
                 .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
         AlertDialog status = new AlertDialog.Builder(this).setTitle("Controller status")
                 .setMessage(message.toString()).setPositiveButton("Done", null).create();
@@ -1087,12 +1103,25 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     public boolean dispatchGenericMotionEvent(MotionEvent event) {
         if (pd2Session && pd2InputRouter != null) {
             if (pd2MenuOpen || !pd2HasWindowFocus || pd2Paused || drawerLayout.isDrawerOpen(GravityCompat.START)) return super.dispatchGenericMotionEvent(event);
-            if (pd2MouseKeyboard && pd2InputRouter.motion(event)) return true;
-            if (!pd2MouseKeyboard && winHandler.onGenericMotionEvent(event)) return true;
+            if (pd2PointerControls() && ExternalController.isJoystickDevice(event)) {
+                winHandler.controllerDiagnostics.recordMotion(false);
+                if (pd2InputRouter.motion(event)) {
+                    winHandler.controllerDiagnostics.recordMotion(true);
+                    return true;
+                }
+            }
+            if (!pd2PointerControls() && winHandler.onGenericMotionEvent(event)) return true;
             if (touchpadView.onExternalMouseEvent(event)) return true;
             return super.dispatchGenericMotionEvent(event);
         }
         return !winHandler.onGenericMotionEvent(event) && !touchpadView.onExternalMouseEvent(event) && super.dispatchGenericMotionEvent(event);
+    }
+
+    private boolean routePd2PointerKey(KeyEvent event) {
+        winHandler.controllerDiagnostics.recordKey(false);
+        boolean handled = pd2InputRouter.keyEvent(event);
+        if (handled) winHandler.controllerDiagnostics.recordKey(true);
+        return handled;
     }
 
     @Override
@@ -1113,14 +1142,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                         showPd2QuickMenu();
                     } else if (!down && deferred && !pd2ChordConsumed && !pd2MenuOpen && pd2HasWindowFocus && !pd2Paused && !drawerLayout.isDrawerOpen(GravityCompat.START)) {
                         KeyEvent press = KeyEvent.changeAction(event, KeyEvent.ACTION_DOWN);
-                        if (pd2MouseKeyboard) { pd2InputRouter.keyEvent(press); pd2InputRouter.keyEvent(event); }
+                        if (pd2PointerControls()) { routePd2PointerKey(press); routePd2PointerKey(event); }
                         else { winHandler.onKeyEvent(press); winHandler.onKeyEvent(event); }
                     }
                     if (!pd2LeftThumbDown && !pd2RightThumbDown) pd2ChordConsumed = false;
                     return true;
                 }
                 if (pd2MenuOpen || !pd2HasWindowFocus || pd2Paused || drawerLayout.isDrawerOpen(GravityCompat.START)) return super.dispatchKeyEvent(event);
-                if (pd2MouseKeyboard) return pd2InputRouter.keyEvent(event);
+                if (pd2PointerControls()) return routePd2PointerKey(event);
                 if (winHandler.onKeyEvent(event)) return true;
                 return true;
             }

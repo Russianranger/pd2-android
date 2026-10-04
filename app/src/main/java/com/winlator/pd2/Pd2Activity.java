@@ -330,6 +330,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("rootfsVersion", RootFS.find(this).getVersion())
                 .put("renderer", preferences.getString("pd2_renderer", "turnip,zink"))
                 .put("inputMode", preferences.getBoolean("pd2_mouse_keyboard", false) ? "mouse_keyboard" : "native")
+                .put("inputModeScope", "Saved gameplay preference; current session mode and transitions are in controller.json")
                 .put("controllerRuntime", Pd2ControllerRuntime.status(this))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
                 .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")

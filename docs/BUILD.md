@@ -53,7 +53,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.6-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.7-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -99,7 +99,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum; the controller notifications preview tag is `v0.1.6`.
+GitHub prerelease with the APK and checksum; the menu-control preview tag is `v0.1.7`.
 
 ## Startup verification boundary
 
@@ -157,16 +157,26 @@ was not validated. Final ARM64 assembly/signature/version checks passed. All 35
 Android native libraries and 70 existing assets match 0.1.5; only the controller
 backend/manifest are added, with the final module verified inside the APK.
 Version 0.1.6/code 7 retains the same package/certificate, min SDK 26, and target
-SDK 28. Published 0.1.6 CI and the physical test remain pending.
+SDK 28. [Published 0.1.6 CI run 37167615176](https://github.com/Russianranger/pd2-android/actions/runs/37167615176) succeeded. The user subsequently accepted native input inside a character, with a menu failure after Save/Exit.
 
-Install 0.1.6 over 0.1.5 with the same signing key/application ID to retain
+For 0.1.7, all 78 Robolectric tests across 13 suites passed with zero failures,
+errors, or skips. Eight real-Java-router host scenarios and 749 logging assertions
+passed. ARM64 assembly and identity/signature checks passed as `com.pd2.thor`,
+0.1.7/code 8, min SDK 26, target SDK 28, with the same preview certificate.
+All 35 Android native libraries and 70 baseline assets match the verified 0.1.5
+APK byte-for-byte; both custom controller assets match tracked 0.1.6 source.
+The native module is unchanged. APK size is 171,296,970 bytes; SHA-256:
+`d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
+Published 0.1.7 CI and the physical Menu cursor/re-entry test remain pending.
+
+Install 0.1.7 over 0.1.6 with the same signing key/application ID to retain
 imported files. The targeted controller update reuses rootfs version 24 and the current
 `wine-9.2-pd2-1` managed prefix; **no Prepare runtime or re-import is needed**.
 The backend installs automatically on Play. To restore the original, select
 **Launch settings → Controller → Controller notifications disabled**, force-stop
 the app, reopen, and Play.
 A first installation or an upgrade from the older Wine 10 baseline still needs
-runtime preparation. The controller retest and remaining qualification sequence
+runtime preparation. The menu-transition test and remaining qualification sequence
 are in [Testing](TESTING.md).
 
 Preview certificate SHA-256: `A6:12:97:BE:F1:BE:26:52:B5:3B:76:37:30:27:5E:1F:0E:09:75:22:22:94:60:2E:D8:FF:A5:F8:14:7D:DB:1E`.

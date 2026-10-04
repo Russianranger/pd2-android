@@ -13,7 +13,7 @@ import com.winlator.xserver.XServer;
 import java.util.HashMap;
 import java.util.Map;
 
-/** The fallback layout only. Native mode continues through Wine's gamepad driver. */
+/** Mouse/keyboard and temporary menu layouts. Native mode uses Wine's gamepad driver. */
 public final class Pd2InputRouter {
     private final XServer xServer;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -21,6 +21,7 @@ public final class Pd2InputRouter {
     private final Map<String, Pointer.Button> heldButtons = new HashMap<>();
     private float mouseX, mouseY, remainderX, remainderY, cursorSpeed = 1.0f, deadzone = 0.18f;
     private boolean mouseScheduled;
+    private boolean menuControls;
     private final Runnable moveMouse = new Runnable() {
         @Override public void run() {
             mouseScheduled = false;
@@ -37,6 +38,13 @@ public final class Pd2InputRouter {
     };
 
     public Pd2InputRouter(XServer xServer) { this.xServer = xServer; }
+
+    /** The Activity owns routing; this only selects the layout when it forwards an event here. */
+    public void setMenuControls(boolean enabled) {
+        if (menuControls == enabled) return;
+        releaseAll();
+        menuControls = enabled;
+    }
 
     public void setCursorSpeed(float value) { cursorSpeed = Math.max(0.25f, Math.min(3.0f, value)); }
     public float getCursorSpeed() { return cursorSpeed; }
@@ -80,15 +88,28 @@ public final class Pd2InputRouter {
     public boolean motion(MotionEvent event) {
         if (!ExternalController.isJoystickDevice(event)) return false;
         String device = event.getDeviceId() + ":";
-        directions(device + "lx", axis(event, MotionEvent.AXIS_X), XKeycode.KEY_A, XKeycode.KEY_D);
-        directions(device + "ly", axis(event, MotionEvent.AXIS_Y), XKeycode.KEY_W, XKeycode.KEY_S);
+        float leftX = axis(event, MotionEvent.AXIS_X);
+        float leftY = axis(event, MotionEvent.AXIS_Y);
+        if (!menuControls) {
+            directions(device + "lx", leftX, XKeycode.KEY_A, XKeycode.KEY_D);
+            directions(device + "ly", leftY, XKeycode.KEY_W, XKeycode.KEY_S);
+        }
         int rightX = event.getDevice().getMotionRange(MotionEvent.AXIS_Z, event.getSource()) != null ? MotionEvent.AXIS_Z : MotionEvent.AXIS_RX;
         int rightY = event.getDevice().getMotionRange(MotionEvent.AXIS_RZ, event.getSource()) != null ? MotionEvent.AXIS_RZ : MotionEvent.AXIS_RY;
         mouseX = axis(event, rightX);
         mouseY = axis(event, rightY);
+        if (menuControls && mouseX == 0 && mouseY == 0) {
+            mouseX = leftX;
+            mouseY = leftY;
+        }
         if (!mouseScheduled && (mouseX != 0 || mouseY != 0)) {
             mouseScheduled = true;
             handler.post(moveMouse);
+        }
+        if (menuControls) {
+            directions(device + "hatx", event.getAxisValue(MotionEvent.AXIS_HAT_X), XKeycode.KEY_LEFT, XKeycode.KEY_RIGHT);
+            directions(device + "haty", event.getAxisValue(MotionEvent.AXIS_HAT_Y), XKeycode.KEY_UP, XKeycode.KEY_DOWN);
+            return true;
         }
         float lt = Math.max(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE));
         float rt = Math.max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS));
@@ -105,6 +126,23 @@ public final class Pd2InputRouter {
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
         String source = event.getDeviceId() + ":key" + event.getKeyCode();
         XKeycode keycode;
+        if (menuControls) {
+            switch (event.getKeyCode()) {
+                case KeyEvent.KEYCODE_BUTTON_A: button(source, Pointer.Button.BUTTON_LEFT, down); return true;
+                case KeyEvent.KEYCODE_BUTTON_B:
+                case KeyEvent.KEYCODE_BUTTON_SELECT: keycode = XKeycode.KEY_ESC; break;
+                case KeyEvent.KEYCODE_BUTTON_START:
+                case KeyEvent.KEYCODE_BUTTON_THUMBR: keycode = XKeycode.KEY_ENTER; break;
+                case KeyEvent.KEYCODE_BUTTON_THUMBL: keycode = XKeycode.KEY_TAB; break;
+                case KeyEvent.KEYCODE_DPAD_UP: keycode = XKeycode.KEY_UP; break;
+                case KeyEvent.KEYCODE_DPAD_RIGHT: keycode = XKeycode.KEY_RIGHT; break;
+                case KeyEvent.KEYCODE_DPAD_DOWN: keycode = XKeycode.KEY_DOWN; break;
+                case KeyEvent.KEYCODE_DPAD_LEFT: keycode = XKeycode.KEY_LEFT; break;
+                default: return true;
+            }
+            key(source, keycode, down);
+            return true;
+        }
         switch (event.getKeyCode()) {
             case KeyEvent.KEYCODE_BUTTON_A: button(source, Pointer.Button.BUTTON_LEFT, down); return true;
             case KeyEvent.KEYCODE_BUTTON_B: button(source, Pointer.Button.BUTTON_RIGHT, down); return true;
@@ -137,6 +175,8 @@ public final class Pd2InputRouter {
         handler.removeCallbacks(moveMouse);
         mouseScheduled = false;
     }
+
+    public static final String MENU_HELP = "Either stick: mouse cursor (right stick takes priority)\nA: left click\nB / Select: Esc (back)\nStart / R3: Enter (confirm)\nL3: Tab\nD-pad: arrow keys\nL3 + R3: quick menu";
 
     public static final String LAYOUT_HELP = "Left stick: WASD (enable PD2 WASD movement)\nRight stick: mouse cursor\nA / B: left / right click\nX / Y: Shift / Alt\nLB / RB: F1 / F2\nLT / RT: 1 / 2\nD-pad up / right / down / left: F3 / F4 / F5 / F6\nSelect: Esc · Start: I\nL3: Tab · R3: Enter (tap on release)\nL3 + R3: quick menu\n\nNative controller mode uses PD2's own gamepad bindings. This fallback layout is fixed for the preview; advanced runtime profiles do not replace it.";
 }

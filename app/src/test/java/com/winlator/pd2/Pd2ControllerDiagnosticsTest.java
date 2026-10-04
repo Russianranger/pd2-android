@@ -32,6 +32,48 @@ import static org.junit.Assert.*;
 public final class Pd2ControllerDiagnosticsTest {
     @Before public void clearDevices() { InputDevices.devices.clear(); }
 
+    @Test public void transitionsRetainMenuOwnershipAndLatestGatesWithinTheReportBound() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        diagnostics.setInputGate(true, false, false, false);
+        for (int i = 0; i < 80; i++) diagnostics.setMode(i % 2 == 0 ? "menu_cursor" : "native", true);
+        diagnostics.setMode("menu_cursor", false);
+        diagnostics.setInputGate(false, true, true, false);
+        JSONObject report = diagnostics.snapshot();
+        assertEquals("menu_cursor", report.getString("mode"));
+        assertEquals(32, report.getJSONArray("recentTransitions").length());
+        JSONObject latest = report.getJSONArray("recentTransitions").getJSONObject(31);
+        assertEquals("gate", latest.getString("event"));
+        assertEquals("menu_cursor", latest.getString("mode"));
+        assertFalse(latest.getBoolean("windowFocus"));
+        assertTrue(latest.getBoolean("paused"));
+        assertTrue(latest.getBoolean("quickMenu"));
+        assertFalse(latest.getBoolean("drawer"));
+        assertTrue(latest.getLong("at") > 0);
+        assertTrue(report.toString().getBytes(StandardCharsets.UTF_8).length < Pd2ControllerDiagnostics.MAX_REPORT_BYTES);
+        latest.put("mode", "tampered");
+        assertEquals("menu_cursor", diagnostics.snapshot().getJSONArray("recentTransitions").getJSONObject(31).getString("mode"));
+    }
+
+    @Test public void eventTimesDistinguishHandledInputAndSuccessfulBridgeReplies() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        diagnostics.recordMotion(false);
+        diagnostics.recordKey(false);
+        diagnostics.recordReply((byte)9, 7950, false);
+        JSONObject before = diagnostics.snapshot().getJSONObject("lastEvents");
+        assertEquals(0, before.getLong("handledMotionAt"));
+        assertEquals(0, before.getLong("handledKeyAt"));
+        assertEquals(0, before.getLong("hidStateReplyAt"));
+        diagnostics.recordMotion(true);
+        diagnostics.recordKey(true);
+        diagnostics.recordReply((byte)9, 7950, true);
+        diagnostics.recordReply((byte)9, 7949, true);
+        JSONObject after = diagnostics.snapshot().getJSONObject("lastEvents");
+        for (String name : new String[]{"handledMotionAt", "handledKeyAt", "hidStateReplyAt", "xinputStateReplyAt"})
+            assertTrue(after.getLong(name) > 0);
+        assertFalse(after.toString().contains("keyCode"));
+        assertFalse(after.toString().contains("axisValue"));
+    }
+
     @Test public void unattachedActivityCanConstructSnapshotAndSaveBeforeBaseContextExists() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(new Activity());
         diagnostics.setLaunchId("not-yet-attached");

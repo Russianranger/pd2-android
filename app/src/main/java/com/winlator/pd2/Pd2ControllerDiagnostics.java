@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.ArrayDeque;
 import java.util.UUID;
 
 /** Device capabilities and aggregate bridge counts, never key presses or axis values. */
@@ -39,6 +40,9 @@ public final class Pd2ControllerDiagnostics {
     private long motionEvents, handledMotionEvents, keyEvents, handledKeyEvents;
     private long legacyXInputDiscovery, legacyDInputDiscovery, notifySubscriptions;
     private long hidDiscoveryRequests, hidDeviceReplies, hidStateReplies;
+    private long lastHandledMotionAt, lastHandledKeyAt, lastHidReplyAt, lastXInputReplyAt;
+    private boolean gateKnown, windowFocus, paused, quickMenu, drawer;
+    private final ArrayDeque<JSONObject> recentTransitions = new ArrayDeque<>();
 
     public Pd2ControllerDiagnostics(Context context) {
         // WinHandler is an Activity field initialized before attachBaseContext.
@@ -55,8 +59,32 @@ public final class Pd2ControllerDiagnostics {
     }
 
     public synchronized void setMode(String mode, boolean inputAvailable) {
-        this.mode = "mouse_keyboard".equals(mode) ? "mouse_keyboard" : "native";
+        String selected = "menu_cursor".equals(mode) ? "menu_cursor" : "mouse_keyboard".equals(mode) ? "mouse_keyboard" : "native";
+        boolean changed = !this.mode.equals(selected) || this.inputAvailable != inputAvailable;
+        this.mode = selected;
         this.inputAvailable = inputAvailable;
+        if (changed || recentTransitions.isEmpty()) transition("mode");
+    }
+
+    public synchronized void setInputGate(boolean focus, boolean paused, boolean quickMenu, boolean drawer) {
+        boolean changed = !gateKnown || windowFocus != focus || this.paused != paused
+                || this.quickMenu != quickMenu || this.drawer != drawer;
+        gateKnown = true;
+        windowFocus = focus;
+        this.paused = paused;
+        this.quickMenu = quickMenu;
+        this.drawer = drawer;
+        if (changed) transition("gate");
+    }
+
+    private void transition(String event) {
+        try {
+            if (recentTransitions.size() == 32) recentTransitions.removeFirst();
+            recentTransitions.addLast(new JSONObject().put("at", System.currentTimeMillis()).put("event", event)
+                    .put("mode", mode).put("inputAvailable", inputAvailable).put("gateKnown", gateKnown)
+                    .put("windowFocus", windowFocus).put("paused", paused).put("quickMenu", quickMenu).put("drawer", drawer));
+        }
+        catch (JSONException ignored) { }
     }
 
     public synchronized void setLaunchId(String value) {
@@ -96,16 +124,18 @@ public final class Pd2ControllerDiagnostics {
         else {
             stateReplies = increment(stateReplies);
             if (port == 7950) hidStateReplies = increment(hidStateReplies);
+            if (port == 7950) lastHidReplyAt = System.currentTimeMillis();
+            else if (port == 7949) lastXInputReplyAt = System.currentTimeMillis();
         }
     }
 
     public synchronized void recordMotion(boolean handled) {
-        if (handled) handledMotionEvents = increment(handledMotionEvents);
+        if (handled) { handledMotionEvents = increment(handledMotionEvents); lastHandledMotionAt = System.currentTimeMillis(); }
         else motionEvents = increment(motionEvents);
     }
 
     public synchronized void recordKey(boolean handled) {
-        if (handled) handledKeyEvents = increment(handledKeyEvents);
+        if (handled) { handledKeyEvents = increment(handledKeyEvents); lastHandledKeyAt = System.currentTimeMillis(); }
         else keyEvents = increment(keyEvents);
     }
 
@@ -114,10 +144,18 @@ public final class Pd2ControllerDiagnostics {
         JSONObject report = new JSONObject();
         try {
             synchronized (this) {
+                JSONArray history = new JSONArray();
+                for (JSONObject entry : recentTransitions) history.put(new JSONObject(entry.toString()));
                 report.put("sessionId", sessionId).put("launchId", launchId).put("createdAt", createdAt)
                         .put("capturedAt", System.currentTimeMillis())
-                        .put("scope", "Android input capabilities and aggregate counters; no pressed keys or axis values")
+                        .put("scope", "Android input capabilities, counters, mode history and event times; no pressed keys or axis values")
                         .put("mode", mode).put("inputAvailable", inputAvailable)
+                        .put("recentTransitions", history)
+                        .put("inputGate", new JSONObject().put("known", gateKnown).put("windowFocus", windowFocus)
+                                .put("paused", paused).put("quickMenu", quickMenu).put("drawer", drawer))
+                        .put("lastEvents", new JSONObject().put("handledMotionAt", lastHandledMotionAt)
+                                .put("handledKeyAt", lastHandledKeyAt).put("hidStateReplyAt", lastHidReplyAt)
+                                .put("xinputStateReplyAt", lastXInputReplyAt))
                         .put("nativeBridge", "legacy_xinput_7949_and_hid_7950")
                         .put("bridgeRevision", "java-hid-7950-v1")
                         .put("nativeInputEnabled", nativeInputEnabled)

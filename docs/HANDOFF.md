@@ -8,9 +8,19 @@ The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current implementation is **0.1.6, a controller notifications preview**, version code 7. Title startup remains accepted on the Thor. The latest 0.1.5 bundle confirms that Android accepts the Xbox controller, handles its input, and sends legacy XInput replies; native PD2 activation still failed. The Wine 9 HID notification producer is now added as a targeted comparison. The source/log evidence supports that missing path, but its device result and the full failure mechanism remain unqualified.
+The current implementation is **0.1.7, a menu-control and transition-diagnostics preview**, version code 8. The user accepted native controller input inside a character on 0.1.6, but reported an unresponsive main menu after Save/Exit. The complete twin-stick/button layout, save persistence/re-entry, and session transitions remain unqualified. The retained log supports continued bridge activity, but its old size cap hides the later transition; it does not establish a controller disconnect or a widescreen/4:3 cause.
 
-The next test installs 0.1.6 over 0.1.5 and reuses the accepted Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep the accepted GameNative-arguments Glide profile, Stability, and **Controller notifications enabled (default)**. Enter a temporary offline character using fallback if needed, select Native, close the menu, press a controller button, and test both sticks without mouse input. Inspect Controller status and export after the attempt. If startup regresses, export first, disable notifications under **Launch settings → Controller**, force-stop/reopen, and Play to restore the original backend.
+Install over 0.1.6 and reuse the accepted Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep the accepted GameNative-arguments Glide profile, Stability, and controller notifications enabled. Test **Save/Exit → Menu cursor → re-enter character → Native controller** without touching the screen, then export logs on success or failure.
+
+## 0.1.7 scope
+
+- Add temporary, manually selected **Menu cursor**: either stick moves the pointer (right priority), A clicks, B/Select Esc, Start/R3 Enter, L3 Tab, D-pad arrows. Native forwarding and the full Mouse / keyboard layout remain separate. Return to Native after entering the character; menu mode is not persisted for the next launch.
+- Release held inputs on route changes and pause forwarding while the quick menu/fallback dialogs are open. No automatic menu detection, resolution change, or imported DLL patch is introduced.
+- Continue live recording after the old cap: compact at 8 MiB, keeping the first approximately 512 KiB and latest 4 MiB under a shared capture lock. Export/archive snapshots remain at most 2 MiB each, with startup/tail sections, capture metadata, and omission markers.
+- Remove per-report HID tracing while retaining XInput/raw-input diagnostics. Add up to 32 recent mode/input-gate transitions with timestamps, current focus/pause/menu/drawer gates, and last handled input/reply times. Count pointer-routed input too; `support.json` identifies its input mode as a saved preference, while `controller.json` describes the current session.
+- Preserve Wine 9.2, `wine9-hid-1`, rootfs 24, prefix `wine-9.2-pd2-1`, graphics configuration, imported files/saves, and signing identity.
+
+Final local tests, ARM64 assembly, identity/signature, and payload checks passed. Published 0.1.7 CI and the physical Menu cursor/re-entry result remain pending. See the [menu-transition evidence](evidence/2026-10-04-menu-transition.md).
 
 ## 0.1.6 HID notification scope
 
@@ -20,7 +30,7 @@ The next test installs 0.1.6 over 0.1.5 and reuses the accepted Wine 9.2/rootfs 
 - Preserve Wine 9.2, rootfs 24, prefix revision `wine-9.2-pd2-1`, imported PD2 files/saves, and application/signing identity. The change replaces only Wine's Unix controller backend; no PD2 DLL patch or prefix migration is performed.
 - Record `nativeBridge=legacy_xinput_7949_and_hid_7950`, `bridgeRevision=java-hid-7950-v1`, separate HID discovery/device/state counters, and backend install/enable/revision status.
 
-Local Java/native/source checks and final ARM64 APK verification passed. The Thor controller test and published 0.1.6 CI remain pending. See the [latest controller evidence](evidence/2026-10-04-controller-rawinput.md).
+Local Java/native/source checks and final ARM64 APK verification passed. [0.1.6 CI run 37167615176](https://github.com/Russianranger/pd2-android/actions/runs/37167615176) succeeded. The user subsequently accepted native input inside a character; the [preceding evidence](evidence/2026-10-04-controller-rawinput.md) records the 0.1.5 failure.
 
 ## 0.1.5 device evidence
 
@@ -183,11 +193,20 @@ The completed local 0.1.6 checks are:
 - All 35 packaged Android native libraries and 70 existing assets match 0.1.5 byte-for-byte. Only the controller backend and manifest assets are added; the final module hash was verified inside the APK.
 - APK size: 171,307,488 bytes. SHA-256: `21a5b1095ab254a7f4d5cf60ef9e6364b848fc604bbec58838226c510f796f8b`.
 
-Published 0.1.6 CI and physical native controller activation remain pending. No complete Wine/HID/PD2 integration success is claimed from the host checks.
+Published 0.1.6 CI run 37167615176 succeeded. Native input inside a character was subsequently accepted by user report. No complete Wine/HID/PD2 integration success is claimed from the host checks alone.
 
-Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import and subsequently title startup on 0.1.4. The original Android crash, earlier Wine 10/Fog failure mechanism, and current controller-detection cause remain unconfirmed.
+The completed local 0.1.7 checks are:
 
-The next physical step tests HID-backed controller activation on the accepted Wine 9.2 setup. Runtime preparation and import are not repeated:
+- All 78 Robolectric tests across 13 suites passed with zero failures, errors, or skips. Eight real-Java-router host scenarios and 749 logging assertions passed.
+- ARM64 assembly, identity, and signature checks passed: `com.pd2.thor`, 0.1.7/code 8, min SDK 26, target SDK 28, with the unchanged preview certificate.
+- All 35 packaged Android native libraries and 70 baseline assets match the verified 0.1.5 APK byte-for-byte. Both custom controller assets match tracked 0.1.6 source; the `wine9-hid-1` module retains SHA-256 `541523c1e21059a386cfd60f6f18354c05b28ca2457faf867221911b545c4b0e`. No native module change is included.
+- APK size: 171,296,970 bytes. SHA-256: `d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
+
+Published 0.1.7 CI and the physical menu-transition test remain pending.
+
+Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Save/Exit menu failure cause remain unconfirmed.
+
+The next physical step tests menu navigation and re-entry on the accepted Wine 9.2/HID setup. Runtime preparation and import are not repeated:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
@@ -196,13 +215,14 @@ The next physical step tests HID-backed controller activation on the accepted Wi
 | Installation import | Accepted on 0.1.1 | User report, import-completed log, and structural validation details |
 | Client launch | Title startup accepted on 0.1.4 | User report; Wine 9.2/current prefix confirmed and Fog 10019 returns |
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
-| Native controller | Activation absent through 0.1.5; 0.1.6 retest pending | Android input/legacy replies confirmed; test HID notifications and both sticks in-game |
+| Native controller | In-character input accepted on 0.1.6 | User report; detailed independent aiming/buttons/triggers still pending |
+| Menu transition | Unresponsive after Save/Exit on 0.1.6 | Test manual Menu cursor, re-entry, and return to Native; cause unconfirmed |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
 | Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
 | Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |
 | Online play | Pending | User authenticates and enters a normal PD2 online game |
 
-The immediate qualification step is native controller activation inside an offline game. Keyboard emulation working is not evidence that native movement/aiming works. Rendering/audio, controller, lifecycle, save, and online gates remain pending beyond accepted title startup.
+The immediate qualification step is Save/Exit menu control and character re-entry using Menu cursor, then returning to Native. Specific controller actions, rendering/audio, lifecycle, saved progress, and online gates remain pending beyond the accepted in-character input.
 
 ## Next work after the first device test
 

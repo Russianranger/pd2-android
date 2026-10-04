@@ -64,20 +64,19 @@ public final class Pd2LaunchDiagnosticsTest {
         assertEquals("1", new EnvVars(Pd2LaunchPolicy.environment("-ddraw -w", false)).get("BOX64_DYNAREC"));
     }
 
-    @Test public void liveLogCapPreservesFirstExceptionAndMarksOmittedOutput() throws Exception {
-        ByteArrayOutputStream destination = new ByteArrayOutputStream();
+    @Test public void liveLogRotationPreservesStartupAndContinuesCapturingLatestEvents() throws Exception {
+        File destination = File.createTempFile("pd2-rolling-log-", ".log"); destination.deleteOnExit();
         try (Pd2LogOutputStream log = new Pd2LogOutputStream(destination)) {
             log.write("First exception: fixture\n".getBytes(StandardCharsets.UTF_8));
             byte[] chunk = new byte[64 * 1024]; Arrays.fill(chunk, (byte)'x');
             for (int i = 0; i < 200; i++) log.write(chunk);
-            int cappedBytes = destination.size();
-            log.write("Must not grow".getBytes(StandardCharsets.UTF_8));
-            assertEquals(cappedBytes, destination.size());
+            log.write("Latest event: Save and Exit\n".getBytes(StandardCharsets.UTF_8));
         }
-        assertTrue(destination.size() <= Pd2LogOutputStream.MAX_BYTES);
-        String output = destination.toString(StandardCharsets.UTF_8.name());
+        assertTrue(destination.length() <= Pd2LogOutputStream.MAX_BYTES);
+        String output = read(destination);
         assertTrue(output.startsWith("First exception: fixture\n"));
-        assertTrue(output.endsWith("[PD2 runtime log reached 8 MiB; further output omitted]\n"));
+        assertTrue(output.contains("runtime log rotated"));
+        assertTrue(output.endsWith("Latest event: Save and Exit\n"));
     }
 
     @Test public void pe32HeaderReportsPreferredModuleAddressWithoutReadingContents() throws Exception {

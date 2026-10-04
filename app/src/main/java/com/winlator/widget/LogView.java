@@ -73,13 +73,14 @@ public class LogView extends View {
         }
 
         File logFile = new File(logPath);
-        FileUtils.delete(logFile);
+        if (!pd2) FileUtils.delete(logFile);
 
         if (saveToFile) {
             PrintStream printStream = null;
             try {
-                OutputStream output = new BufferedOutputStream(new FileOutputStream(logFile), StreamUtils.BUFFER_SIZE);
-                printStream = new PrintStream(pd2 ? new Pd2LogOutputStream(output) : output);
+                OutputStream output = pd2 ? new Pd2LogOutputStream(logFile)
+                        : new BufferedOutputStream(new FileOutputStream(logFile), StreamUtils.BUFFER_SIZE);
+                printStream = new PrintStream(output);
             }
             catch (IOException e) {}
             this.printStream = printStream;

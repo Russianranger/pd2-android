@@ -22,7 +22,8 @@ public final class Pd2SessionLog {
     private static final byte[] TRUNCATED =
             "\n\n[Runtime log truncated: middle omitted; first and last sections preserved]\n\n"
                     .getBytes(StandardCharsets.UTF_8);
-    private static final Object LOCK = new Object();
+    // Shared with the live file-backed logger: a snapshot never reads a partial rotation.
+    static final Object LOCK = new Object();
 
     private Pd2SessionLog() {}
 
@@ -68,24 +69,60 @@ public final class Pd2SessionLog {
      * Leaves the caller's stream open and does not create archives or change the source file.
      */
     public static void writeSnapshot(File source, OutputStream output) throws IOException {
-        try (RandomAccessFile input = new RandomAccessFile(source, "r")) {
-            long originalBytes = input.length();
-            byte[] header = ("PD2 Android runtime log snapshot\nCaptured: " + new Date()
-                    + "\nOriginal modification time: " + new Date(source.lastModified())
-                    + "\nOriginal log bytes: " + originalBytes + "\n\n").getBytes(StandardCharsets.UTF_8);
-            output.write(header);
-            int budget = MAX_ARCHIVE_BYTES - header.length;
-            if (originalBytes <= budget) copy(input, output, originalBytes);
-            else {
-                int contentBudget = budget - TRUNCATED.length;
-                int head = contentBudget / 2;
-                int tail = contentBudget - head;
-                copy(input, output, head);
-                output.write(TRUNCATED);
-                input.seek(originalBytes - tail);
-                copy(input, output, tail);
+        synchronized (LOCK) {
+            try (RandomAccessFile input = new RandomAccessFile(source, "r")) {
+                long originalBytes = input.length();
+                byte[] header = ("PD2 Android runtime log snapshot\nCaptured: " + new Date()
+                        + "\nOriginal modification time: " + new Date(source.lastModified())
+                        + "\nOriginal log bytes: " + originalBytes + "\n\n").getBytes(StandardCharsets.UTF_8);
+                output.write(header);
+                int budget = MAX_ARCHIVE_BYTES - header.length;
+                if (originalBytes <= budget) {
+                    long end = utf8End(input, 0, originalBytes);
+                    input.seek(0);
+                    copy(input, output, end);
+                }
+                else {
+                    int contentBudget = budget - TRUNCATED.length;
+                    int head = contentBudget / 2;
+                    int tail = contentBudget - head;
+                    long headEnd = utf8End(input, 0, head);
+                    long tailStart = utf8Start(input, originalBytes - tail, originalBytes);
+                    long tailEnd = utf8End(input, tailStart, originalBytes);
+                    input.seek(0);
+                    copy(input, output, headEnd);
+                    output.write(TRUNCATED);
+                    input.seek(tailStart);
+                    copy(input, output, tailEnd - tailStart);
+                }
             }
         }
+    }
+
+    /** Avoid beginning a retained UTF-8 slice in the middle of a code point. */
+    static long utf8Start(RandomAccessFile input, long start, long end) throws IOException {
+        long boundary = start;
+        while (boundary < end && boundary < start + 3) {
+            input.seek(boundary);
+            if ((input.readUnsignedByte() & 0xc0) != 0x80) break;
+            boundary++;
+        }
+        return boundary;
+    }
+
+    /** Avoid ending a retained UTF-8 slice with a partial code point. */
+    static long utf8End(RandomAccessFile input, long start, long end) throws IOException {
+        if (end <= start) return end;
+        long lead = end - 1;
+        input.seek(lead);
+        int value = input.readUnsignedByte();
+        while ((value & 0xc0) == 0x80 && lead > start && lead > end - 4) {
+            input.seek(--lead);
+            value = input.readUnsignedByte();
+        }
+        int bytes = value >= 0xc2 && value <= 0xdf ? 2
+                : value >= 0xe0 && value <= 0xef ? 3 : value >= 0xf0 && value <= 0xf4 ? 4 : 1;
+        return lead + bytes > end ? lead : end;
     }
 
     private static void copy(RandomAccessFile input, OutputStream output, long remaining) throws IOException {

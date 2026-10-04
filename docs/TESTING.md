@@ -1,15 +1,31 @@
-# 0.1.6 controller notification test
+# 0.1.7 Save/Exit and menu-control test
 
-Title startup remains accepted. The 0.1.5 bundle confirms accepted Android controller input and legacy replies, but native PD2 activation still failed. The 0.1.6 preview adds the Wine HID notification path and matching Java producer. Its device result is unqualified; Wine 9.2/rootfs 24 and the accepted prefix are preserved.
+The user accepted native controller input inside a character on 0.1.6, then reported an unresponsive main menu after Save/Exit. The retained log does not establish the timing or cause of that transition. Menu cursor is a manual navigation workaround to test, not a confirmed fix for the native menu behavior. Wine 9.2/rootfs 24, the accepted prefix, and the HID backend are preserved.
 
-## Controller retest
+## Focused test
 
-1. Install **0.1.6 over 0.1.5** without uninstalling or clearing storage. **Reuse the accepted runtime/prefix/game files. Do not Prepare runtime or re-import.**
-2. Keep **Turnip + Zink · Glide (GameNative arguments)**, **CPU mode → Stability (default)**, and **Launch settings → Controller → Controller notifications enabled (default)**. Press Play; the verified backend installs automatically before the game starts. Do not cycle through renderers or repeat Interpreter.
-3. Use **Mouse / keyboard layout** only as needed to enter a temporary offline character. Title/menu controller navigation is unverified; check native input inside the game.
-4. Select **Native controller**, close the quick menu, and press a controller button. Check left-stick movement and independent right-stick aiming, then buttons/triggers. Avoid mouse movement/clicks while checking native input: PD2 can switch back to mouse/keyboard on mouse input.
-5. Open **Controller status** after the attempt. Record the accepted pad count and legacy/HID input/discovery/state-reply counters. Gameplay input is paused while the menu is open; close it before testing the sticks again. Counters alone do not qualify game input.
-6. Return to the launcher and **Export support logs**, then upload the ZIP whether native input worked or failed. Report whether the title appeared, whether the offline character opened, and which button/stick actions worked.
+1. Install **0.1.7 over 0.1.6** without uninstalling or clearing storage. **Do not Prepare runtime or re-import.** Keep the accepted GameNative-arguments Glide choice, Stability, and controller notifications enabled.
+2. Press Play. Open the quick menu with **L3 + R3**, choose **Menu cursor**, and enter a temporary offline character using the controller alone.
+3. After the character loads, open the quick menu, select **Native controller**, close it, and press a controller button. Confirm movement and aiming; avoid mouse input during the native check.
+4. Save/Exit normally. If the menu does not respond natively, use **L3 + R3 → Menu cursor**. Select and re-enter the same character without touching the screen.
+5. Return to **Native controller** after loading. Check that movement/aiming resumes and no click, key, or movement is stuck. Record whether the character's saved progress is retained.
+6. Open **Controller status**, then return to the launcher and **Export support logs**. Upload the ZIP on success or failure. Describe which screen stopped responding, whether the chord opened the quick menu, whether Menu cursor worked, and whether Native worked again after re-entry.
+
+Opening the quick menu pauses gameplay input; close it before checking controls. Do not change resolution or cycle through graphics profiles for this comparison. A widescreen/4:3 change is not an established cause.
+
+## Menu cursor bindings
+
+| Thor input | Menu input |
+| --- | --- |
+| Either stick | Mouse cursor; right stick takes priority |
+| A | Left click |
+| B / Select | Esc / back |
+| Start / R3 | Enter / confirm |
+| L3 | Tab |
+| D-pad | Arrow keys |
+| L3 + R3 | Quick menu |
+
+Menu cursor does not send WASD, skills, modifiers, triggers, or right click. It is temporary; choose Native after the character loads. The full Mouse / keyboard layout below remains available separately.
 
 If the client unexpectedly stops reaching the title, export that attempt first. To restore the original controller backend:
 
@@ -26,7 +42,8 @@ If the whole Android app closes:
 
 Support export retains the current runtime log and up to four archived attempts, and adds:
 
-- XInput/raw-input traces for the controller path; traces and replies do not establish that PD2 accepted input.
+- XInput/raw-input traces for the controller path, without the per-report HID trace. The live log continues recording after rotation: at 8 MiB it keeps approximately the first 512 KiB and latest 4 MiB. Export/archive snapshots remain at most 2 MiB each and keep startup/tail sections with capture metadata and omission markers.
+- Up to 32 recent controller mode/input-gate transitions with timestamps and last handled input/reply times, alongside aggregate counters. Snapshot flags describe capture time, not the whole session. `support.json` labels the saved mode preference; `controller.json` records the current session mode.
 - `controller.json` (at most 64 KiB) with Android device/bridge diagnostics for the matching launch, plus `inputMode` in `support.json`. Stale/invalid controller reports are skipped.
 - HID discovery/device/state counters on port 7950 alongside the legacy counters, plus controller backend enable/revision/install status in the launch/support records.
 - Wine/rootfs/runtime-revision identity for the replacement baseline in support and launch records.
@@ -40,7 +57,7 @@ The current runtime trace enables XInput/raw-input diagnostics instead of Fog ex
 
 Use your complete, updated **English classic Diablo II + Lord of Destruction + Project Diablo 2** installation. Preserve your working Winlator/GameNative copy and offline-save backup.
 
-Title startup is already accepted. The current step is native controller activation inside an offline game, followed by the controls/save checklist below. Do not prepare or re-import for the 0.1.6 upgrade.
+Title startup and native input inside a character are accepted by user report. The current step is Save/Exit menu navigation and re-entry, followed by the detailed controls/save checklist below. Do not prepare or re-import for the 0.1.7 upgrade.
 
 Export support information after the controller result before changing graphics settings. Further comparisons should follow diagnosis of that result.
 
@@ -105,4 +122,4 @@ An import success is not a gameplay success. APK build/CI success is not physica
 
 Support export contains diagnostics and log tails, not game files or offline-save backups.
 
-Local 0.1.6 verification passed all 76 API 33 Robolectric tests, three native controller tests, the 47 import/11 crash/26 session-log checks, input-router checks, native source/artifact/ABI checks, and final APK assembly/signature/payload checks. Published CI and the physical test remain pending. The host harness does not establish complete Wine/HID/PD2 integration or qualify activation on the Thor. Full results and accepted title startup are recorded in [Handoff](HANDOFF.md).
+0.1.6 local verification and [CI run 37167615176](https://github.com/Russianranger/pd2-android/actions/runs/37167615176) passed; its native in-character input was subsequently accepted by the user. Local 0.1.7 verification passed all 78 Robolectric tests (13 suites, zero failures/errors/skips), eight real-Java-router host scenarios, and 749 logging assertions, plus ARM64 assembly, signature/identity, and payload checks. Published 0.1.7 CI and the physical menu-transition test remain pending. Automated checks do not qualify the physical menu transition, complete controller bindings, saves, or online play. Full results are recorded in [Handoff](HANDOFF.md).
