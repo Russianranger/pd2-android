@@ -2,7 +2,7 @@
 
 The user reports that Native still fails on Save/Quit, the white pointer remains in the main menu, LT + L3 does not reliably toggle run/walk, and shoulder buttons have difficulty switching in-game menu tabs. This continues the earlier Native failure after Save/Exit and character re-entry. Initial Native gameplay and Menu cursor navigation remain accepted. The latest support bundle belongs to **0.1.10**; no physical 0.1.11 result is available.
 
-Research started at **2026-10-04 12:55:09 UTC**. The requested research window runs until **13:55:09 UTC**. Completion time and final validation will be recorded after the window ends; this note does not claim that the full hour has already elapsed.
+Research ran from **2026-10-04 12:55:09 to 13:55:36 UTC**, completing **60 minutes 27 seconds**. The work covered primary-source research, current-log analysis, focused regression reproduction, bridge corrections, and validation.
 
 ## Findings and priority
 
@@ -120,6 +120,6 @@ The useful next result is a short 0.1.11 comparison with the accepted settings: 
 
 Local verification passed **122 tests across 16 suites**, with no failures, errors or skips; all host input/import/recovery/log and runtime checks passed, including the Wine backend sanitizer checks and all 206 final runtime pins. Final ARM64 assembly, package identity, matching preview certificate/V2 signature, ZIP integrity and alignment passed. All 72 runtime assets match the verified 0.1.10 CI APK byte-for-byte. Of 35 Android native libraries, 26 match exactly, eight differ only in build IDs, and VirGL rebuild differences were statically traced to source-path strings and address/relocation adjustments; this is not physical graphics qualification. No Wine/HID binary changes are included.
 
-APK: `PD2-Android-0.1.11-preview.apk`, **174,055,860 bytes**. SHA-256: `0a307e4cde8a88312ec82f4413e76f71cf1f7d935a1597e86557081460e7a89c`. Identity: `com.pd2.thor`, 0.1.11/code 12, min SDK 26, target SDK 28, ARM64 only. Published source CI is pending; physical Save/Quit and shoulder-tab qualification remain pending.
+APK: `PD2-Android-0.1.11-preview.apk`, **174,055,860 bytes**. SHA-256: `0a307e4cde8a88312ec82f4413e76f71cf1f7d935a1597e86557081460e7a89c`. Identity: `com.pd2.thor`, 0.1.11/code 12, min SDK 26, target SDK 28, ARM64 only. [Published 0.1.11 CI run 37206816716](https://github.com/Russianranger/pd2-android/actions/runs/37206816716) passed for code commit `2f5e1a9086c3131a9de265813c636f4c57eda6c0`; physical Save/Quit and shoulder-tab qualification remain pending.
 
-Actual research-hour completion time is pending until the requested window ends.
+Research-hour completion was recorded at **13:55:36 UTC**. No physical 0.1.11 recovery result is claimed.
