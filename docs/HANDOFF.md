@@ -8,9 +8,31 @@ The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The current implementation is **0.1.8, a temporary menu-pointer recovery preview**, version code 9. The user accepted native input inside a character on 0.1.6, then rejected the 0.1.7 menu test after Save/Exit. The latest capture confirms the user selected Menu cursor and Android focus/input were restored for 9.85 seconds. RawInput/XInput continued after the apparent Save/Exit; no native device removal is recorded. No handled controller key is recorded during that menu interval. The root cause and saved re-entry remain unqualified.
+The current implementation is **0.1.9, a native foreground-recovery preview**, version code 10. The user accepted native input inside a character on 0.1.6, rejected the 0.1.7 Menu cursor after Save/Exit, then accepted Menu cursor on 0.1.8 while reporting that Native remained unresponsive after Save/Exit. No new matching 0.1.8 support bundle accompanies that report. Native title/character-menu support and recovery after in-character re-entry must be qualified separately; the root cause remains unconfirmed.
 
-Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep GameNative-arguments Glide, Stability, and controller notifications enabled. See [Testing](TESTING.md) and [new evidence](evidence/2026-10-04-menu-pointer.md).
+Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep GameNative-arguments Glide, Stability, and controller notifications enabled. See [Testing](TESTING.md) and the [foreground-recovery evidence note](evidence/2026-10-04-native-foreground.md).
+
+## 0.1.9 scope
+
+- Restore Game.exe Windows foreground focus when Native input resumes after a mode/menu/lifecycle gate, using the existing Windows helper. Coalesce map/resize events belonging to the mapped game subtree with a 75 ms delay, then request one settling restore 250 ms later. Each stage permits at most eight helper-readiness checks.
+- Resolve the current game HWND for each request. Cancel queued focus work when Native loses ownership or a newer game-window transition supersedes it. Menu cursor's existing focus request now also expires when its mode loses ownership. No pointer/key input is injected by Native recovery.
+- Add `controller.json.nativeFocusRecovery` with `requests`, `lastRequestAt`, `lastReason`, and `scope`. Reasons are `route`, `window`, and `settle`; these count queued requests, not Windows acceptance or PD2 consumption.
+- Keep the same accepted HID backend/device and input forwarding; no device replug or runtime/prefix change is introduced.
+- Retain accepted Menu cursor navigation and its pointer diagnostics. Native support in PD2's title/character menus is not established by existing evidence.
+- Add the requested fiery PD2 icon with a devilish skull, including an adaptive launcher icon. Apply a dark full-screen session theme and dark gear menu/dialog surfaces.
+- Retain Wine 9.2, `wine9-hid-1`, rootfs 24, prefix `wine-9.2-pd2-1`, graphics settings, imported PD2 files/saves, and signing identity.
+
+Local 0.1.9 verification passed:
+
+- All 93 Android 13/API 33 Robolectric tests across 14 suites passed with zero failures, errors, or skips.
+- Nine real-router scenarios, 12 menu-pointer/native-focus scenarios with 156 checks, 47 import checks, 11 crash-recovery checks, and 749 session-log checks passed.
+- All 24 runtime tests and three native-controller tests passed; 206 final dependency hashes, 49 relocated assets, and controller source/artifact/ABI checks verified.
+- ARM64 assembly completed in 1 minute 35 seconds. APK identity is `com.pd2.thor`, 0.1.9/code 10, min SDK 26, target SDK 28. V2 signature verification passed with the same preview certificate as 0.1.8; ZIP integrity and alignment passed.
+- All 72 packaged runtime assets match the verified 0.1.8 APK byte-for-byte, including the accepted Wine/HID assets.
+- Of 35 Android native libraries, 26 match byte-for-byte; eight rebuilt libraries differ only in their GNU build IDs. VirGL's rebuilt differences are string/address placement after the scratch build path changed: normalized strings and referenced targets match, without opcode/register/control-flow changes. No native source changed.
+- APK size: 174,020,117 bytes. SHA-256: `e6b1a0215b3502b3fe6fc57d915bdeb1d66b136db89720cde65162c9db5d9e16`.
+
+Published 0.1.9 CI and physical-device qualification remain pending. The physical check distinguishes Native at the title/character menus from Native gameplay after re-entry, then checks a repeated cycle and gear/launcher resume. See [0.1.9 release notes](RELEASE-0.1.9.md).
 
 ## 0.1.8 scope
 
@@ -20,7 +42,7 @@ Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no P
 - Record handled input per mode, menu output request counts/times and returned Windows cursor feedback separately, plus up to 16 filtered geometry/cursor contexts. No key codes, axis values, titles, game binaries or saves are exported in these fields.
 - Preserve the accepted Wine/HID backend and all runtime assets. Do not change aspect-ratio math or modify PD2 DLLs.
 
-Local 0.1.8 verification passed: 86 Android 13/API 33 Robolectric tests across 13 suites, with no failures, errors or skips; 9 real-router scenarios; and 11 menu-pointer scenarios with 145 checks. These include the actual mouse/keyboard datagram layout, queued-action expiry, fresh Windows cursor synchronization, lost-feedback retry, resize/clipping, and balanced controls. ARM64 assembly and APK identity/signature checks passed: `com.pd2.thor`, 0.1.8/code 9, min SDK 26, target SDK 28, unchanged preview certificate. All 35 Android native libraries and 72 runtime assets match the verified 0.1.7 APK byte-for-byte, including the accepted HID module. APK size: 171,307,574 bytes. SHA-256: `53cec30a4ee97ef6bb30453ee694c618631572eb853c86dfcc2944e2e4d4c550`. Packaging drift rejection and correct-version artifact fixtures passed. Published 0.1.8 CI and the physical menu/re-entry test remain pending. Device confirmation is required; no complete native-menu fix is claimed.
+Local 0.1.8 verification passed: 86 Android 13/API 33 Robolectric tests across 13 suites, with no failures, errors or skips; 9 real-router scenarios; and 11 menu-pointer scenarios with 145 checks. These include the actual mouse/keyboard datagram layout, queued-action expiry, fresh Windows cursor synchronization, lost-feedback retry, resize/clipping, and balanced controls. ARM64 assembly and APK identity/signature checks passed: `com.pd2.thor`, 0.1.8/code 9, min SDK 26, target SDK 28, unchanged preview certificate. All 35 Android native libraries and 72 runtime assets match the verified 0.1.7 APK byte-for-byte, including the accepted HID module. APK size: 171,307,574 bytes. SHA-256: `53cec30a4ee97ef6bb30453ee694c618631572eb853c86dfcc2944e2e4d4c550`. Packaging drift rejection and correct-version artifact fixtures passed. [Published 0.1.8 CI run 37172243169](https://github.com/Russianranger/pd2-android/actions/runs/37172243169) passed. The user subsequently accepted Menu cursor but reported that Native still did not respond after Save/Exit. This does not establish whether Native was also tested after character re-entry.
 
 ## 0.1.7 scope
 
@@ -214,9 +236,9 @@ The completed local 0.1.7 checks are:
 
 Published 0.1.7 CI run 37169294205 passed. The user rejected its physical menu test; re-entry remains unqualified.
 
-Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Save/Exit menu failure cause remain unconfirmed.
+Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Native failure after Save/Exit remain unconfirmed.
 
-The next physical step tests menu navigation and re-entry on the accepted Wine 9.2/HID setup. Runtime preparation and import are not repeated:
+The next physical step tests Native after Save/Exit and character re-entry on the accepted Wine 9.2/HID setup. Runtime preparation and import are not repeated:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
@@ -226,13 +248,14 @@ The next physical step tests menu navigation and re-entry on the accepted Wine 9
 | Client launch | Title startup accepted on 0.1.4 | User report; Wine 9.2/current prefix confirmed and Fog 10019 returns |
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
 | Native controller | In-character input accepted on 0.1.6 | User report; detailed independent aiming/buttons/triggers still pending |
-| Menu transition | Unresponsive after Save/Exit on 0.1.6 | Test manual Menu cursor, re-entry, and return to Native; cause unconfirmed |
+| Menu cursor | Accepted on 0.1.8 | User report; retain this navigation path |
+| Native after Save/Exit | Unresponsive by latest user report | Test Native title/character menus separately from gameplay after re-entry; cause unconfirmed |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
 | Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
 | Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |
 | Online play | Pending | User authenticates and enters a normal PD2 online game |
 
-The immediate qualification step is Save/Exit menu control and character re-entry using Menu cursor, then returning to Native. Specific controller actions, rendering/audio, lifecycle, saved progress, and online gates remain pending beyond the accepted in-character input.
+The immediate qualification step is Native menu input, then character re-entry using the accepted Menu cursor if necessary, followed by Native gameplay and repeated gear/launcher resume checks. Specific controller actions, rendering/audio, lifecycle, saved progress, and online gates remain pending beyond the accepted in-character input and Menu cursor.
 
 ## Next work after the first device test
 

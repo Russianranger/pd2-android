@@ -4,15 +4,15 @@ A dedicated Android launcher for a user-owned classic Diablo II: Lord of Destruc
 
 The app includes a Winlator-derived Windows runtime rather than requiring a separate Winlator or GameNative installation. It uses Wine 9.2 (Custom) from official Winlator 10.1, retaining Box64 0.4.4 and the current Android display/input and graphics components. Its application ID is `com.pd2.thor`, so it installs alongside those apps.
 
-**Status: 0.1.8 menu-pointer recovery preview.** Native controller input inside a character was accepted on 0.1.6. The user reported that the 0.1.7 Menu cursor still did not respond after Save/Exit. The new capture confirms that Menu cursor was selected with Android focus restored; it does not establish an aspect-ratio cause.
+**Status: 0.1.9 native foreground-recovery preview.** The user accepted Native controller input inside a character on 0.1.6 and Menu cursor navigation on 0.1.8. Native input still fails after Save/Exit. Native support at the title/character menus and recovery after re-entering a character need separate physical checks.
 
-This preview gives Menu cursor an app-owned visible pointer and routes its mouse/keyboard commands through the existing Windows input helper. It centers and bounds the pointer using the live game window, and records per-mode input, output requests, cursor feedback, and bounded window geometry. The accepted native HID runtime and the full Mouse / keyboard layout are preserved. Device confirmation remains required.
+This preview restores the game's Windows foreground focus when Native input resumes and after game-window transitions, using bounded, cancellable requests through the existing Windows helper. It also adds the requested fiery PD2/skull app icon and dark gear menu. The accepted Menu cursor and Wine/HID runtime are retained. Device confirmation remains required.
 
-## Next 0.1.8 check
+## Next 0.1.9 check
 
-Install 0.1.8 over the existing app without uninstalling or clearing storage. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.** Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and controller notifications enabled.
+Install 0.1.9 over the existing app without uninstalling or clearing storage. **Reuse the accepted runtime, prefix, and installation. Do not Prepare runtime or re-import.** Keep **Turnip + Zink · Glide (GameNative arguments)**, **Stability (default)**, and controller notifications enabled.
 
-Enter a character and confirm Native controller still works. Save/Exit, use **L3 + R3 → Menu cursor**, and check whether the visible pointer moves with either stick and whether **A** clicks Single Player/character controls. Re-enter the same character, select **Native controller**, and check input again. Export support logs and distinguish a missing/stationary pointer from a pointer that moves but cannot click. [Testing](docs/TESTING.md) gives the focused sequence.
+Enter a character and confirm Native controller still works, then Save/Exit and check Native at the title/character menus. If it cannot navigate there, use the accepted **L3 + R3 → Menu cursor** to re-enter the same character. After it loads, select **Native controller**, close the menu, press a controller button, and check gameplay input. Repeat once and check that controls return after opening/closing the gear and using **Back to Launcher Menu → Resume client**. Export support logs and report Native menu and in-character results separately. [Testing](docs/TESTING.md) gives the focused sequence.
 
 If the whole Android app closes, reopen it. If **PD2 Android recovery** appears, choose **Export crash details**, save/share `crash.txt`, and upload it to the chat. Java crash capture does not cover every possible process exit.
 
@@ -43,7 +43,7 @@ Private game files and saves survive APK updates using the same signing identity
 
 ## Controls and display
 
-**Native controller** forwards the physical controller through the Wine 9.2-compatible bridge. This baseline exposes one active gamepad; its XInput triggers are digital and its Wine DLL does not support rumble. PD2 remains responsible for movement, aiming, and its controller bindings. Native input inside a character is accepted by user report; independent aiming and the complete button/trigger layout still need physical checks.
+**Native controller** forwards the physical controller through the Wine 9.2-compatible bridge. This baseline exposes one active gamepad; its XInput triggers are digital and its Wine DLL does not support rumble. PD2 remains responsible for movement, aiming, and its controller bindings. Native input inside a character is accepted by user report; menu support, recovery after re-entry, independent aiming, and the complete button/trigger layout still need physical checks. Native selection and resumption now request Game.exe foreground focus; this does not establish that PD2 supports its native controller in every menu.
 
 Controller notifications are enabled by default. To restore the original Wine backend, stop the client, select **Launch settings → Controller → Controller notifications disabled**, force-stop the Android app, reopen it, and press Play. Changing this option takes effect on the next fresh game launch.
 
@@ -66,6 +66,6 @@ GameNative once your game files are imported.
 The targeted Wine 9 HID backend is built from the included source and pinned
 Wine 9 headers; [Build instructions](docs/BUILD.md) describe its artifact/ABI checks.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.8 release notes](docs/RELEASE-0.1.8.md) describe the revised menu pointer and diagnostics. Earlier release notes retain the preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.9 release notes](docs/RELEASE-0.1.9.md) describe foreground recovery and the new icon/dark menu. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.

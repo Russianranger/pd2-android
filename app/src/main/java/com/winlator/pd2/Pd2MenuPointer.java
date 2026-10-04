@@ -47,10 +47,27 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
         initializing = recenterPending = true;
         try (XLock ignored = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.INPUT_DEVICE)) {
             Bounds bounds = selectBounds();
-            if (winHandler.isInputReady())
-                winHandler.bringToFront("Game.exe", bounds.game != null ? bounds.game.getHandle() : 0);
+            if (winHandler.isInputReady()) {
+                final long epoch = generation;
+                winHandler.bringToFront("Game.exe", bounds.game != null ? bounds.game.getHandle() : 0,
+                        () -> active && generation == epoch);
+            }
             // A zero move asks the Windows helper for GetCursorPos before using any cached X position.
             sendMove(0, 0);
+        }
+    }
+
+    /** Restore only the game's foreground window; native recovery never moves or clicks the pointer. */
+    public synchronized void reacquireGameWindow(BooleanSupplier allowed) {
+        try (XLock ignored = xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
+            Bounds bounds = selectBounds();
+            winHandler.bringToFront("Game.exe", bounds.game != null ? bounds.game.getHandle() : 0, allowed);
+        }
+    }
+
+    public synchronized boolean belongsToGame(Window window) {
+        try (XLock ignored = xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
+            return gameAncestor(window) != null;
         }
     }
 

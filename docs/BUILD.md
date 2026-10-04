@@ -53,7 +53,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The output is `app/build/distributions/PD2-Android-0.1.8-preview.apk` and a
+The output is `app/build/distributions/PD2-Android-0.1.9-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -99,7 +99,7 @@ requires a different executable packaging strategy. Compile SDK is 35.
 
 GitHub Actions runs tests and builds an ARM64 preview on main pushes, pull
 requests, and manual dispatches. Pushing an immutable `v*` tag also creates a
-GitHub prerelease with the APK and checksum; the menu-control preview tag is `v0.1.8`.
+GitHub prerelease with the APK and checksum; the native-recovery preview tag is `v0.1.9`.
 
 ## Startup verification boundary
 
@@ -169,7 +169,7 @@ The native module is unchanged. APK size is 171,296,970 bytes; SHA-256:
 `d36d82927bcc7ee745fe7a5ae704545c8cc27d256b15c5a928000fd409c30d1a`.
 Published 0.1.7 CI run 37169294205 passed. The user rejected the physical menu test; re-entry remains unqualified.
 
-Install 0.1.7 over 0.1.6 with the same signing key/application ID to retain
+Install 0.1.9 over the existing accepted preview with the same signing key/application ID to retain
 imported files. The targeted controller update reuses rootfs version 24 and the current
 `wine-9.2-pd2-1` managed prefix; **no Prepare runtime or re-import is needed**.
 The backend installs automatically on Play. To restore the original, select
@@ -183,6 +183,18 @@ Preview certificate SHA-256: `A6:12:97:BE:F1:BE:26:52:B5:3B:76:37:30:27:5E:1F:0E
 
 ## 0.1.8 menu-pointer verification
 
-Local 0.1.8 verification passed: 86 Android 13/API 33 Robolectric tests across 13 suites, with no failures, errors or skips; 9 real-router scenarios; and 11 menu-pointer scenarios with 145 checks. These include the actual mouse/keyboard datagram layout, queued-action expiry, fresh Windows cursor synchronization, lost-feedback retry, resize/clipping, and balanced controls. ARM64 assembly and APK identity/signature checks passed: `com.pd2.thor`, 0.1.8/code 9, min SDK 26, target SDK 28, unchanged preview certificate. All 35 Android native libraries and 72 runtime assets match the verified 0.1.7 APK byte-for-byte, including the accepted HID module. APK size: 171,307,574 bytes. SHA-256: `53cec30a4ee97ef6bb30453ee694c618631572eb853c86dfcc2944e2e4d4c550`. Packaging drift rejection and correct-version artifact fixtures passed. Published 0.1.8 CI and the physical menu/re-entry test remain pending. The accepted Wine/HID backend is unchanged. Install over the existing app without runtime preparation or re-import; see [Testing](TESTING.md).
+Local 0.1.8 verification passed: 86 Android 13/API 33 Robolectric tests across 13 suites, with no failures, errors or skips; 9 real-router scenarios; and 11 menu-pointer scenarios with 145 checks. These include the actual mouse/keyboard datagram layout, queued-action expiry, fresh Windows cursor synchronization, lost-feedback retry, resize/clipping, and balanced controls. ARM64 assembly and APK identity/signature checks passed: `com.pd2.thor`, 0.1.8/code 9, min SDK 26, target SDK 28, unchanged preview certificate. All 35 Android native libraries and 72 runtime assets match the verified 0.1.7 APK byte-for-byte, including the accepted HID module. APK size: 171,307,574 bytes. SHA-256: `53cec30a4ee97ef6bb30453ee694c618631572eb853c86dfcc2944e2e4d4c550`. Packaging drift rejection and correct-version artifact fixtures passed. [Published 0.1.8 CI run 37172243169](https://github.com/Russianranger/pd2-android/actions/runs/37172243169) passed. The user accepted Menu cursor but reported Native failure after Save/Exit; Native after character re-entry remains unqualified. The accepted Wine/HID backend is unchanged. Install over the existing app without runtime preparation or re-import; see [Testing](TESTING.md).
 
 The packaging script rejects metadata that differs from the configured version before copying the APK. If an incremental build reports this mismatch, remove `app/build/outputs/apk/debug/output-metadata.json` and rerun `:app:packageDebug :app:assembleDebug`, then package again. APK manifest metadata was independently checked with `aapt` for this preview.
+
+## 0.1.9 native recovery and visual changes
+
+0.1.9/code 10 adds bounded Game.exe foreground recovery when Native resumes and during game-window transitions, with stale queued work cancelled on route loss. It retains the accepted runtime/HID backend and imported game files. A generated fiery PD2/skull icon is packaged in `drawable-nodpi/pd2_icon_art.png`, referenced through `pd2_icon.xml` and the adaptive launcher icon. The session theme and gear menu/dialogs use dark surfaces while retaining fullscreen settings.
+
+All 93 Android 13/API 33 Robolectric tests across 14 suites passed with zero failures, errors, or skips. Nine real-router scenarios and 12 menu-pointer/native-focus scenarios with 156 checks passed, alongside import/crash/session-log checks, 24 runtime tests, three native-controller tests, and pinned dependency/relocation/source/artifact/ABI checks.
+
+ARM64 assembly completed in 1 minute 35 seconds. The final APK is `com.pd2.thor`, 0.1.9/code 10, min SDK 26, target SDK 28; V2 signature verification confirms the same preview certificate as 0.1.8. ZIP integrity and alignment passed. All 72 packaged runtime assets match 0.1.8 byte-for-byte, including Wine/HID assets.
+
+Of the 35 Android native libraries, 26 match 0.1.8 byte-for-byte and eight rebuilt libraries differ only in their GNU build IDs. VirGL's rebuilt string pool and address references reflect the changed scratch build path: all normalized strings and referenced targets match, without opcode/register/control-flow changes. Native source files are unchanged.
+
+APK size: 174,020,117 bytes. SHA-256: `e6b1a0215b3502b3fe6fc57d915bdeb1d66b136db89720cde65162c9db5d9e16`. Published 0.1.9 CI and physical-device qualification remain pending. Automated checks do not qualify Native support in PD2's title/character menus or gameplay recovery after re-entry. Follow [Testing](TESTING.md) without runtime preparation or re-import.

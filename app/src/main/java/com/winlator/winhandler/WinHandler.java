@@ -224,7 +224,13 @@ public class WinHandler {
     }
 
     public void bringToFront(final String processName, final long handle) {
+        bringToFront(processName, handle, () -> true);
+    }
+
+    /** A session-scoped focus request must expire if another layout or Android window takes input. */
+    public void bringToFront(final String processName, final long handle, java.util.function.BooleanSupplier allowed) {
         addAction(() -> {
+            if (!allowed.getAsBoolean()) return;
             sendData.rewind();
             sendData.put(RequestCodes.BRING_TO_FRONT);
             byte[] bytes = processName.getBytes();

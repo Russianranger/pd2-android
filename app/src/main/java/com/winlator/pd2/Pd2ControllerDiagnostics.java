@@ -41,6 +41,8 @@ public final class Pd2ControllerDiagnostics {
     private long legacyXInputDiscovery, legacyDInputDiscovery, notifySubscriptions;
     private long hidDiscoveryRequests, hidDeviceReplies, hidStateReplies;
     private long lastHandledMotionAt, lastHandledKeyAt, lastHidReplyAt, lastXInputReplyAt;
+    private long nativeFocusRequests, lastNativeFocusRequestAt;
+    private String lastNativeFocusReason = "";
     private boolean gateKnown, windowFocus, paused, quickMenu, drawer;
     private final ArrayDeque<JSONObject> recentTransitions = new ArrayDeque<>();
     private final ArrayDeque<JSONObject> recentPointerContexts = new ArrayDeque<>();
@@ -133,6 +135,14 @@ public final class Pd2ControllerDiagnostics {
     public synchronized void recordInit() { initReceived = true; initMessages = increment(initMessages); }
     public synchronized void recordInvalidPacket() { invalidPackets = increment(invalidPackets); }
     public synchronized void recordSocketFailure() { socketFailures = increment(socketFailures); }
+
+    /** Records a queued foreground request, not proof that Windows or PD2 accepted focus. */
+    public synchronized void recordNativeFocusRequest(String reason) {
+        if (!"route".equals(reason) && !"window".equals(reason) && !"settle".equals(reason)) return;
+        nativeFocusRequests = increment(nativeFocusRequests);
+        lastNativeFocusRequestAt = System.currentTimeMillis();
+        lastNativeFocusReason = reason;
+    }
 
     public synchronized void recordRequest(byte code, int port) {
         if (code == 8) {
@@ -253,6 +263,9 @@ public final class Pd2ControllerDiagnostics {
                         .put("mode", mode).put("inputAvailable", inputAvailable)
                         .put("recentTransitions", history)
                         .put("inputByMode", modes).put("pointerOutput", pointerOutput.snapshot())
+                        .put("nativeFocusRecovery", new JSONObject().put("requests", nativeFocusRequests)
+                                .put("lastRequestAt", lastNativeFocusRequestAt).put("lastReason", lastNativeFocusReason)
+                                .put("scope", "Queued Game.exe foreground requests; Windows acceptance is not acknowledged"))
                         .put("recentPointerContexts", pointerContexts)
                         .put("inputGate", new JSONObject().put("known", gateKnown).put("windowFocus", windowFocus)
                                 .put("paused", paused).put("quickMenu", quickMenu).put("drawer", drawer))

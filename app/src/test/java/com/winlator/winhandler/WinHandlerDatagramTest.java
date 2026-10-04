@@ -117,6 +117,27 @@ public final class WinHandlerDatagramTest {
         assertFalse(handler.isInputReady());
     }
 
+    @Test public void nativeFocusPacketTargetsTheCurrentGameHandleAndExpiredRequestsCannotStealFocus() throws Exception {
+        RecordingSocket socket = new RecordingSocket();
+        WinHandler handler = configured(socket); handler.initReceived = true;
+        java.util.concurrent.atomic.AtomicBoolean active = new java.util.concurrent.atomic.AtomicBoolean(true);
+        handler.bringToFront("Game.exe", 0xabc123L, active::get);
+        active.set(false);
+        handler.bringToFront("Game.exe", 0xdef456L, () -> true);
+        assertEquals(2, handler.drainPendingActions());
+        assertEquals(1, socket.packets.size());
+        java.nio.ByteBuffer packet = java.nio.ByteBuffer.wrap(socket.packets.get(0)).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(256, packet.capacity());
+        assertEquals(RequestCodes.BRING_TO_FRONT, packet.get());
+        assertEquals(8, packet.getInt());
+        byte[] process = new byte[8]; packet.get(process);
+        assertEquals("Game.exe", new String(process, java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(0xdef456L, packet.getLong());
+        handler.bringToFront("Game.exe"); handler.drainPendingActions();
+        java.nio.ByteBuffer legacy = java.nio.ByteBuffer.wrap(socket.packets.get(1)).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(0, legacy.getLong(13));
+    }
+
     private static WinHandler configured(RecordingSocket socket) throws Exception {
         WinHandler handler = new WinHandler(null);
         Field socketField = WinHandler.class.getDeclaredField("socket"); socketField.setAccessible(true);

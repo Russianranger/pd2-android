@@ -73,6 +73,7 @@ import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.pd2.Pd2InputRouter;
 import com.winlator.pd2.Pd2MenuPointer;
+import com.winlator.pd2.Pd2NativeFocusRecovery;
 import com.winlator.pd2.Pd2ControllerDialogs;
 import com.winlator.pd2.Pd2ControllerRuntime;
 import com.winlator.pd2.Pd2Activity;
@@ -163,6 +164,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean pd2LeftThumbDeferred, pd2RightThumbDeferred;
     private Pd2InputRouter pd2InputRouter;
     private Pd2MenuPointer pd2MenuPointer;
+    private Pd2NativeFocusRecovery pd2NativeFocusRecovery;
     private boolean pd2MenuPointerActive;
     private long pd2LastPointerContextAt;
     private AlertDialog pd2QuickDialog;
@@ -198,6 +200,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     @Override
     public void onCreate(Bundle savedInstanceState) {
         AppUtils.setActivityTheme(this);
+        if (getIntent().getBooleanExtra("pd2_session", false)) setTheme(R.style.AppThemeFullscreenDark);
         super.onCreate(savedInstanceState);
         AppUtils.hideSystemUI(this);
         AppUtils.keepScreenOn(this);
@@ -336,6 +339,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 if (win32AppWorkarounds != null) win32AppWorkarounds.applyWindowWorkarounds(window);
                 changeFrameRatingVisibility(window, true);
                 postPd2PointerContext();
+                postPd2NativeWindowTransition(window);
             }
 
             @Override
@@ -347,6 +351,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             @Override
             public void onUpdateWindowGeometry(Window window, boolean resized) {
                 postPd2PointerContext();
+                if (resized) postPd2NativeWindowTransition(window);
             }
         });
 
@@ -446,6 +451,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     protected synchronized void onDestroy() {
         if (pd2Session) {
             pd2StopRequested = true;
+            if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
             if (pd2ActiveSession.get() == this) pd2ActiveSession.clear();
         }
@@ -548,6 +554,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pd2Session) {
             if (pd2StopRequested) return;
             pd2StopRequested = true;
+            if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
             winHandler.stop();
             if (environment != null) environment.stopEnvironmentComponents();
@@ -771,12 +778,23 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pd2Session) {
             hideInputControls();
             pd2MenuPointer = new Pd2MenuPointer(xServer, winHandler);
+            pd2NativeFocusRecovery = new Pd2NativeFocusRecovery(new Pd2NativeFocusRecovery.Target() {
+                @Override public boolean isReady() { return winHandler.isInputReady(); }
+                @Override public void restore(java.util.function.BooleanSupplier allowed, String reason) {
+                    pd2MenuPointer.reacquireGameWindow(allowed);
+                    winHandler.controllerDiagnostics.recordNativeFocusRequest(reason);
+                    capturePd2PointerContext(true);
+                }
+            });
             pd2InputRouter = new Pd2InputRouter(xServer, pd2MenuPointer);
             pd2InputRouter.setCursorSpeed(preferences.getFloat("pd2_cursor_speed", 1.0f));
             pd2InputRouter.setDeadzone(preferences.getFloat("pd2_deadzone", 0.18f));
             pd2Gear = new Button(this);
             pd2Gear.setText("⚙");
             pd2Gear.setTextSize(22);
+            pd2Gear.setTextColor(0xFFE2B966);
+            pd2Gear.setBackgroundResource(R.drawable.pd2_gear_background);
+            pd2Gear.setPadding(0, 0, 0, 0);
             pd2Gear.setContentDescription("Project Diablo 2 quick menu");
             pd2Gear.setAlpha(0.75f);
             int size = Math.round(54 * getResources().getDisplayMetrics().density);
@@ -811,7 +829,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     private void updatePd2InputMode() {
         if (!pd2Session || pd2InputRouter == null) return;
-        boolean inputAvailable = !pd2MenuOpen && !pd2Paused && pd2HasWindowFocus && !drawerLayout.isDrawerOpen(GravityCompat.START);
+        boolean inputAvailable = !pd2StopRequested && !pd2MenuOpen && !pd2Paused && pd2HasWindowFocus && !drawerLayout.isDrawerOpen(GravityCompat.START);
         winHandler.gamepadHandler.setStickDeadzone(pd2InputRouter.getDeadzone());
         pd2InputRouter.setMenuControls(pd2MenuCursor);
         winHandler.controllerDiagnostics.setMode(pd2InputModeName(), inputAvailable);
@@ -824,7 +842,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             else pd2MenuPointer.deactivate();
         }
         xServerView.getRenderer().setForceRootCursor(menuPointerActive);
-        winHandler.gamepadHandler.setInputEnabled(!pd2PointerControls() && inputAvailable);
+        boolean nativeActive = !pd2PointerControls() && inputAvailable;
+        pd2NativeFocusRecovery.setActive(nativeActive);
+        winHandler.gamepadHandler.setInputEnabled(nativeActive);
         capturePd2PointerContext(true);
         winHandler.controllerDiagnostics.save();
         // Touch remains usable for inventory, login and text in every mode.
@@ -846,6 +866,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     private void postPd2PointerContext() {
         if (pd2Session) runOnUiThread(() -> capturePd2PointerContext(false));
+    }
+
+    private void postPd2NativeWindowTransition(Window window) {
+        if (pd2Session) runOnUiThread(() -> {
+            if (pd2NativeFocusRecovery == null || pd2MenuPointer == null || isFinishing() || isDestroyed()) return;
+            // Resolve the game ancestor on the UI thread, outside the window callback's XServer locks.
+            if (pd2MenuPointer.belongsToGame(window)) pd2NativeFocusRecovery.windowChanged();
+        });
     }
 
     private void capturePd2PointerContext(boolean force) {
@@ -880,7 +908,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             "Stop game",
             "Controller status"
         };
-        pd2QuickDialog = new AlertDialog.Builder(this)
+        pd2QuickDialog = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme)
             .setTitle("PD2 quick menu · " + current)
             .setItems(items, (dialog, which) -> {
                 switch (which) {
@@ -937,7 +965,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         releasePd2Input();
         pd2MenuOpen = true;
         updatePd2InputMode();
-        AlertDialog help = new AlertDialog.Builder(this).setTitle(pd2MenuCursor ? "Menu cursor controls" : "Mouse / keyboard layout")
+        AlertDialog help = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme).setTitle(pd2MenuCursor ? "Menu cursor controls" : "Mouse / keyboard layout")
                 .setMessage(pd2MenuCursor ? Pd2InputRouter.MENU_HELP : Pd2InputRouter.LAYOUT_HELP).setPositiveButton("Done", null).create();
         help.setOnDismissListener(dialog -> { pd2MenuOpen = false; updatePd2InputMode(); });
         help.show();
@@ -980,7 +1008,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 .append("\nWindows cursor feedback: ").append(pointerOutput.optLong("feedbackEvents"));
         message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. After entering your character, choose Native controller, close the quick menu, and press a controller button.")
                 .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
-        AlertDialog status = new AlertDialog.Builder(this).setTitle("Controller status")
+        AlertDialog status = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme).setTitle("Controller status")
                 .setMessage(message.toString()).setPositiveButton("Done", null).create();
         status.setOnDismissListener(dialog -> { pd2MenuOpen = false; updatePd2InputMode(); });
         status.show();

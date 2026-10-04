@@ -32,6 +32,25 @@ import static org.junit.Assert.*;
 public final class Pd2ControllerDiagnosticsTest {
     @Before public void clearDevices() { InputDevices.devices.clear(); }
 
+    @Test public void nativeFocusRecoveryReportsOnlyBoundedRequestReasonsAndNeverClaimsWindowsAcceptance() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        diagnostics.recordNativeFocusRequest(null);
+        diagnostics.recordNativeFocusRequest("private-window-title");
+        assertEquals(0, diagnostics.snapshot().getJSONObject("nativeFocusRecovery").getLong("requests"));
+        diagnostics.recordNativeFocusRequest("route");
+        diagnostics.recordNativeFocusRequest("window");
+        diagnostics.recordNativeFocusRequest("settle");
+        JSONObject report = diagnostics.snapshot();
+        JSONObject recovery = report.getJSONObject("nativeFocusRecovery");
+        assertEquals(3, recovery.getLong("requests"));
+        assertEquals("settle", recovery.getString("lastReason"));
+        assertTrue(recovery.getLong("lastRequestAt") > 0);
+        assertTrue(recovery.getString("scope").contains("not acknowledged"));
+        assertFalse(report.toString().contains("private-window-title"));
+        recovery.put("requests", 123);
+        assertEquals(3, diagnostics.snapshot().getJSONObject("nativeFocusRecovery").getLong("requests"));
+    }
+
     @Test public void transitionsRetainMenuOwnershipAndLatestGatesWithinTheReportBound() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
         diagnostics.setInputGate(true, false, false, false);

@@ -182,6 +182,12 @@ import java.util.*;
 import java.util.function.BooleanSupplier;
 import com.winlator.pd2.Pd2ControllerDiagnostics;
 public final class WinHandler {
+ public static final class FocusEvent {
+  public final String name;
+  public final long handle;
+  final BooleanSupplier allowed;
+  FocusEvent(String name,long handle,BooleanSupplier allowed) { this.name=name;this.handle=handle;this.allowed=allowed; }
+ }
  public static final class Event {
   public final boolean mouse;
   public final int flags,dx,dy,wheel,vkey;
@@ -193,8 +199,10 @@ public final class WinHandler {
  public final Pd2ControllerDiagnostics controllerDiagnostics=new Pd2ControllerDiagnostics();
  public boolean ready=true;
  public final ArrayList<Event> queued=new ArrayList<>(),delivered=new ArrayList<>();
+ public final ArrayList<FocusEvent> queuedFocus=new ArrayList<>(),deliveredFocus=new ArrayList<>();
  public boolean isInputReady() { return ready; }
- public void bringToFront(String name,long handle) {}
+ public void bringToFront(String name,long handle) { bringToFront(name,handle,() -> true); }
+ public void bringToFront(String name,long handle,BooleanSupplier allowed) { queuedFocus.add(new FocusEvent(name,handle,allowed)); }
  public void mouseEvent(int flags,int dx,int dy,int wheel) { mouseEvent(flags,dx,dy,wheel,() -> true); }
  public void mouseEvent(int flags,int dx,int dy,int wheel,BooleanSupplier allowed) {
   queued.add(new Event(true,flags,dx,dy,wheel,0,allowed));
@@ -203,8 +211,11 @@ public final class WinHandler {
  public void keyboardEvent(byte vkey,int flags,BooleanSupplier allowed) {
   queued.add(new Event(false,flags,0,0,0,vkey&255,allowed));
  }
- public void drain() { for(Event event:queued) if(event.allowed.getAsBoolean()) delivered.add(event);queued.clear(); }
- public void clear() { queued.clear();delivered.clear(); }
+ public void drain() {
+  for(Event event:queued) if(event.allowed.getAsBoolean()) delivered.add(event);queued.clear();
+  for(FocusEvent event:queuedFocus) if(event.allowed.getAsBoolean()) deliveredFocus.add(event);queuedFocus.clear();
+ }
+ public void clear() { queued.clear();delivered.clear();queuedFocus.clear();deliveredFocus.clear(); }
 }
 """,
     "MenuPointerTest.java": """import android.os.SystemClock;
@@ -385,13 +396,33 @@ public final class MenuPointerTest {
   }
   check(!context.toString().contains("PRIVATE_"),"Capture context leaked private window titles");
  }
+ static void nativeRecoveryOnlyRestoresTheCurrentGameWindowAndExpiresQueuedFocus() {
+  Fixture f=new Fixture(1280,720);Window older=f.game(2,0,0,1280,720);
+  Window newer=f.game(3,0,0,800,600);
+  Window client=new Window(4,"PRIVATE_CLIENT_TITLE","",0,0,800,600);newer.addChild(client);
+  check(f.pointer.belongsToGame(client),"A current game child was excluded from resize recovery");
+  java.util.concurrent.atomic.AtomicBoolean active=new java.util.concurrent.atomic.AtomicBoolean(true);
+  f.pointer.reacquireGameWindow(active::get);f.win.drain();
+  check(f.win.deliveredFocus.size()==1,"Native restore failed to queue a foreground request");
+  check("Game.exe".equals(f.win.deliveredFocus.get(0).name) && f.win.deliveredFocus.get(0).handle==newer.handle,
+   "Native restore selected a desktop, stale game window or client handle");
+  check(f.win.delivered.isEmpty(),"Native restore moved/clicked the pointer or injected keyboard input");
+  f.win.clear();newer.mapped=false;check(!f.pointer.belongsToGame(client),"Unmapped child still triggered native recovery");
+  f.pointer.reacquireGameWindow(active::get);active.set(false);f.win.drain();
+  check(f.win.deliveredFocus.isEmpty(),"Expired native restore stole Windows focus");
+  f.win.clear();active.set(true);f.pointer.reacquireGameWindow(active::get);f.win.drain();
+  check(f.win.deliveredFocus.get(0).handle==older.handle,"Recovery retained the replaced/unmapped HWND");
+  f.win.clear();f.pointer.activate();f.pointer.deactivate();f.win.drain();
+  check(f.win.deliveredFocus.isEmpty(),"Expired menu activation stole Windows focus after route change");
+ }
  public static void main(String[] args) {
   activationRecentersOnceAndNeverUsesXServerInput();missingInitialFeedbackRetriesQueryWithoutReplayingMovement();feedbackGuardTimeoutAndDroppedBursts();
   liveWindowShrinkCorrectsOutsideFeedbackPosition();negativeCoordinatesAndSurfaceAreClippedToAncestorsAndScreen();
   wrongFocusUsesTopmostGameAndEligibleFocusWins();screenFallbackDoesNotTreatRootOrExplorerAsGame();
   vkMappingLeftClickAndIgnoredControls();deactivateBalancesHeldInputAndRejectsFurtherOutput();
   queuedActionsAreGuardedAcrossModeChangeAndReactivation();notReadyProducesNoRequestsAndContextContainsNoPrivateTitles();
-  System.out.println("PASS: 11 menu pointer scenarios; "+checks+" checks");
+  nativeRecoveryOnlyRestoresTheCurrentGameWindowAndExpiresQueuedFocus();
+  System.out.println("PASS: 12 menu pointer/native focus scenarios; "+checks+" checks");
  }
 }
 """,
