@@ -72,3 +72,22 @@ routes, prefix, game installation, saves and container protection are retained.
 Physical Play recovery remains to be tested. The Save/Quit-versus-same-app
 Stop/Play controller gate remains unresolved, independently of startup and
 automated checks.
+
+## Completed validation and offered artifact
+
+Implementation `d83228779e635939079247bd32e3e2d39af7ba81` passed
+[CI 37390266190](https://github.com/Russianranger/pd2-android/actions/runs/37390266190).
+The actual production socket configuration was exercised against real Linux
+Unix sockets: six missing-parent failures reproduced, 19 prepared binds
+passed, including stale endpoint replacement, a second session after tmp
+clear, and continued communication through a live sibling socket. All 160
+unit tests across 20 suites passed, alongside runtime/controller pin checks,
+existing host regressions and ARM64 packaging. Local startup suites passed
+26 tests; local AF_UNIX execution itself was blocked before bind, so CI is
+explicitly the real-bind evidence.
+
+The offered CI APK has SHA-256
+`6d943637e375b853436e7ba236bdffedb5164253531ec358aef7f8c94064a028`,
+174,045,817 bytes. Identity/signature/integrity/alignment verified; all 72
+assets and 35 ARM64 JNI libraries match the preceding 0.1.13 CI APK exactly.
+Physical startup and Native recovery still require the device result.
