@@ -164,6 +164,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean pd2HasWindowFocus = true;
     private volatile boolean pd2StopRequested;
     private Integer pd2RuntimeExitStatus;
+    private String pd2LaunchFailure;
+    private boolean runtimeLaunchRejected;
+    private static volatile boolean pd2LaunchPending;
+    private static final java.util.concurrent.atomic.AtomicInteger pd2EnvironmentWorkers = new java.util.concurrent.atomic.AtomicInteger();
     private final Pd2ThumbButtons pd2ThumbButtons = new Pd2ThumbButtons();
     private Pd2InputRouter pd2InputRouter;
     private Pd2MenuPointer pd2MenuPointer;
@@ -173,6 +177,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private AlertDialog pd2QuickDialog;
     private Button pd2Gear;
     private static WeakReference<XServerDisplayActivity> pd2ActiveSession = new WeakReference<>(null);
+    private static volatile WeakReference<XServerDisplayActivity> runtimeActiveSession = new WeakReference<>(null);
     // Worker-only lock: cleanup must finish closing shared audio/display sockets before replacement startup.
     private static final Object PD2_ENVIRONMENT_LOCK = new Object();
 
@@ -180,6 +185,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         XServerDisplayActivity activity = pd2ActiveSession.get();
         return activity != null && !activity.isFinishing() && !activity.isDestroyed();
     }
+
+    public static boolean isPd2RuntimeWorkInProgress() {
+        return pd2LaunchPending || pd2EnvironmentWorkers.get() != 0 || runtimeActiveSession.get() != null;
+    }
+
+    public static void setPd2LaunchPending(boolean pending) { pd2LaunchPending = pending; }
 
     public static void savePd2ControllerDiagnostics() {
         XServerDisplayActivity activity = pd2ActiveSession.get();
@@ -211,6 +222,17 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         AppUtils.setActivityTheme(this);
         if (getIntent().getBooleanExtra("pd2_session", false)) setTheme(R.style.AppThemeFullscreenDark);
         super.onCreate(savedInstanceState);
+        synchronized (com.winlator.pd2.Pd2ContainerMaintenance.class) {
+            if (com.winlator.pd2.Pd2ContainerMaintenance.isDeletionInProgress()) {
+                runtimeLaunchRejected = true;
+                pd2LaunchPending = false;
+                Toast.makeText(this, "Wait for container deletion to finish before starting the client.", Toast.LENGTH_LONG).show();
+                finish();
+                return;
+            }
+            runtimeActiveSession = new WeakReference<>(this);
+            pd2LaunchPending = false;
+        }
         AppUtils.hideSystemUI(this);
         AppUtils.keepScreenOn(this);
         setContentView(R.layout.xserver_display_activity);
@@ -222,6 +244,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         pd2MouseKeyboard = preferences.getBoolean("pd2_mouse_keyboard", false);
         if (pd2Session) {
             pd2ActiveSession = new WeakReference<>(this);
+            pd2LaunchPending = false;
             winHandler.controllerDiagnostics.setLaunchId(getIntent().getStringExtra("pd2_launch_id"));
             winHandler.controllerDiagnostics.setMode(pd2MouseKeyboard ? "mouse_keyboard" : "native", false);
             winHandler.controllerDiagnostics.setNativeInputEnabled(false);
@@ -366,13 +389,16 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         setupUI();
 
+        pd2EnvironmentWorkers.incrementAndGet();
         Executors.newSingleThreadExecutor().execute(() -> {
+          try {
             if (!isGenerateWineprefix()) {
                 setupWineSystemFiles();
                 extractGraphicsDriverFiles();
                 changeWineAudioDriver();
             }
             setupXEnvironment();
+          } finally { pd2EnvironmentWorkers.decrementAndGet(); }
         });
     }
 
@@ -395,6 +421,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (runtimeLaunchRejected) return;
         if (pd2Session) {
             pd2HasWindowFocus = hasFocus;
             if (!hasFocus) {
@@ -418,6 +445,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     @Override
     public void onResume() {
         super.onResume();
+        if (runtimeLaunchRejected) return;
         if (environment != null) {
             xServerView.onResume();
             environment.onResume();
@@ -431,6 +459,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     @Override
     public void onPause() {
+        if (runtimeLaunchRejected) { super.onPause(); return; }
         if (pd2Session) {
             pd2Paused = true;
             pd2NativeReconnectPending = false;
@@ -455,6 +484,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     @Override
     protected synchronized void onDestroy() {
+        if (runtimeLaunchRejected) { super.onDestroy(); return; }
         boolean ownsSession = pd2ActiveSession.get() == this;
         if (pd2Session) {
             pd2StopRequested = true;
@@ -467,10 +497,17 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         XEnvironment stoppedEnvironment = environment;
         environment = null;
         if (stoppedEnvironment != null) {
-            if (pd2Session) Executors.newSingleThreadExecutor().execute(() -> stopPd2Environment(stoppedEnvironment));
+            if (pd2Session) {
+                pd2EnvironmentWorkers.incrementAndGet();
+                Executors.newSingleThreadExecutor().execute(() -> {
+                    try { stopPd2Environment(stoppedEnvironment); }
+                    finally { pd2EnvironmentWorkers.decrementAndGet(); }
+                });
+            }
             else stoppedEnvironment.stopEnvironmentComponents();
         }
         if (!pd2Session || ownsSession) ForegroundService.stopSession(this);
+        if (runtimeActiveSession.get() == this) runtimeActiveSession.clear();
         super.onDestroy();
     }
 
@@ -584,6 +621,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     Intent launcher = new Intent().setClassName(getPackageName(), "com.winlator.pd2.Pd2Activity")
                             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     if (pd2RuntimeExitStatus != null) launcher.putExtra("pd2_runtime_exit_status", pd2RuntimeExitStatus.intValue());
+                    if (pd2LaunchFailure != null) launcher.putExtra("pd2_launch_failure", pd2LaunchFailure);
                     startActivity(launcher);
                     finish();
                 }); }
@@ -605,13 +643,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     }
 
     private static void stopPd2Environment(XEnvironment environment) {
-        synchronized (PD2_ENVIRONMENT_LOCK) {
+        pd2EnvironmentWorkers.incrementAndGet();
+        try { synchronized (PD2_ENVIRONMENT_LOCK) {
             try {
                 GuestProgramLauncherComponent guest = environment.getComponent(GuestProgramLauncherComponent.class);
                 // Retain display/audio sockets until the exact-prefix Wine shutdown has finished.
                 if (guest != null) guest.stop();
             } finally { environment.stopEnvironmentComponents(); }
-        }
+        } } finally { pd2EnvironmentWorkers.decrementAndGet(); }
     }
 
     private void setupWineSystemFiles() {
@@ -732,10 +771,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pd2Session) guestProgramLauncherComponent.setPd2LaunchId(getIntent().getStringExtra("pd2_launch_id"));
         guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
             if (pd2Session && !pd2StopRequested) {
+                pd2LaunchFailure = guestProgramLauncherComponent.getPd2LaunchFailure();
                 pd2RuntimeExitStatus = status;
                 String id = getIntent().getStringExtra("pd2_launch_id");
                 if (id != null) Pd2LaunchDiagnostics.exited(this, id, status);
-                Pd2Activity.recordRuntimeExit(this, status);
+                if (pd2LaunchFailure != null) Pd2Activity.recordLaunchFailure(this, pd2LaunchFailure);
+                else Pd2Activity.recordRuntimeExit(this, status);
                 if (debugDialog != null) debugDialog.call("=== Windows runtime exit status: " + status + " ===");
             }
             exit();
@@ -754,6 +795,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
           if (pd2StopRequested || isFinishing() || isDestroyed()) return;
           if (pd2Session) {
             if (!guestProgramLauncherComponent.preparePd2Session()) {
+                pd2LaunchFailure = guestProgramLauncherComponent.getPd2LaunchFailure();
                 Pd2Activity.appendLauncherLog(this, "Client launch refused: previous Wine services or controller ports have not closed. Export support logs.");
                 runOnUiThread(() -> {
                     Toast.makeText(this, "Client cleanup did not finish. Export support logs before retrying.", Toast.LENGTH_LONG).show();
@@ -771,7 +813,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
           if (cancelled) { guestProgramLauncherComponent.stop(); return; }
           try { pendingEnvironment.startEnvironmentComponents(); }
           catch (RuntimeException failure) {
-              Pd2Activity.appendLauncherLog(this, "Runtime startup failed: " + failure.getClass().getSimpleName());
+              pd2LaunchFailure = "Runtime startup failed: " + failure.getClass().getSimpleName();
+              Pd2LaunchDiagnostics.failed(this, getIntent().getStringExtra("pd2_launch_id"), pd2LaunchFailure);
+              Pd2Activity.recordLaunchFailure(this, pd2LaunchFailure);
               runOnUiThread(this::exit);
               return;
           }

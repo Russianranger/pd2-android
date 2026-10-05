@@ -82,6 +82,19 @@ public final class Pd2LaunchDiagnostics {
         } catch (IOException | JSONException ignored) { }
     }
 
+    public static synchronized void failed(Context context, String id, String message) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (id == null || !file.isFile() || file.length() > 128 * 1024) return;
+            JSONObject report = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            if (!id.equals(report.optString("launchId"))) return;
+            String bounded = message == null ? "Runtime startup failed" : message;
+            report.put("launchFailure", bounded.substring(0, Math.min(512, bounded.length())))
+                    .put("launchFailedAt", System.currentTimeMillis());
+            write(file, report);
+        } catch (IOException | JSONException ignored) { }
+    }
+
     public static JSONObject installationFiles(File installed, Pd2InstallValidator.Result installation) throws JSONException {
         JSONArray files = new JSONArray();
         File base = installation.clientRootRelativePath.isEmpty() ? installed : new File(installed, installation.clientRootRelativePath);

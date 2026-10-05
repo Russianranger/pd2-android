@@ -37,6 +37,21 @@ public final class Pd2LaunchDiagnosticsTest {
     @BeforeClass public static void preserveExceptionHandler() { hostHandler = Thread.getDefaultUncaughtExceptionHandler(); }
     @After public void restoreExceptionHandler() { Thread.setDefaultUncaughtExceptionHandler(hostHandler); }
 
+    @Test public void launchFailureIsBoundedAndAnOlderCallbackCannotOverwriteTheCurrentReport() throws Exception {
+        Application application = RuntimeEnvironment.getApplication();
+        File report = new File(application.getFilesDir(), "pd2/logs/launch.json");
+        assertTrue(report.getParentFile().mkdirs() || report.getParentFile().isDirectory());
+        Files.write(report.toPath(), new JSONObject().put("launchId", "new-session").toString().getBytes(StandardCharsets.UTF_8));
+        Pd2LaunchDiagnostics.failed(application, "old-session", "stale callback");
+        assertFalse(new JSONObject(read(report)).has("launchFailure"));
+        char[] message = new char[2000]; Arrays.fill(message, 'x');
+        Pd2LaunchDiagnostics.failed(application, "new-session", new String(message));
+        JSONObject current = new JSONObject(read(report));
+        assertEquals(512, current.getString("launchFailure").length());
+        assertTrue(current.getLong("launchFailedAt") > 0);
+        assertEquals("new-session", current.getString("launchId"));
+    }
+
     @Test public void directDrawBypassesNativeWrapperWhileGlidePreservesIt() {
         EnvVars directDraw = new EnvVars(Pd2LaunchPolicy.environment("-ddraw -w", false));
         assertEquals("ddraw=b;glide3x=n,b;mscoree,mshtml=d", directDraw.get("WINEDLLOVERRIDES"));

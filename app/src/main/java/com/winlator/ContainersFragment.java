@@ -19,6 +19,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
@@ -31,6 +32,8 @@ import com.winlator.container.ContainerManager;
 import com.winlator.contentdialog.ContentDialog;
 import com.winlator.contentdialog.StorageInfoDialog;
 import com.winlator.core.PreloaderDialog;
+import com.winlator.pd2.Pd2ContainerMaintenance;
+import com.winlator.pd2.Pd2Runtime;
 import com.winlator.xenvironment.RootFS;
 
 import java.util.ArrayList;
@@ -73,9 +76,15 @@ public class ContainersFragment extends Fragment {
     }
 
     private void loadContainersList() {
+        manager = new ContainerManager(requireContext());
         ArrayList<Container> containers = manager.getContainers();
         recyclerView.setAdapter(new ContainersAdapter(containers));
-        if (containers.isEmpty()) emptyTextView.setVisibility(View.VISIBLE);
+        emptyTextView.setVisibility(containers.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    @Override public void onResume() {
+        super.onResume();
+        if (manager != null && recyclerView != null) loadContainersList();
     }
 
     @Override
@@ -99,17 +108,20 @@ public class ContainersFragment extends Fragment {
 
     private class ContainersAdapter extends RecyclerView.Adapter<ContainersAdapter.ViewHolder> {
         private final List<Container> data;
+        private final int currentId;
 
         private class ViewHolder extends RecyclerView.ViewHolder {
             private final ImageView runButton;
             private final ImageView menuButton;
             private final ImageView imageView;
             private final TextView title;
+            private final TextView status;
 
             private ViewHolder(View view) {
                 super(view);
                 this.imageView = view.findViewById(R.id.ImageView);
                 this.title = view.findViewById(R.id.TVTitle);
+                this.status = view.findViewById(R.id.TVContainerStatus);
                 this.runButton = view.findViewById(R.id.BTRun);
                 this.menuButton = view.findViewById(R.id.BTMenu);
             }
@@ -117,6 +129,8 @@ public class ContainersFragment extends Fragment {
 
         public ContainersAdapter(List<Container> data) {
             this.data = data;
+            Container current = Pd2Runtime.findCurrentContainer(requireContext(), manager);
+            currentId = current == null ? 0 : current.id;
         }
 
         @Override
@@ -129,6 +143,9 @@ public class ContainersFragment extends Fragment {
             final Container item = data.get(position);
             holder.imageView.setImageResource(R.drawable.icon_container);
             holder.title.setText(item.getName());
+            String kind = item.id == currentId ? "Current PD2 · protected"
+                    : Pd2Runtime.isManagedContainer(item) ? "Older PD2" : "Additional container";
+            holder.status.setText(kind + " · #" + item.id + "\nWine: " + item.getWineVersion());
             holder.runButton.setOnClickListener((view) -> runContainer(item));
             holder.menuButton.setOnClickListener((view) -> showListItemMenu(view, item));
         }
@@ -142,9 +159,15 @@ public class ContainersFragment extends Fragment {
             MainActivity activity = (MainActivity)getActivity();
             PopupMenu listItemMenu = new PopupMenu(activity, anchorView);
             listItemMenu.inflate(R.menu.container_popup_menu);
+            MenuItem remove = listItemMenu.getMenu().findItem(R.id.menu_item_remove);
+            String blocked = Pd2ContainerMaintenance.deletionBlockReason(activity, container);
+            remove.setTitle(blocked == null ? "Delete container…"
+                    : container.id == currentId ? "Current container is protected" : "Deletion unavailable");
+            remove.setEnabled(blocked == null);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) listItemMenu.setForceShowIcon(true);
 
             listItemMenu.setOnMenuItemClickListener((menuItem) -> {
+                if (Pd2ContainerMaintenance.isDeletionInProgress()) return true;
                 switch (menuItem.getItemId()) {
                     case R.id.menu_item_file_manager:
                         activity.showFragment(new ContainerFileManagerFragment(container.id));
@@ -162,13 +185,7 @@ public class ContainersFragment extends Fragment {
                         });
                         break;
                     case R.id.menu_item_remove:
-                        ContentDialog.confirm(getContext(), R.string.do_you_want_to_remove_this_container, () -> {
-                            preloaderDialog.show(R.string.removing_container);
-                            manager.removeContainerAsync(container, () -> {
-                                preloaderDialog.close();
-                                loadContainersList();
-                            });
-                        });
+                        confirmDelete(container);
                         break;
                     case R.id.menu_item_info:
                         (new StorageInfoDialog(activity, container)).show();
@@ -179,11 +196,44 @@ public class ContainersFragment extends Fragment {
             listItemMenu.show();
         }
 
+        private void confirmDelete(Container container) {
+            String blocked = Pd2ContainerMaintenance.deletionBlockReason(requireContext(), container);
+            if (blocked != null) {
+                new AlertDialog.Builder(requireContext()).setTitle("Container kept")
+                        .setMessage(blocked).setPositiveButton("OK", null).show();
+                return;
+            }
+            new AlertDialog.Builder(requireContext()).setTitle("Delete container #" + container.id + "?")
+                    .setMessage("This deletes “" + container.getName() + "” and files stored in its private C: drive. "
+                            + "Back up any files you want from this older container first. "
+                            + "Your imported PD2 installation, its saves, the current container, and files on mapped drives stay in place.")
+                    .setNegativeButton("Cancel", null).setPositiveButton("Delete", (dialog, which) -> {
+                        preloaderDialog.show(R.string.removing_container);
+                        Pd2ContainerMaintenance.deleteAsync(requireContext(), container, error -> {
+                            preloaderDialog.close();
+                            if (!isAdded()) return;
+                            loadContainersList();
+                            if (error != null) new AlertDialog.Builder(requireContext()).setTitle("Container deletion needs attention")
+                                    .setMessage(error).setPositiveButton("OK", null).show();
+                        });
+                    }).show();
+        }
+
         private void runContainer(Container container) {
-            Activity activity = getActivity();
-            Intent intent = new Intent(activity, XServerDisplayActivity.class);
-            intent.putExtra("container_id", container.id);
-            activity.startActivity(intent);
+            synchronized (Pd2ContainerMaintenance.class) {
+                if (Pd2ContainerMaintenance.isDeletionInProgress()
+                        || com.winlator.pd2.Pd2Activity.isOperationInProgress()
+                        || XServerDisplayActivity.isPd2RuntimeWorkInProgress()) return;
+                Activity activity = getActivity();
+                Intent intent = new Intent(activity, XServerDisplayActivity.class);
+                intent.putExtra("container_id", container.id);
+                XServerDisplayActivity.setPd2LaunchPending(true);
+                try { activity.startActivity(intent); }
+                catch (RuntimeException error) {
+                    XServerDisplayActivity.setPd2LaunchPending(false);
+                    throw error;
+                }
+            }
         }
     }
 }

@@ -87,16 +87,7 @@ public final class Pd2Runtime {
                 Pd2ControllerRuntime.prepare(activity);
                 ContainerManager manager = new ContainerManager(activity);
                 SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
-                Container selected = manager.getContainerById(preferences.getInt(CONTAINER_ID, 0));
-                if (!isManagedAndReady(selected)) {
-                    selected = null;
-                    for (Container candidate : manager.getContainers()) {
-                        if (isManagedAndReady(candidate)) {
-                            selected = candidate;
-                            break;
-                        }
-                    }
-                }
+                Container selected = findCurrentContainer(activity, manager);
                 if (selected != null) {
                     String renderer = selected.getGraphicsDriver();
                     configure(activity, selected, isRenderer(renderer) ? renderer : DEFAULT_RENDERER);
@@ -128,6 +119,24 @@ public final class Pd2Runtime {
                 else callback.call(null);
             }
         });
+    }
+
+    /** Read-only selection shared by Play and the container list; never creates or migrates a prefix. */
+    public static Container findCurrentContainer(Context context, ContainerManager manager) {
+        Container selected = manager.getContainerById(savedContainerId(context));
+        if (isManagedAndReady(selected)) return selected;
+        for (Container candidate : manager.getContainers()) {
+            if (isManagedAndReady(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    static int savedContainerId(Context context) {
+        return PreferenceManager.getDefaultSharedPreferences(context).getInt(CONTAINER_ID, 0);
+    }
+
+    public static boolean isManagedContainer(Container container) {
+        return container != null && "1".equals(container.getExtra(MANAGED));
     }
 
     /** Save runtime-only defaults and the private P: drive before launching. */
