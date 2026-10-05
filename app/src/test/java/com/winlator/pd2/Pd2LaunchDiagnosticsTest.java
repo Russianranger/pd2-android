@@ -37,6 +37,16 @@ public final class Pd2LaunchDiagnosticsTest {
     @BeforeClass public static void preserveExceptionHandler() { hostHandler = Thread.getDefaultUncaughtExceptionHandler(); }
     @After public void restoreExceptionHandler() { Thread.setDefaultUncaughtExceptionHandler(hostHandler); }
 
+    @Test public void startupFailureRetainsTheComponentAndEndpointWithinItsBound() {
+        String result = Pd2LaunchDiagnostics.startupFailure(new IllegalStateException(
+                "SysVSharedMemoryComponent: RuntimeException: /tmp/.sysvshm/SM0\n" + "x".repeat(1000)));
+        assertTrue(result.contains("SysVSharedMemoryComponent"));
+        assertTrue(result.contains("/tmp/.sysvshm/SM0"));
+        assertFalse(result.contains("\n"));
+        assertEquals(512, result.length());
+        assertEquals("Runtime startup failed: RuntimeException", Pd2LaunchDiagnostics.startupFailure(new RuntimeException()));
+    }
+
     @Test public void launchFailureIsBoundedAndAnOlderCallbackCannotOverwriteTheCurrentReport() throws Exception {
         Application application = RuntimeEnvironment.getApplication();
         File report = new File(application.getFilesDir(), "pd2/logs/launch.json");

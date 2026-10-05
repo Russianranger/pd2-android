@@ -813,7 +813,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
           if (cancelled) { guestProgramLauncherComponent.stop(); return; }
           try { pendingEnvironment.startEnvironmentComponents(); }
           catch (RuntimeException failure) {
-              pd2LaunchFailure = "Runtime startup failed: " + failure.getClass().getSimpleName();
+              pd2LaunchFailure = Pd2LaunchDiagnostics.startupFailure(failure);
               Pd2LaunchDiagnostics.failed(this, getIntent().getStringExtra("pd2_launch_id"), pd2LaunchFailure);
               Pd2Activity.recordLaunchFailure(this, pd2LaunchFailure);
               runOnUiThread(this::exit);

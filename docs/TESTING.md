@@ -1,8 +1,8 @@
-# 0.1.13 startup repair and container management
+# 0.1.14 socket startup repair
 
-Install **0.1.13 over the existing app** and keep the accepted Wine 9.2/rootfs 24, imported installation, prefix, Turnip + Zink / Glide (GameNative arguments), Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.**
+Install **0.1.14 over the existing app** and keep the accepted Wine 9.2/rootfs 24, imported installation, prefix, Turnip + Zink / Glide (GameNative arguments), Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.**
 
-The 0.1.12 physical report says Play immediately returned to the launcher. No support ZIP was supplied for that attempt. Source and accepted runtime binary inspection found that preflight creates `rootfs/tmp/shm`, the subsequent temporary-file clear deletes it, and cached launch-environment reuse does not recreate it. 0.1.13 restores the directory immediately before guest execution. This fixes that source regression; the exact device failure branch remains unconfirmed until retest/logs.
+The 0.1.13 first-try support ZIP records a caught startup exception before Wine/PD2 output, with both cleanup phases passing. Source inspection found that socket configurations created their parent directories before the post-cleanup temporary clear deleted them. 0.1.14 defers endpoint preparation to service startup, after that clear; shared memory, display, audio and optional renderer sockets use the same ordering. The existing Wine `tmp/shm` repair stays in place. A future startup failure includes the component and endpoint/message instead of only the exception class. See [evidence](evidence/2026-10-05-startup-sockets.md).
 
 ## First check: Play
 
@@ -31,7 +31,7 @@ The current/persisted-selected/runtime-selected container is protected. With the
 
 If full Stop/Play restores Native, accept that restart repair while in-place Save/Quit remains separate. If it fails after clean cleanup, investigate surviving backend/process/device ownership using the records rather than repeating blind reconnect/focus experiments.
 
-The older reference/checklists below preserve accepted behavior and historical boundaries.
+The older reference/checklists below preserve accepted behavior and historical boundaries; use the current 0.1.14 test above.
 
 ---
 

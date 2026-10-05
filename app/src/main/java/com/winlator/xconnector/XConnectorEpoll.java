@@ -27,8 +27,9 @@ public class XConnectorEpoll {
         this.connectionHandler = connectionHandler;
         this.requestHandler = requestHandler;
 
+        socketConfig.prepareForBind();
         nativePtr = nativeAllocate(socketConfig.path);
-        if (nativePtr == 0) throw new RuntimeException("Failed to allocate XConnectorEpoll.");
+        if (nativePtr == 0) throw new RuntimeException("Failed to allocate XConnectorEpoll for Unix socket " + socketConfig.relativePath);
     }
 
     public void start() {

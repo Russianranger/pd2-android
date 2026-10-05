@@ -33,6 +33,7 @@ python3 tests/test_native_controller_input.py
 python3 tests/test_captured_pointer.py
 python3 tests/test_crash_recovery.py
 python3 tests/test_session_logs.py
+python3 tests/test_unix_socket_config.py
 sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;24.0.8215888' 'cmake;3.22.1'
 ./gradlew --no-daemon :app:testDebugUnitTest
 ./gradlew --no-daemon :app:assembleDebug
@@ -55,7 +56,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The current output is `app/build/distributions/PD2-Android-0.1.13-preview.apk` and a
+The current output is `app/build/distributions/PD2-Android-0.1.14-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 

@@ -27,6 +27,7 @@ public class PulseAudioComponent extends EnvironmentComponent {
     public void start() {
         synchronized (lock) {
             stop();
+            socketConfig.prepareForBind();
             pid = execPulseAudio();
         }
     }

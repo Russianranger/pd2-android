@@ -95,6 +95,14 @@ public final class Pd2LaunchDiagnostics {
         } catch (IOException | JSONException ignored) { }
     }
 
+    /** Include the failed component/endpoint without an unbounded exception or stack dump. */
+    public static String startupFailure(RuntimeException failure) {
+        String detail = failure.getMessage();
+        if (detail == null || detail.isEmpty()) detail = failure.getClass().getSimpleName();
+        String message = "Runtime startup failed: " + detail.replace('\n', ' ').replace('\r', ' ');
+        return message.substring(0, Math.min(512, message.length()));
+    }
+
     public static JSONObject installationFiles(File installed, Pd2InstallValidator.Result installation) throws JSONException {
         JSONArray files = new JSONArray();
         File base = installation.clientRootRelativePath.isEmpty() ? installed : new File(installed, installation.clientRootRelativePath);

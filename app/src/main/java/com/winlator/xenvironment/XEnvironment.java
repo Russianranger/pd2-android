@@ -54,7 +54,14 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
 
     public void startEnvironmentComponents() {
         FileUtils.clear(getTmpDir());
-        for (EnvironmentComponent environmentComponent : this) environmentComponent.start();
+        for (EnvironmentComponent environmentComponent : this) {
+            try { environmentComponent.start(); }
+            catch (RuntimeException failure) {
+                throw new IllegalStateException(environmentComponent.getClass().getSimpleName()
+                        + ": " + failure.getClass().getSimpleName()
+                        + (failure.getMessage() == null ? "" : ": " + failure.getMessage()), failure);
+            }
+        }
     }
 
     public void stopEnvironmentComponents() {

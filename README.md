@@ -1,8 +1,8 @@
 # PD2 Android
 
-Current preview: **0.1.13**. The 0.1.12 device report says Play immediately returned to the launcher. This preview repairs a source-proven temporary shared-memory directory ordering regression, retains exact-prefix Wine/session cleanup, and adds clear current/older container labels with protected deletion. Startup and Native recovery require the next physical result; accepted LT/thumb and shoulder input remain.
+Current preview: **0.1.14**. The 0.1.13 support ZIP records a startup failure before PD2 began, with both Wine cleanup phases passing. Socket configurations now leave the filesystem untouched until service startup; each service recreates its socket parent after temporary cleanup, immediately before binding. Component and endpoint details are retained if startup fails. Accepted runtime, input fixes and protected container management remain.
 
-Install over the existing app; keep runtime, import and saves. First check Play reaches the same offline character, then compare Native after Save/Quit/re-entry and full Stop/Play without killing Android. Export before Stop and after relaunch. Advanced runtime settings identifies the current protected container and permits confirmed deletion of eligible older private containers. [Focused testing](docs/TESTING.md), [release notes](docs/RELEASE-0.1.13.md) and [handoff](docs/HANDOFF.md) give the details. No Prepare runtime or re-import is requested.
+Install over the existing app; keep runtime, import and saves. First check Play reaches the same offline character, then compare Native after Save/Quit/re-entry and full Stop/Play without killing Android. Export before Stop and after relaunch. Advanced runtime settings identifies the current protected container and permits confirmed deletion of eligible older private containers. [Focused testing](docs/TESTING.md), [release notes](docs/RELEASE-0.1.14.md), [startup evidence](docs/evidence/2026-10-05-startup-sockets.md) and [handoff](docs/HANDOFF.md) give the details. No Prepare runtime or re-import is requested.
 
 ## First preview
 
@@ -56,6 +56,6 @@ GameNative once your game files are imported.
 The targeted Wine 9 HID backend is built from the included source and pinned
 Wine 9 headers; [Build instructions](docs/BUILD.md) describe its artifact/ABI checks.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.13 release notes](docs/RELEASE-0.1.13.md) describe the startup repair and container cleanup, and the [research report](docs/evidence/2026-10-04-controller-research.md) records primary sources and diagnosis limits. Earlier release notes retain the preview history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the controller retest and pending gameplay checklist; [Handoff](docs/HANDOFF.md) records the evidence and remaining gates. [0.1.14 release notes](docs/RELEASE-0.1.14.md) describe the socket startup repair; [0.1.13 notes](docs/RELEASE-0.1.13.md) retain container-cleanup details, and the [research report](docs/evidence/2026-10-04-controller-research.md) records primary sources and diagnosis limits. Earlier release notes retain the preview history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.
