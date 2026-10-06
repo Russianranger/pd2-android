@@ -498,6 +498,24 @@ public class GamepadHandler {
             break;
         }
         winHandler.controllerDiagnostics.setSelectedAndroidDevice(physicalId);
+        recordControllerSlotTopology();
+    }
+
+    /** Observe the existing assignment; never enumerate Windows devices or open another XInput client. */
+    void recordControllerSlotTopology() {
+        int slots = 0, physicalSlots = 0, connectedPhysical;
+        HashSet<Integer> assignedAndroidDevices = new HashSet<>(GAMEPAD_MAX_COUNT);
+        for (GamepadSlot slot : gamepadSlots) {
+            if (slot == null) continue;
+            slots++;
+            if (slot instanceof ExternalController) {
+                physicalSlots++;
+                assignedAndroidDevices.add(((ExternalController)slot).getDeviceId());
+            }
+        }
+        synchronized (connectedControllers) { connectedPhysical = connectedControllers.size(); }
+        winHandler.controllerDiagnostics.setControllerSlotTopology(connectedPhysical, slots, physicalSlots,
+                assignedAndroidDevices.size(), slots - physicalSlots);
     }
 
     private boolean isAnyGamepadConnected() {
@@ -506,7 +524,10 @@ public class GamepadHandler {
     }
 
     public void handleGetGamepadRequest(int port) {
-        if (isLegacyClient(port) && winHandler.receiveData.remaining() < 6) return;
+        if (isLegacyClient(port) && winHandler.receiveData.remaining() < 6) {
+            winHandler.controllerDiagnostics.recordInvalidLegacyDiscovery();
+            return;
+        }
         updateGamepadSlots();
         if (isLegacyClient(port)) {
             handleLegacyGetGamepadRequest(port);
@@ -560,11 +581,20 @@ public class GamepadHandler {
 
     void handleLegacyGetGamepadRequest(int port) {
         ByteBuffer request = winHandler.receiveData;
-        if (request.remaining() < 6) return;
-        boolean xinput = request.get() == 1;
-        boolean notify = request.get() == 1;
+        if (request.remaining() < 6) {
+            winHandler.controllerDiagnostics.recordInvalidLegacyDiscovery();
+            return;
+        }
+        byte xinputFlag = request.get(), notifyFlag = request.get();
+        if ((xinputFlag != 0 && xinputFlag != 1) || (notifyFlag != 0 && notifyFlag != 1)) {
+            winHandler.controllerDiagnostics.recordInvalidLegacyDiscovery();
+            throw new IllegalArgumentException("Invalid legacy controller discovery flags");
+        }
+        boolean xinput = xinputFlag == 1;
+        boolean notify = notifyFlag == 1;
         int processId = request.getInt();
-        winHandler.controllerDiagnostics.recordLegacyDiscovery(xinput, notify);
+        if (!winHandler.controllerDiagnostics.recordLegacyDiscovery(xinput, notify, processId, port))
+            throw new IllegalArgumentException("Invalid legacy controller discovery identity");
         if (xinput) legacyXInputProcesses.add(processId);
         GamepadSlot selected = null;
         // Match upstream AUTO: avoid a duplicate DInput device for an XInput process.

@@ -1,4 +1,22 @@
-# 0.1.16 Native identity and cleanup test
+# 0.1.17 HID read-cancellation test
+
+The new 0.1.16 physical result accepts Native after full **Stop client → Play in the same Android app process**. Save/Quit still fails, and both fresh-identity attempts failed despite successful Wine removal/start observations. The [new controller census](evidence/2026-10-06-controller-census.md) finds one physical pad and one active Wine HID parent, with paired child interfaces and an independent legacy XInput representation. Do not repeat the failed identity/reconnect/focus experiments or accepted binding tests.
+
+Install **0.1.17 over the existing app**. Preserve the accepted runtime, import/prefix/saves, graphics/GameNative arguments, Stability and controller notifications. **No Prepare runtime, re-import, uninstall or clear storage.** The new experiment defaults Off, retaining the original driver.
+
+1. Fully **Stop client** and wait for cleanup. Open **Launch settings → Controller → Save/Quit experiment** and select **HID read cancellation fix (experimental)**. Keep controller notifications enabled. The choice applies on the next clean Play; it does not change a running client.
+2. Press **Play**, enter the same character and confirm ordinary Native movement and one face-button action. If the client does not start or initial Native fails, export immediately and use the rollback below.
+3. Save/Quit, use Menu cursor to re-enter the character, select Native and test movement plus a face button. **Export support logs before Stop or any recovery action**, labeling whether Native worked. A successful driver install is not a gameplay result.
+4. If it works, repeat Save/Quit and character re-entry twice more in the same client and export again. If it fails, capture that result and use the accepted full Stop/Play workaround; do not retry fresh identities.
+5. To roll back, fully **Stop client**, choose **Save/Quit experiment → Original Wine driver (default)** and press **Play**. The verified original driver is restored after cleanup. Export if restoration or launch is refused. No Android force-stop is required to apply this setting.
+
+Report initial Native and each Save/Quit re-entry separately. This targets a source-proven HID read-cancellation defect; the capture does not prove that defect causes PD2's symptom. Same-app session cleanup is unchanged and already accepted; retest it only if this preview produces a regression.
+
+`launch.json.hidReadRuntime` records the requested/installed driver revision and exact hash after cleanup. `controller.json.controllerExposure` records selected slot counts, bounded declared Windows client IDs and request/reply port categories. These are diagnostic identity/counter fields, not control values, authenticated Linux process owners or proof that the game accepted input.
+
+## Historical 0.1.16 test and results
+
+The sequence below is retained as historical reference. The new physical capture completes its gates: same-app Stop/Play passes; fresh identity and in-place Save/Quit fail. Do not repeat it for 0.1.17.
 
 Install **0.1.16 over the existing app**. Keep the accepted Wine 9.2 Custom, Box64 0.4.4, rootfs 24, import/prefix/saves, Turnip + Zink, GameNative Glide arguments, Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.** LT/thumb, shoulders, Menu cursor and cursor/icon work are accepted and need no repeated qualification.
 

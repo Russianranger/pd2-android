@@ -13,6 +13,14 @@ public final class Pd2LaunchPolicy {
 
     public static String cpuPreset() { return Box64Preset.STABILITY; }
 
+    /** Wine treats .sys as part of the name. Cover its full, wildcard and basename lookups. */
+    public static String hidReadOverrides(String existing, boolean experimental) {
+        String value = existing == null ? "" : existing;
+        if (!experimental) return value;
+        return value + (value.isEmpty() || value.endsWith(";") ? "" : ";")
+                + "C:\\windows\\system32\\drivers\\hidclass.sys=b;*hidclass.sys=b;hidclass.sys=b";
+    }
+
     public static String environment(String arguments, boolean interpreter) {
         // Native-first DirectDraw can select the same D2GL hooks as Glide.
         // The compatibility choice must actually bypass that imported wrapper.

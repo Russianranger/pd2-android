@@ -79,6 +79,7 @@ import com.winlator.pd2.Pd2PointerCleanup;
 import com.winlator.pd2.Pd2NativeFocusRecovery;
 import com.winlator.pd2.Pd2ControllerDialogs;
 import com.winlator.pd2.Pd2ControllerRuntime;
+import com.winlator.pd2.Pd2HidReadRuntime;
 import com.winlator.pd2.Pd2Activity;
 import com.winlator.pd2.Pd2LaunchDiagnostics;
 import com.winlator.math.Mathf;
@@ -811,9 +812,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
           if (pd2Session) {
             if (!guestProgramLauncherComponent.preparePd2Session()) {
                 pd2LaunchFailure = guestProgramLauncherComponent.getPd2LaunchFailure();
-                Pd2Activity.appendLauncherLog(this, "Client launch refused: previous Wine services or controller ports have not closed. Export support logs.");
+                Pd2Activity.appendLauncherLog(this, "Client launch refused: " + pd2LaunchFailure);
                 runOnUiThread(() -> {
-                    Toast.makeText(this, "Client cleanup did not finish. Export support logs before retrying.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, pd2LaunchFailure == null ? "Client cleanup did not finish. Export support logs before retrying."
+                            : pd2LaunchFailure + " Export support logs.", Toast.LENGTH_LONG).show();
                     exit();
                 });
                 return;
@@ -1156,6 +1158,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         StringBuilder message = new StringBuilder("Layout: ")
                 .append(pd2InputModeLabel())
                 .append("\nController notifications: ").append(Pd2ControllerRuntime.enabled(this) ? "Enabled" : "Disabled")
+                .append("\nHID read experiment: ").append(Pd2HidReadRuntime.enabled(this) ? "Selected for next clean Play" : "Off")
                 .append("\n\nDetected controllers:");
         JSONArray devices = report.optJSONArray("devices");
         int accepted = 0;
@@ -1167,6 +1170,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
         }
         if (accepted == 0) message.append("\nNone detected by Android as a gamepad.");
+        else message.append("\nAccepted Android gamepads: ").append(accepted);
+        JSONObject exposure = report.optJSONObject("controllerExposure");
+        if (exposure != null) message.append("\nAssigned controller slots: ").append(exposure.optInt("assignedSlots"))
+                .append("\nObserved legacy XInput clients: ").append(exposure.optInt("trackedXinputClientCount"))
+                .append(" (session total)");
         JSONObject counts = report.optJSONObject("counts");
         if (counts != null) message.append("\n\nController buttons received: ")
                 .append(counts.optLong("handledKeyEvents"))
@@ -1196,8 +1204,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
             message.append("\n\nLast experimental recovery: ").append(label);
         }
-        message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. If Native input stops after Save/Quit, enter gameplay and try Recover Native controller (experimental). This creates a fresh Windows controller identity; gameplay recovery still needs your test.")
-                .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
+        message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. Fresh identity recovery did not fix the reported Save/Quit failure. The new HID read experiment is in launcher settings and applies after Stop client → Play.")
+                .append("\n\nIf Native fails after Save/Quit, export support logs before Stop. Full Stop/Play now restores Native in the reported test.");
         AlertDialog status = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme).setTitle("Controller status")
                 .setMessage(message.toString()).setPositiveButton("Done", null).create();
         status.setOnDismissListener(dialog -> { pd2MenuOpen = false; updatePd2InputMode(); });

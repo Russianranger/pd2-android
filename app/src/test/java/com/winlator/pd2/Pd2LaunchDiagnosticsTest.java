@@ -73,6 +73,33 @@ public final class Pd2LaunchDiagnosticsTest {
                 new EnvVars(Pd2LaunchPolicy.environment("  -DDRAW\t-w ", false)).get("WINEDLLOVERRIDES"));
     }
 
+    @Test public void hidExperimentKeepsGraphicsOverridesAndTargetsTheSysLoaderNames() {
+        String original = new EnvVars(Pd2LaunchPolicy.environment(Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS, false))
+                .get("WINEDLLOVERRIDES");
+        assertEquals(original, Pd2LaunchPolicy.hidReadOverrides(original, false));
+        String enabled = Pd2LaunchPolicy.hidReadOverrides(original, true);
+        assertTrue(enabled.startsWith(original + ";"));
+        assertTrue(enabled.endsWith("C:\\windows\\system32\\drivers\\hidclass.sys=b;*hidclass.sys=b;hidclass.sys=b"));
+        assertFalse(enabled.contains("hidclass=b"));
+        assertEquals("ddraw,glide3x=n,b;mscoree,mshtml=d", original);
+        assertFalse(Pd2LaunchPolicy.hidReadOverrides("", true).startsWith(";"));
+        assertFalse(Pd2LaunchPolicy.hidReadOverrides("ddraw=b;", true).contains(";;"));
+    }
+
+    @Test public void appliedHidDriverStatusCannotAnnotateANewerLaunch() throws Exception {
+        Application application = RuntimeEnvironment.getApplication();
+        File report = new File(application.getFilesDir(), "pd2/logs/launch.json");
+        assertTrue(report.getParentFile().mkdirs() || report.getParentFile().isDirectory());
+        Files.write(report.toPath(), new JSONObject().put("launchId", "current").toString().getBytes(StandardCharsets.UTF_8));
+        JSONObject status = new JSONObject().put("installed", true).put("appliedForLaunch", true);
+        Pd2LaunchDiagnostics.hidReadRuntime(application, "old", status);
+        assertFalse(new JSONObject(read(report)).has("hidReadRuntime"));
+        Pd2LaunchDiagnostics.hidReadRuntime(application, "current", status);
+        JSONObject current = new JSONObject(read(report));
+        assertTrue(current.getJSONObject("hidReadRuntime").getBoolean("appliedForLaunch"));
+        assertTrue(current.getLong("hidReadPreparedAt") > 0);
+    }
+
     @Test public void interpreterOverridesDefaultAndRetainsExceptionDiagnostics() {
         EnvVars merged = Box64PresetManager.getEnvVars(RuntimeEnvironment.getApplication(), Pd2LaunchPolicy.cpuPreset());
         merged.put("BOX64_DYNAREC", "1");

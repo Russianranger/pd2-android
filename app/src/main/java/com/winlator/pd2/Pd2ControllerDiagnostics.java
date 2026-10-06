@@ -18,12 +18,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.UUID;
 
 /** Bounded capabilities, bridge counts and pointer routing context; never pressed keys or axis values. */
 public final class Pd2ControllerDiagnostics {
     public static final int MAX_REPORT_BYTES = 64 * 1024;
     public static final int MAX_DEVICES = 32;
+    public static final int MAX_LEGACY_CLIENTS = 16;
     private static final Object FILE_LOCK = new Object();
     private final Context context;
     private final String sessionId = UUID.randomUUID().toString();
@@ -39,6 +41,14 @@ public final class Pd2ControllerDiagnostics {
     private long deviceReplies, stateReplies, replyFailures, invalidPackets, socketFailures;
     private long motionEvents, handledMotionEvents, keyEvents, handledKeyEvents;
     private long legacyXInputDiscovery, legacyDInputDiscovery, notifySubscriptions;
+    private final ArrayList<LegacyClient> legacyClients = new ArrayList<>(MAX_LEGACY_CLIENTS);
+    private long legacyClientOverflowRequests, invalidLegacyDiscoveries;
+    private final long[] controllerRequestSources = new long[4];
+    private final long[] controllerReplyDestinations = new long[4];
+    private int connectedPhysicalControllers, assignedSlots, assignedPhysicalSlots;
+    private int distinctAssignedAndroidDevices, assignedVirtualSlots;
+    private boolean slotTopologyKnown, connectedPhysicalControllersTruncated;
+    private long slotTopologyUpdatedAt;
     private long hidDiscoveryRequests, hidDeviceReplies, hidStateReplies;
     private long lastHandledMotionAt, lastHandledKeyAt, lastHidReplyAt, lastXInputReplyAt;
     private long nativeFocusRequests, lastNativeFocusRequestAt;
@@ -64,6 +74,32 @@ public final class Pd2ControllerDiagnostics {
     private static final String[] MODES = {"native", "menu_cursor", "mouse_keyboard"};
     private final ModeInput[] inputByMode = {new ModeInput(), new ModeInput(), new ModeInput()};
     private final PointerOutput pointerOutput = new PointerOutput();
+
+    private static final class LegacyClient {
+        final int windowsProcessId;
+        final long firstSeenAt = System.currentTimeMillis();
+        long lastSeenAt, xinputDiscoveries, dinputDiscoveries, notifyDiscoveries;
+        long source7948Requests, source7949Requests;
+
+        LegacyClient(int pid) { windowsProcessId = pid; }
+
+        void record(boolean xinput, boolean notify, int sourcePort) {
+            lastSeenAt = System.currentTimeMillis();
+            if (xinput) xinputDiscoveries = increment(xinputDiscoveries);
+            else dinputDiscoveries = increment(dinputDiscoveries);
+            if (notify) notifyDiscoveries = increment(notifyDiscoveries);
+            if (sourcePort == 7948) source7948Requests = increment(source7948Requests);
+            else source7949Requests = increment(source7949Requests);
+        }
+
+        JSONObject snapshot() throws JSONException {
+            return new JSONObject().put("windowsProcessId", windowsProcessId)
+                    .put("firstSeenAt", firstSeenAt).put("lastSeenAt", lastSeenAt)
+                    .put("xinputDiscoveries", xinputDiscoveries).put("dinputDiscoveries", dinputDiscoveries)
+                    .put("notifyDiscoveries", notifyDiscoveries)
+                    .put("source7948Requests", source7948Requests).put("source7949Requests", source7949Requests);
+        }
+    }
 
     private static final class ModeInput {
         long handledMotionEvents, handledKeyEvents, lastHandledMotionAt, lastHandledKeyAt;
@@ -190,6 +226,22 @@ public final class Pd2ControllerDiagnostics {
     }
     public synchronized void setHidDeviceUid(int uid) { hidDeviceUid = uid; }
 
+    /** Latest Java slot assignment only; it does not count Windows enumeration or accepted input. */
+    public synchronized void setControllerSlotTopology(int connectedPhysical, int slots, int physicalSlots,
+            int distinctAndroidDevices, int virtualSlots) {
+        if (connectedPhysical < 0 || slots < 0 || slots > 4 || physicalSlots < 0 || physicalSlots > slots
+                || distinctAndroidDevices < 0 || distinctAndroidDevices > physicalSlots
+                || virtualSlots < 0 || virtualSlots != slots - physicalSlots) return;
+        slotTopologyKnown = true;
+        connectedPhysicalControllers = Math.min(connectedPhysical, MAX_DEVICES);
+        connectedPhysicalControllersTruncated = connectedPhysical > MAX_DEVICES;
+        assignedSlots = slots;
+        assignedPhysicalSlots = physicalSlots;
+        distinctAssignedAndroidDevices = distinctAndroidDevices;
+        assignedVirtualSlots = virtualSlots;
+        slotTopologyUpdatedAt = System.currentTimeMillis();
+    }
+
     /** An observed Unix HID callback is not a PD2 input or Windows enumeration acknowledgement. */
     public synchronized void recordNativeIdentityRecovery(String phase) {
         if (phase == null) return;
@@ -276,6 +328,10 @@ public final class Pd2ControllerDiagnostics {
     }
 
     public synchronized void recordRequest(byte code, int port) {
+        if (code == 8 || code == 9) {
+            int category = controllerPortCategory(port);
+            controllerRequestSources[category] = increment(controllerRequestSources[category]);
+        }
         if (code == 8) {
             if (port == 7948) dinputRequests = increment(dinputRequests);
             else if (port == 7949) xinputRequests = increment(xinputRequests);
@@ -291,8 +347,42 @@ public final class Pd2ControllerDiagnostics {
         if (notify) notifySubscriptions = increment(notifySubscriptions);
     }
 
+    /**
+     * Retain the first sixteen distinct declared Windows PIDs for this diagnostics session.
+     * This observes existing discovery packets; no helper process opens an XInput DLL.
+     * The declared PID is not authenticated Linux socket ownership, and overflow counts requests.
+     */
+    public synchronized boolean recordLegacyDiscovery(boolean xinput, boolean notify, int windowsProcessId,
+            int sourcePort) {
+        if (windowsProcessId <= 0 || (sourcePort != 7948 && sourcePort != 7949)) {
+            recordInvalidLegacyDiscovery();
+            return false;
+        }
+        recordLegacyDiscovery(xinput, notify);
+        for (LegacyClient client : legacyClients) {
+            if (client.windowsProcessId == windowsProcessId) {
+                client.record(xinput, notify, sourcePort);
+                return true;
+            }
+        }
+        if (legacyClients.size() == MAX_LEGACY_CLIENTS) {
+            legacyClientOverflowRequests = increment(legacyClientOverflowRequests);
+            return true;
+        }
+        LegacyClient client = new LegacyClient(windowsProcessId);
+        client.record(xinput, notify, sourcePort);
+        legacyClients.add(client);
+        return true;
+    }
+
+    public synchronized void recordInvalidLegacyDiscovery() {
+        invalidLegacyDiscoveries = increment(invalidLegacyDiscoveries);
+    }
+
     public synchronized void recordReply(byte code, int port, boolean success) {
         if (code != 8 && code != 9) return;
+        int category = controllerPortCategory(port);
+        controllerReplyDestinations[category] = increment(controllerReplyDestinations[category]);
         if (!success) replyFailures = increment(replyFailures);
         else if (code == 8) {
             deviceReplies = increment(deviceReplies);
@@ -304,6 +394,41 @@ public final class Pd2ControllerDiagnostics {
             if (port == 7950) lastHidReplyAt = System.currentTimeMillis();
             else if (port == 7949) lastXInputReplyAt = System.currentTimeMillis();
         }
+    }
+
+    private static int controllerPortCategory(int port) {
+        return port == 7948 ? 0 : port == 7949 ? 1 : port == 7950 ? 2 : 3;
+    }
+
+    private static JSONObject controllerPortCounts(long[] counts) throws JSONException {
+        return new JSONObject().put("legacyDinput7948", counts[0]).put("legacyXinput7949", counts[1])
+                .put("hid7950", counts[2]).put("other", counts[3]);
+    }
+
+    private JSONObject controllerExposureSnapshot() throws JSONException {
+        JSONArray clients = new JSONArray();
+        int xinputClients = 0, dinputClients = 0;
+        for (LegacyClient client : legacyClients) {
+            clients.put(client.snapshot());
+            if (client.xinputDiscoveries > 0) xinputClients++;
+            if (client.dinputDiscoveries > 0) dinputClients++;
+        }
+        return new JSONObject().put("slotTopologyKnown", slotTopologyKnown)
+                .put("slotTopologyUpdatedAt", slotTopologyUpdatedAt)
+                .put("connectedPhysicalControllers", connectedPhysicalControllers)
+                .put("connectedPhysicalControllersTruncated", connectedPhysicalControllersTruncated)
+                .put("assignedSlots", assignedSlots).put("assignedPhysicalSlots", assignedPhysicalSlots)
+                .put("distinctAssignedAndroidDevices", distinctAssignedAndroidDevices)
+                .put("assignedVirtualSlots", assignedVirtualSlots)
+                .put("legacyClients", clients).put("trackedLegacyClientCount", legacyClients.size())
+                .put("trackedXinputClientCount", xinputClients).put("trackedDinputClientCount", dinputClients)
+                .put("maxLegacyClients", MAX_LEGACY_CLIENTS)
+                .put("legacyClientOverflowRequests", legacyClientOverflowRequests)
+                .put("invalidLegacyDiscoveries", invalidLegacyDiscoveries)
+                .put("requestSourceCategories", controllerPortCounts(controllerRequestSources))
+                .put("replyDestinationCategories", controllerPortCounts(controllerReplyDestinations))
+                .put("producerPort", 7947)
+                .put("scope", "Java slot topology and bounded existing UDP discovery metadata; declared Windows PIDs are not authenticated Linux socket owners or simultaneous listeners. Retained per session; overflow counts requests, reply destinations include failed sends. No helper process loads XInput; no input values or session tokens.");
     }
 
     public synchronized void recordMotion(boolean handled) {
@@ -426,6 +551,7 @@ public final class Pd2ControllerDiagnostics {
                         .put("controllerProducer", new JSONObject().put("generation", producerGeneration)
                                 .put("selectedAndroidDeviceId", selectedAndroidDeviceId).put("androidDeviceChanges", androidDeviceChanges)
                                 .put("hidDeviceUid", hidDeviceUid))
+                        .put("controllerExposure", controllerExposureSnapshot())
                         .put("nativeIdentityRecovery", new JSONObject().put("requests", identityRequests)
                                 .put("detachSent", identityDetachSent).put("detachObserved", identityDetachObserved).put("attachSent", identityAttachSent)
                                 .put("backendObserved", identityBackendObserved).put("deviceStartObserved", identityStartedObserved)

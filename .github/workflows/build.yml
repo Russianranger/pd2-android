@@ -63,6 +63,8 @@ jobs:
         run: |
           python3 scripts/build-controller-runtime.py --check
           python3 -m unittest discover -s tests -p 'test_controller_runtime.py' -v
+          python3 scripts/build-hid-read-runtime.py --check
+          python3 -m unittest discover -s tests -p 'test_hid_read_runtime.py' -v
       - name: Test Android 13 startup and build ARM64 preview
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - name: Upload Android startup test results

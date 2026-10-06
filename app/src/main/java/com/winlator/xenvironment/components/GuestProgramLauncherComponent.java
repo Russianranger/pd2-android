@@ -22,6 +22,8 @@ import com.winlator.xenvironment.RootFS;
 import com.winlator.pd2.Pd2WineSession;
 import com.winlator.pd2.Pd2LaunchDiagnostics;
 import com.winlator.pd2.Pd2Activity;
+import com.winlator.pd2.Pd2HidReadRuntime;
+import com.winlator.pd2.Pd2LaunchPolicy;
 
 import java.io.File;
 import java.util.List;
@@ -61,8 +63,26 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 pd2WineSession = new Pd2WineSession(rootFS.getRootDir(), rootFS.getWinePath(), launchEnvironment);
                 Pd2WineSession.Result result = pd2WineSession.beforeLaunch();
                 recordCleanup(result);
-                if (!result.passed) recordLaunchFailure(result.error);
-                return result.passed;
+                if (!result.passed) { recordLaunchFailure(result.error); return false; }
+                try {
+                    // The environment lock excludes replacement startup; cleanup proves the old
+                    // guest is gone before changing a driver. Never patch during Save/Quit.
+                    boolean hidReadApplied = Pd2HidReadRuntime.prepareAfterCleanup(environment.getContext(), result);
+                    launchEnvironment.put("WINEDLLOVERRIDES", Pd2LaunchPolicy.hidReadOverrides(
+                            launchEnvironment.get("WINEDLLOVERRIDES"), hidReadApplied));
+                    org.json.JSONObject hidReadStatus = Pd2HidReadRuntime.status(environment.getContext());
+                    try { hidReadStatus.put("appliedForLaunch", hidReadApplied); }
+                    catch (org.json.JSONException ignored) { }
+                    Pd2LaunchDiagnostics.hidReadRuntime(environment.getContext(), pd2LaunchId, hidReadStatus);
+                    return true;
+                } catch (java.io.IOException | RuntimeException error) {
+                    recordLaunchFailure("Cannot apply the HID read experiment: " + error.getMessage());
+                    // A prepared session owns the global lease even before guest startup.
+                    // Release it on installation failure so the next clean Play is possible.
+                    recordCleanup(pd2WineSession.stop());
+                    pd2CleanupRecorded = true;
+                    return false;
+                }
             } catch (java.io.IOException error) {
                 recordLaunchFailure("Cannot verify PD2 Wine shutdown: " + error.getMessage());
                 return false;

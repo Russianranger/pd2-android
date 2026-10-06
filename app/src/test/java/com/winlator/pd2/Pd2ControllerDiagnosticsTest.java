@@ -32,6 +32,98 @@ import static org.junit.Assert.*;
 public final class Pd2ControllerDiagnosticsTest {
     @Before public void clearDevices() { InputDevices.devices.clear(); }
 
+    @Test public void legacyExposureRetainsDistinctDeclaredProcessesAcrossRolesWithoutClaimingSocketOwnership() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        assertTrue(diagnostics.recordLegacyDiscovery(true, true, 240, 7949));
+        assertTrue(diagnostics.recordLegacyDiscovery(true, false, 240, 7949));
+        assertTrue(diagnostics.recordLegacyDiscovery(false, true, 240, 7948));
+        assertTrue(diagnostics.recordLegacyDiscovery(true, true, 244, 7949));
+        diagnostics.setSocketReady(false); // A stop/export retains the session's observed PIDs.
+        JSONObject exposure = diagnostics.snapshot().getJSONObject("controllerExposure");
+        assertEquals(2, exposure.getInt("trackedLegacyClientCount"));
+        assertEquals(2, exposure.getInt("trackedXinputClientCount"));
+        assertEquals(1, exposure.getInt("trackedDinputClientCount"));
+        JSONObject first = exposure.getJSONArray("legacyClients").getJSONObject(0);
+        assertEquals(240, first.getInt("windowsProcessId"));
+        assertEquals(2, first.getLong("xinputDiscoveries"));
+        assertEquals(1, first.getLong("dinputDiscoveries"));
+        assertEquals(2, first.getLong("notifyDiscoveries"));
+        assertEquals(2, first.getLong("source7949Requests"));
+        assertEquals(1, first.getLong("source7948Requests"));
+        assertTrue(first.getLong("firstSeenAt") > 0);
+        assertTrue(first.getLong("lastSeenAt") >= first.getLong("firstSeenAt"));
+        assertTrue(exposure.getString("scope").contains("not authenticated Linux socket owners"));
+        assertTrue(exposure.getString("scope").contains("No helper process loads XInput"));
+        first.put("windowsProcessId", 9999);
+        assertEquals(240, diagnostics.snapshot().getJSONObject("controllerExposure")
+                .getJSONArray("legacyClients").getJSONObject(0).getInt("windowsProcessId"));
+        assertEquals(0, new Pd2ControllerDiagnostics(null).snapshot()
+                .getJSONObject("controllerExposure").getInt("trackedLegacyClientCount"));
+    }
+
+    @Test public void legacyExposureCapsPidRecordsCountsUntrackedRequestsAndDropsInvalidIdentities() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        for (int i = 0; i < Pd2ControllerDiagnostics.MAX_LEGACY_CLIENTS; i++)
+            assertTrue(diagnostics.recordLegacyDiscovery(true, true, 100 + i, 7949));
+        assertTrue(diagnostics.recordLegacyDiscovery(true, true, 999, 7949));
+        assertTrue(diagnostics.recordLegacyDiscovery(true, true, 999, 7949));
+        assertTrue(diagnostics.recordLegacyDiscovery(false, false, 100, 7948));
+        for (int invalid : new int[]{0, -1, Integer.MIN_VALUE})
+            assertFalse(diagnostics.recordLegacyDiscovery(true, true, invalid, 7949));
+        assertFalse(diagnostics.recordLegacyDiscovery(true, true, 1000, 7950));
+        JSONObject report = diagnostics.snapshot(), exposure = report.getJSONObject("controllerExposure");
+        assertEquals(Pd2ControllerDiagnostics.MAX_LEGACY_CLIENTS, exposure.getJSONArray("legacyClients").length());
+        assertEquals(2, exposure.getLong("legacyClientOverflowRequests"));
+        assertEquals(4, exposure.getLong("invalidLegacyDiscoveries"));
+        assertEquals(Pd2ControllerDiagnostics.MAX_LEGACY_CLIENTS + 2,
+                report.getJSONObject("counts").getLong("legacyXInputDiscovery"));
+        assertEquals(1, report.getJSONObject("counts").getLong("legacyDInputDiscovery"));
+        assertTrue(report.toString().getBytes(StandardCharsets.UTF_8).length < Pd2ControllerDiagnostics.MAX_REPORT_BYTES);
+        assertTrue(new Pd2ControllerDiagnostics(null).recordLegacyDiscovery(true, false, Integer.MAX_VALUE, 7949));
+    }
+
+    @Test public void exposurePortCategoriesAreFixedAndSeparateRequestsFromReplyAttempts() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        for (int port : new int[]{7948, 7949, 7950, 44444}) {
+            diagnostics.recordRequest((byte)8, port);
+            diagnostics.recordRequest((byte)9, port);
+            diagnostics.recordRequest((byte)7, port);
+            diagnostics.recordReply((byte)8, port, true);
+            diagnostics.recordReply((byte)9, port, false);
+            diagnostics.recordReply((byte)7, port, true);
+        }
+        JSONObject exposure = diagnostics.snapshot().getJSONObject("controllerExposure");
+        for (String category : new String[]{"legacyDinput7948", "legacyXinput7949", "hid7950", "other"}) {
+            assertEquals(category, 2, exposure.getJSONObject("requestSourceCategories").getLong(category));
+            assertEquals(category, 2, exposure.getJSONObject("replyDestinationCategories").getLong(category));
+        }
+        assertEquals(7947, exposure.getInt("producerPort"));
+        assertFalse(exposure.toString().contains("44444"));
+    }
+
+    @Test public void slotExposureSeparatesPhysicalAssignmentAliasesFromVirtualSlotsAndClampsTheDeviceCount() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        assertFalse(diagnostics.snapshot().getJSONObject("controllerExposure").getBoolean("slotTopologyKnown"));
+        diagnostics.setControllerSlotTopology(1, 3, 2, 1, 1);
+        JSONObject exposure = diagnostics.snapshot().getJSONObject("controllerExposure");
+        assertTrue(exposure.getBoolean("slotTopologyKnown"));
+        assertTrue(exposure.getLong("slotTopologyUpdatedAt") > 0);
+        assertEquals(1, exposure.getInt("connectedPhysicalControllers"));
+        assertEquals(3, exposure.getInt("assignedSlots"));
+        assertEquals(2, exposure.getInt("assignedPhysicalSlots"));
+        assertEquals(1, exposure.getInt("distinctAssignedAndroidDevices"));
+        assertEquals(1, exposure.getInt("assignedVirtualSlots"));
+        diagnostics.setControllerSlotTopology(-1, 0, 0, 0, 0);
+        diagnostics.setControllerSlotTopology(1, 5, 2, 1, 3);
+        diagnostics.setControllerSlotTopology(1, 2, 1, 2, 1);
+        diagnostics.setControllerSlotTopology(1, 2, 1, 1, 0);
+        assertEquals(3, diagnostics.snapshot().getJSONObject("controllerExposure").getInt("assignedSlots"));
+        diagnostics.setControllerSlotTopology(1000, 4, 4, 4, 0);
+        exposure = diagnostics.snapshot().getJSONObject("controllerExposure");
+        assertEquals(Pd2ControllerDiagnostics.MAX_DEVICES, exposure.getInt("connectedPhysicalControllers"));
+        assertTrue(exposure.getBoolean("connectedPhysicalControllersTruncated"));
+    }
+
     @Test public void pointerRoutesAttributeEmissionsAndRejectedCaptureToTheCurrentModeWithoutValues() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
         diagnostics.recordPointerRoute("captured", "disabled");
@@ -366,6 +458,10 @@ public final class Pd2ControllerDiagnosticsTest {
                 .put("focusWindow", window).put("pointWindow", window).put("grabWindow", window).put("menuWindow", window);
         diagnostics.setLaunchId(new String(new char[128]).replace('\0', 'L'));
         diagnostics.setSelectedDevice(name.toString());
+        for (int index = 0; index < Pd2ControllerDiagnostics.MAX_LEGACY_CLIENTS; index++) {
+            diagnostics.recordLegacyDiscovery(true, true, Integer.MAX_VALUE - index, 7949);
+            diagnostics.recordLegacyDiscovery(false, true, Integer.MAX_VALUE - index, 7948);
+        }
         for (int index = 0; index < 80; index++) {
             diagnostics.setMode(index % 2 == 0 ? "menu_cursor" : "mouse_keyboard", true);
             diagnostics.recordMotion(true);
@@ -380,6 +476,8 @@ public final class Pd2ControllerDiagnosticsTest {
         assertEquals(32, report.getJSONArray("devices").length());
         assertEquals(32, report.getJSONArray("recentTransitions").length());
         assertEquals(16, report.getJSONArray("recentPointerContexts").length());
+        assertEquals(Pd2ControllerDiagnostics.MAX_LEGACY_CLIENTS,
+                report.getJSONObject("controllerExposure").getJSONArray("legacyClients").length());
         assertTrue(report.toString().getBytes(StandardCharsets.UTF_8).length <= Pd2ControllerDiagnostics.MAX_REPORT_BYTES);
     }
 

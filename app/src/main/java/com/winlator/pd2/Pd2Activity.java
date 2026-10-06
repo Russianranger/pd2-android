@@ -267,6 +267,16 @@ public final class Pd2Activity extends AppCompatActivity {
                 preferences.edit().putBoolean(Pd2ControllerRuntime.ENABLED_PREFERENCE, which == 0).apply();
                 operation = "Controller setting saved. Restart the app before launching the game to apply it.";
                 d.dismiss(); updateUi();
+            }).setNeutralButton("Save/Quit experiment", (d, w) -> showHidReadSettings())
+              .setNegativeButton("Close", null).show());
+    }
+    private void showHidReadSettings() {
+        String[] modes = {"Original Wine driver (default)", "HID read cancellation fix (experimental)"};
+        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Save/Quit experiment")
+            .setSingleChoiceItems(modes, Pd2HidReadRuntime.enabled(this) ? 1 : 0, (d, which) -> {
+                preferences.edit().putBoolean(Pd2HidReadRuntime.ENABLED_PREFERENCE, which == 1).apply();
+                operation = "Setting saved. Stop client, then Play to apply it. Export logs after the Save/Quit test.";
+                d.dismiss(); updateUi();
             }).setNegativeButton("Close", null).show());
     }
     private void showCpuSettings() {
@@ -365,6 +375,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("inputMode", preferences.getBoolean("pd2_mouse_keyboard", false) ? "mouse_keyboard" : "native")
                 .put("inputModeScope", "Saved gameplay preference; current session mode and transitions are in controller.json")
                 .put("controllerRuntime", Pd2ControllerRuntime.status(this))
+                .put("hidReadRuntime", Pd2HidReadRuntime.status(this))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
                 .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")
                 .put("installation", installation == null ? "unchecked" : installation.details).put("lastOperation", operation);
