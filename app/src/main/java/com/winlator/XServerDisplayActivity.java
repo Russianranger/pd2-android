@@ -166,6 +166,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private Integer pd2RuntimeExitStatus;
     private String pd2LaunchFailure;
     private boolean runtimeLaunchRejected;
+    private com.winlator.pd2.Pd2MemoryDiagnostics pd2MemoryDiagnostics;
     private static volatile boolean pd2LaunchPending;
     private static final java.util.concurrent.atomic.AtomicInteger pd2EnvironmentWorkers = new java.util.concurrent.atomic.AtomicInteger();
     private final Pd2ThumbButtons pd2ThumbButtons = new Pd2ThumbButtons();
@@ -249,6 +250,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             winHandler.controllerDiagnostics.setMode(pd2MouseKeyboard ? "mouse_keyboard" : "native", false);
             winHandler.controllerDiagnostics.setNativeInputEnabled(false);
             winHandler.controllerDiagnostics.save();
+            pd2MemoryDiagnostics = com.winlator.pd2.Pd2MemoryDiagnostics.start(this,
+                    getIntent().getStringExtra("pd2_launch_id"), winHandler.controllerDiagnostics::save);
         }
         boolean useAndroidClipboardOnWine = preferences.getBoolean("use_android_clipboard_on_wine", false);
         clipboardManager = useAndroidClipboardOnWine ? (ClipboardManager)getSystemService(CLIPBOARD_SERVICE) : null;
@@ -453,6 +456,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         ForegroundService.onResumeSession(this);
         if (pd2Session) {
             pd2Paused = false;
+            if (pd2MemoryDiagnostics != null) pd2MemoryDiagnostics.setResumed(true);
             updatePd2InputMode();
         }
     }
@@ -462,6 +466,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (runtimeLaunchRejected) { super.onPause(); return; }
         if (pd2Session) {
             pd2Paused = true;
+            if (pd2MemoryDiagnostics != null) pd2MemoryDiagnostics.setResumed(false);
             pd2NativeReconnectPending = false;
             releasePd2Input();
             winHandler.gamepadHandler.setInputEnabled(false);
@@ -485,6 +490,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     @Override
     protected synchronized void onDestroy() {
         if (runtimeLaunchRejected) { super.onDestroy(); return; }
+        if (pd2MemoryDiagnostics != null) { pd2MemoryDiagnostics.close(); pd2MemoryDiagnostics = null; }
         boolean ownsSession = pd2ActiveSession.get() == this;
         if (pd2Session) {
             pd2StopRequested = true;
@@ -509,6 +515,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (!pd2Session || ownsSession) ForegroundService.stopSession(this);
         if (runtimeActiveSession.get() == this) runtimeActiveSession.clear();
         super.onDestroy();
+    }
+
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (pd2MemoryDiagnostics != null) pd2MemoryDiagnostics.trimmed(level);
     }
 
     @Override

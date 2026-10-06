@@ -1,7 +1,6 @@
 package com.winlator.pd2;
 
 import android.app.ActivityManager;
-import android.app.ApplicationExitInfo;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -370,13 +369,8 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")
                 .put("installation", installation == null ? "unchecked" : installation.details).put("lastOperation", operation);
             if (Build.VERSION.SDK_INT >= 30) {
-                JSONArray exits = new JSONArray();
                 ActivityManager manager = (ActivityManager)getSystemService(ACTIVITY_SERVICE);
-                for (ApplicationExitInfo info : manager.getHistoricalProcessExitReasons(getPackageName(), 0, 5)) {
-                    exits.put(new JSONObject().put("timestamp", info.getTimestamp()).put("reason", info.getReason())
-                        .put("status", info.getStatus()).put("description", info.getDescription()).put("pssKB", info.getPss()));
-                }
-                report.put("androidExits", exits);
+                Pd2AndroidExitDiagnostics.appendTo(report, manager, getPackageName());
             }
             try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(archive))) {
                 out.putNextEntry(new ZipEntry("support.json")); out.write(report.toString(2).getBytes(StandardCharsets.UTF_8)); out.closeEntry();
@@ -391,6 +385,8 @@ public final class Pd2Activity extends AppCompatActivity {
                 zipLog(out, "launch.json", new File(getFilesDir(), "pd2/logs/launch.json"));
                 zipControllerDiagnostics(out, Pd2ControllerDiagnostics.getFile(this),
                         new File(getFilesDir(), "pd2/logs/launch.json"));
+                zipSessionDiagnostics(out, "memory.json", Pd2MemoryDiagnostics.getFile(this),
+                        new File(getFilesDir(), "pd2/logs/launch.json"), Pd2MemoryDiagnostics.MAX_REPORT_BYTES);
                 File[] attempts = Pd2SessionLog.getAttemptsDirectory(this).listFiles();
                 if (attempts != null) for (File file : attempts) {
                     if (file.isFile() && file.getName().matches("runtime-attempt-[0-9]{13,19}\\.log"))
@@ -424,25 +420,28 @@ public final class Pd2Activity extends AppCompatActivity {
         out.closeEntry();
     }
     private static void zipControllerDiagnostics(ZipOutputStream out, File file, File launch) throws IOException {
-        byte[] bytes = readBoundedReport(file);
-        byte[] launchBytes = readBoundedReport(launch);
+        zipSessionDiagnostics(out, "controller.json", file, launch, Pd2ControllerDiagnostics.MAX_REPORT_BYTES);
+    }
+    static void zipSessionDiagnostics(ZipOutputStream out, String name, File file, File launch, int limit) throws IOException {
+        byte[] bytes = readBoundedReport(file, limit);
+        byte[] launchBytes = readBoundedReport(launch, 128 * 1024);
         if (bytes == null || launchBytes == null) return;
         try {
             String launchId = new JSONObject(new String(launchBytes, StandardCharsets.UTF_8)).optString("launchId");
             if (launchId.isEmpty() || !launchId.equals(new JSONObject(new String(bytes, StandardCharsets.UTF_8)).optString("launchId"))) return;
         }
         catch (org.json.JSONException invalidReport) { return; }
-        out.putNextEntry(new ZipEntry("controller.json"));
+        out.putNextEntry(new ZipEntry(name));
         out.write(bytes);
         out.closeEntry();
     }
-    private static byte[] readBoundedReport(File file) throws IOException {
-        if (!file.isFile() || file.length() > Pd2ControllerDiagnostics.MAX_REPORT_BYTES) return null;
+    private static byte[] readBoundedReport(File file, int limit) throws IOException {
+        if (!file.isFile() || file.length() > limit) return null;
         try (FileInputStream in = new FileInputStream(file);
              java.io.ByteArrayOutputStream data = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192]; int read;
             while ((read = in.read(buffer)) != -1) {
-                if (data.size() + read > Pd2ControllerDiagnostics.MAX_REPORT_BYTES) return null;
+                if (data.size() + read > limit) return null;
                 data.write(buffer, 0, read);
             }
             return data.toByteArray();

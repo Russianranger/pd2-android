@@ -420,7 +420,7 @@ public final class Pd2ControllerDiagnostics {
         return report;
     }
 
-    /** Persist on active/paused/stopped boundaries; input events only update memory counters. */
+    /** Persist on lifecycle boundaries and bounded memory checkpoints; events only update counters. */
     public void save() {
         if (context == null) return;
         JSONObject report = snapshot();

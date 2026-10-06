@@ -1,14 +1,16 @@
-# 0.1.14 socket startup repair
+# 0.1.15 gameplay memory diagnostic preview
 
-Install **0.1.14 over the existing app** and keep the accepted Wine 9.2/rootfs 24, imported installation, prefix, Turnip + Zink / Glide (GameNative arguments), Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.**
+Install **0.1.15 over the existing app** and keep the accepted Wine 9.2/rootfs 24, imported installation, prefix, Turnip + Zink / Glide (GameNative arguments), Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.**
 
-The 0.1.13 first-try support ZIP records a caught startup exception before Wine/PD2 output, with both cleanup phases passing. Source inspection found that socket configurations created their parent directories before the post-cleanup temporary clear deleted them. 0.1.14 defers endpoint preparation to service startup, after that clear; shared memory, display, audio and optional renderer sockets use the same ordering. The existing Wine `tmp/shm` repair stays in place. A future startup failure includes the component and endpoint/message instead of only the exception class. See [evidence](evidence/2026-10-05-startup-sockets.md).
+0.1.14 reached character gameplay by user report, then Android recorded a low-memory termination 34.8 seconds after launch. The old ZIP cannot identify the killed process or memory owner. 0.1.15 adds bounded pre-exit memory/process checkpoints and refreshes controller reports every five seconds. This diagnostic preview does not claim a memory-kill repair. See [evidence](evidence/2026-10-06-gameplay-low-memory.md).
 
-## First check: Play
+## First check: gameplay termination
 
-1. Open the updated app and press **Play**. Confirm it reaches the PD2 frontend and the same offline character.
-2. If Play still returns, record the visible launcher message and **Export support logs immediately**. Do not reset the runtime or delete containers as a workaround. New bounded cleanup helper output and launch-failure fields distinguish preflight refusal from Windows runtime exit.
-3. If it opens, continue the controller gate below. LT/thumb and shoulder behavior are accepted; no repeated binding qualification is requested.
+1. Press **Play**, enter the same character, and use the accepted settings. Test normal gameplay for two minutes if it remains open.
+2. If it closes, reopen the launcher and **Export support logs before pressing Play again**. Report whether the whole Android app closed or only the client returned, and approximately how long gameplay lasted. Do not stop/reset/delete containers to diagnose this termination.
+3. If it remains open for two minutes, return to the launcher and export while the client is still running. Then resume and continue the retained controller gate below. Accepted LT/thumb and shoulder bindings do not need another qualification pass.
+
+The new `memory.json` keeps the most recent 24 five-second samples (at most 512 KiB) for the matching launch. Device available/total RAM and pressure threshold are distinct from app Java/native heaps and visible same-UID process RSS. PID/PPID/start ticks and oom_score_adj help compare ownership. Proc visibility/read limits and unknown fields are explicit; aggregate RSS double-counts shared pages and is not total unique memory or GPU memory. Android exits include PID/process name/UID/importance/reason label plus sampled PSS/RSS, which are not final memory at death. Controller checkpoints contain counters/identity, not input values. A system kill cannot run the Java crash handler, so no crash.txt alone is inconclusive.
 
 ## Containers
 
