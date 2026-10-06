@@ -138,6 +138,72 @@ public final class WinHandlerDatagramTest {
         assertEquals(0, legacy.getLong(13));
     }
 
+    @Test public void repeatedSessionsRetireRealUdpWorkersReleaseThePortAndRejectDuplicateOrTerminalStarts() throws Exception {
+        InetAddress loopback = InetAddress.getByAddress(new byte[]{127, 0, 0, 1});
+        for (int iteration = 0; iteration < 3; iteration++) {
+            WinHandler handler = new WinHandler(null);
+            try {
+                handler.start();
+                await(() -> handler.controllerDiagnostics.snapshot().optBoolean("socketReady"));
+                Field send = WinHandler.class.getDeclaredField("sendThread"); send.setAccessible(true);
+                Field receive = WinHandler.class.getDeclaredField("receiveThread"); receive.setAccessible(true);
+                Thread originalSend = (Thread)send.get(handler), originalReceive = (Thread)receive.get(handler);
+                handler.start();
+                assertSame(originalSend, send.get(handler)); assertSame(originalReceive, receive.get(handler));
+                assertTrue(originalSend.isDaemon()); assertTrue(originalReceive.isDaemon());
+                try (DatagramSocket guest = new DatagramSocket(0, loopback)) {
+                    byte[] init = new byte[64]; init[0] = RequestCodes.INIT;
+                    guest.send(new DatagramPacket(init, init.length, loopback, 7947));
+                    await(handler::isInputReady);
+                }
+                handler.stop(); await(handler::areControllerWorkersStopped);
+                assertFalse(handler.isInputReady());
+                handler.start(); // A stopped GamepadHandler must not be reused.
+                assertSame(originalSend, send.get(handler)); assertSame(originalReceive, receive.get(handler));
+                assertTrue(handler.areControllerWorkersStopped());
+                try (DatagramSocket released = new DatagramSocket(null)) {
+                    released.setReuseAddress(false); released.bind(new java.net.InetSocketAddress(loopback, 7947));
+                }
+            } finally { handler.stop(); await(handler::areControllerWorkersStopped); }
+        }
+    }
+
+    @Test public void realUdpOversizeAcknowledgementsCannotAuthorizeRecoveryAndExactFramesStillWork() throws Exception {
+        InetAddress loopback = InetAddress.getByAddress(new byte[]{127, 0, 0, 1});
+        WinHandler handler = new WinHandler(null);
+        try (DatagramSocket backend = new DatagramSocket(7950, loopback)) {
+            handler.start(); await(() -> handler.controllerDiagnostics.snapshot().optBoolean("socketReady"));
+            Field token = GamepadHandler.class.getDeclaredField("hidSessionToken"); token.setAccessible(true);
+            java.nio.ByteBuffer ack = java.nio.ByteBuffer.allocate(64).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            ack.put(0, Pd2HidProtocol.ACK_CODE).put(1, (byte)1).put(2, (byte)3).put(3, (byte)4)
+                    .putInt(4, Pd2HidProtocol.MAGIC).putInt(8, token.getInt(handler.gamepadHandler))
+                    .putInt(16, 77).putInt(20, 1).putInt(28, 1).putLong(48, 555).putLong(56, 999);
+            for (int length : new int[]{65, 256}) {
+                byte[] oversized = Arrays.copyOf(ack.array(), length);
+                backend.send(new DatagramPacket(oversized, oversized.length, loopback, 7947));
+                long expected = length == 65 ? 1 : 2;
+                await(() -> handler.controllerDiagnostics.snapshot().optJSONObject("counts").optLong("invalidPackets") == expected);
+            }
+            assertTrue(handler.controllerDiagnostics.snapshot().isNull("hidBackend"));
+            assertFalse(handler.gamepadHandler.recoverNativeIdentity(null));
+            assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+            // Upstream runtime packets retain their prior 64-byte truncation behavior.
+            byte[] upstream = new byte[256]; upstream[0] = RequestCodes.INIT;
+            backend.send(new DatagramPacket(upstream, upstream.length, loopback, 7947)); await(handler::isInputReady);
+            backend.send(new DatagramPacket(ack.array(), ack.capacity(), loopback, 7947));
+            await(() -> handler.controllerDiagnostics.snapshot().optJSONObject("hidBackend") != null);
+            assertEquals(77, handler.controllerDiagnostics.snapshot().getJSONObject("hidBackend").getInt("pid"));
+            assertEquals(2, handler.controllerDiagnostics.snapshot().getJSONObject("counts").getLong("invalidPackets"));
+            assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        } finally { handler.stop(); await(handler::areControllerWorkersStopped); }
+    }
+
+    private static void await(java.util.function.BooleanSupplier condition) throws InterruptedException {
+        long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (!condition.getAsBoolean() && System.nanoTime() < end) Thread.sleep(10);
+        assertTrue("Controller lifecycle did not settle within three seconds", condition.getAsBoolean());
+    }
+
     private static WinHandler configured(RecordingSocket socket) throws Exception {
         WinHandler handler = new WinHandler(null);
         Field socketField = WinHandler.class.getDeclaredField("socket"); socketField.setAccessible(true);

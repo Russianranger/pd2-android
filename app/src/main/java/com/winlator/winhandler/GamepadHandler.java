@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
@@ -28,6 +29,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.HashSet;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.security.SecureRandom;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 public class GamepadHandler {
     public static final byte DINPUT_MAPPER_TYPE_STANDARD = 0;
@@ -56,7 +60,172 @@ public class GamepadHandler {
     private volatile boolean stopped;
     private final Handler reconnectHandler = new Handler(Looper.getMainLooper());
     private static final long HID_RECONNECT_GAP_MS = 600;
+    private static final long HID_IDENTITY_TIMEOUT_MS = 8000;
+    private static final AtomicLong PRODUCER_GENERATION = new AtomicLong();
+    private final long producerGeneration = PRODUCER_GENERATION.incrementAndGet();
+    private final int hidSessionToken = new SecureRandom().nextInt(Integer.MAX_VALUE - 1) + 1;
+    private volatile int hidDeviceUid;
+    private volatile boolean identityRecovery;
+    private volatile int identityExpectedUid;
+    private volatile long identityStartBaseline;
+    private volatile long identityRemoveBaseline;
+    private volatile long identityStopBaseline;
+    private volatile long identityDetachSentAt;
+    private volatile boolean identityDetachObserved;
+    private volatile boolean identityBackendObserved;
+    private volatile Pd2HidProtocol.Ack lastHidAck;
+    private Consumer<String> identityCallback;
     private float stickDeadzone;
+
+    long getProducerGeneration() { return producerGeneration; }
+
+    private byte[] hidDevicePacket(GamepadSlot device) {
+        return Pd2HidProtocol.tag(ModernGamepadProtocol.hidDevice(device), hidDeviceUid, hidSessionToken);
+    }
+
+    /** Opt-in experiment: a new Wine PnP instance, retaining the controller's mapping and model. */
+    public boolean recoverNativeIdentity(Consumer<String> callback) {
+        winHandler.controllerDiagnostics.recordNativeIdentityRecovery("requested");
+        Pd2HidProtocol.Ack backend = lastHidAck;
+        if (stopped || !inputEnabled || !hidSubscribed || hidGamepad == null || hidReconnectPhase != 0
+                || !legacyNativeReady() || !winHandler.isInputReady() || hidDeviceUid == Integer.MAX_VALUE
+                || backend == null || backend.uid != hidDeviceUid
+                || (backend.flags & Pd2HidProtocol.CONNECTIVITY_MASK) != 3) {
+            winHandler.controllerDiagnostics.recordNativeIdentityRecovery("unavailable");
+            return false;
+        }
+        reconnectHandler.removeCallbacksAndMessages(null);
+        final long epoch = ++hidReconnectGeneration;
+        identityRecovery = true;
+        identityCallback = callback;
+        identityExpectedUid = hidDeviceUid + 1;
+        identityStartBaseline = backend.started;
+        identityRemoveBaseline = backend.removed;
+        identityStopBaseline = backend.stopped;
+        identityDetachSentAt = 0;
+        identityDetachObserved = false;
+        identityBackendObserved = false;
+        inputGeneration++;
+        hidTopologyGeneration++;
+        hidReconnectPhase = 1;
+        notifyIdentity(epoch, "requested", false);
+        reconnectHandler.postDelayed(() -> {
+            if (identityRecovery && hidReconnectGeneration == epoch && hidReconnectPhase != 0) {
+                cancelNativeReconnect(true, "timedOut");
+            }
+        }, HID_IDENTITY_TIMEOUT_MS);
+        neutralizeAll();
+        winHandler.addControllerAction(() -> {
+            if (!reconnectCurrent(epoch, 1)) return;
+            boolean legacySent = sendLegacyDeviceAndNeutral(null);
+            boolean hidSent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, hidDevicePacket(null));
+            if (legacySent && hidSent) {
+                identityDetachSentAt = SystemClock.uptimeMillis();
+                notifyIdentity(epoch, "detachSent", false);
+                reconnectHandler.postDelayed(() -> checkIdentityDetach(epoch), HID_RECONNECT_GAP_MS);
+            } else reconnectHandler.post(() -> {
+                if (!reconnectCurrent(epoch, 1)) return;
+                cancelNativeReconnect(true, "sendFailure");
+            });
+        });
+        return true;
+    }
+
+    /** A successful UDP send alone cannot authorize a new device UID. */
+    private void checkIdentityDetach(long epoch) {
+        if (!identityRecovery || !reconnectCurrent(epoch, 1)) return;
+        if (identityDetachObserved && SystemClock.uptimeMillis() - identityDetachSentAt >= HID_RECONNECT_GAP_MS) {
+            attachNativeDevice(epoch);
+            return;
+        }
+        winHandler.addControllerAction(() -> {
+            if (!identityRecovery || !reconnectCurrent(epoch, 1)) return;
+            boolean legacySent = sendLegacyDeviceAndNeutral(null);
+            boolean hidSent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, hidDevicePacket(null));
+            if (!legacySent || !hidSent) reconnectHandler.post(() -> {
+                if (identityRecovery && reconnectCurrent(epoch, 1)) cancelNativeReconnect(true, "sendFailure");
+            });
+        });
+        reconnectHandler.postDelayed(() -> checkIdentityDetach(epoch), 300);
+    }
+
+    private void notifyIdentity(long epoch, String phase, boolean terminal) {
+        if (!"requested".equals(phase)) winHandler.controllerDiagnostics.recordNativeIdentityRecovery(phase);
+        Consumer<String> callback = identityCallback;
+        if (terminal) identityCallback = null;
+        if (callback != null) reconnectHandler.post(() -> {
+            if (stopped || hidReconnectGeneration != epoch) return;
+            try { callback.accept(phase); } catch (RuntimeException ignored) { }
+        });
+    }
+
+    /** WinHandler already confines the datagram to the loopback HID port. */
+    boolean handleHidAcknowledgement(ByteBuffer packet, int port) {
+        Pd2HidProtocol.Ack ack = Pd2HidProtocol.parseAck(packet);
+        if (port != ModernGamepadProtocol.HID_PORT || ack == null || ack.sessionToken != hidSessionToken
+                || ack.uid > hidDeviceUid) return false;
+        if (ack.uid < hidDeviceUid) return true; // A valid old-instance stop cannot complete or overwrite the new instance.
+        Pd2HidProtocol.Ack previous = lastHidAck;
+        if (previous != null) {
+            if (ack.pid != previous.pid || (ack.socketInode != 0 && previous.socketInode != 0
+                    && ack.socketInode != previous.socketInode)) {
+                winHandler.controllerDiagnostics.recordRejectedHidBackend("identityChanged", ack.pid, ack.socketInode, ack.uid);
+                observeHidBackend(ack); // A replacement owner starts a new bounded baseline, not a completed recovery.
+                final long epoch = hidReconnectGeneration;
+                reconnectHandler.post(() -> {
+                    if (identityRecovery && hidReconnectGeneration == epoch) cancelNativeReconnect(true);
+                });
+                return true;
+            }
+            if (ack.monotonicMillis < previous.monotonicMillis || ack.created < previous.created
+                    || ack.removed < previous.removed || ack.started < previous.started || ack.stopped < previous.stopped
+                    || ack.stateReceived < previous.stateReceived || ack.reportsQueued < previous.reportsQueued
+                    || ack.invalidPackets < previous.invalidPackets) {
+                winHandler.controllerDiagnostics.recordRejectedHidBackend("outOfOrder", ack.pid, ack.socketInode, ack.uid);
+                return true;
+            }
+        }
+        observeHidBackend(ack);
+        final long epoch = hidReconnectGeneration;
+        // A prior ordinary reconnect can leave another object with the same UID.
+        // The per-object retirement flag prevents its delayed stop from authorizing this detach.
+        if (identityRecovery && hidReconnectPhase == 1
+                && (ack.flags & Pd2HidProtocol.CONNECTIVITY_MASK) == 0
+                && (ack.flags & Pd2HidProtocol.LAST_REMOVAL_STOPPED) != 0
+                && ack.removed > identityRemoveBaseline && ack.stopped > identityStopBaseline) {
+            reconnectHandler.post(() -> {
+                if (!identityRecovery || !reconnectCurrent(epoch, 1) || identityDetachObserved) return;
+                identityDetachObserved = true;
+                notifyIdentity(epoch, "detachObserved", false);
+            });
+        }
+        if (identityRecovery && hidReconnectPhase == 2 && ack.uid == identityExpectedUid) {
+            reconnectHandler.post(() -> {
+                if (!identityRecovery || !reconnectCurrent(epoch, 2) || ack.uid != identityExpectedUid) return;
+                if (!identityBackendObserved) {
+                    identityBackendObserved = true;
+                    notifyIdentity(epoch, "backendObserved", false);
+                }
+                if ((ack.flags & Pd2HidProtocol.CONNECTIVITY_MASK) == 3
+                        && (ack.stage == 4 || ack.started > identityStartBaseline)) {
+                    inputGeneration++;
+                    hidTopologyGeneration++;
+                    hidReconnectPhase = 0;
+                    reconnectHandler.removeCallbacksAndMessages(null);
+                    identityRecovery = false;
+                    notifyIdentity(epoch, "deviceStartObserved", true);
+                }
+            });
+        }
+        return true;
+    }
+
+    private void observeHidBackend(Pd2HidProtocol.Ack ack) {
+        lastHidAck = ack;
+        winHandler.controllerDiagnostics.recordHidBackend(ack.uid, ack.pid, ack.flags, ack.stage,
+                ack.socketInode, ack.monotonicMillis, ack.created, ack.removed, ack.started, ack.stopped,
+                ack.stateReceived, ack.reportsQueued, ack.invalidPackets);
+    }
 
     public void setStickDeadzone(float value) {
         stickDeadzone = Math.max(0, Math.min(0.4f, value));
@@ -78,7 +247,7 @@ public class GamepadHandler {
     public boolean reconnectNativeDevice() {
         winHandler.controllerDiagnostics.recordNativeReconnect("requested");
         if (stopped || !inputEnabled || !hidSubscribed || hidGamepad == null
-                || !legacyNativeReady() || !winHandler.isInputReady()) {
+                || !legacyNativeReady() || !winHandler.isInputReady() || identityRecovery) {
             winHandler.controllerDiagnostics.recordNativeReconnect("unavailable");
             return false;
         }
@@ -99,7 +268,7 @@ public class GamepadHandler {
             // Wine's removal notification makes the game rescan XInput. Advertise
             // the legacy device absent first, so that scan can observe disconnect.
             boolean legacySent = sendLegacyDeviceAndNeutral(null);
-            boolean hidSent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, ModernGamepadProtocol.hidDevice(null));
+            boolean hidSent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, hidDevicePacket(null));
             boolean sent = legacySent && hidSent;
             winHandler.controllerDiagnostics.recordNativeReconnect(sent ? "detachSent" : "sendFailure");
             if (sent) reconnectHandler.postDelayed(() -> attachNativeDevice(epoch), HID_RECONNECT_GAP_MS);
@@ -131,6 +300,10 @@ public class GamepadHandler {
 
     private void attachNativeDevice(long epoch) {
         if (!reconnectCurrent(epoch, 1)) return;
+        if (identityRecovery) {
+            hidDeviceUid = identityExpectedUid;
+            winHandler.controllerDiagnostics.setHidDeviceUid(hidDeviceUid);
+        }
         hidReconnectPhase = 2;
         hidTopologyGeneration++;
         winHandler.addControllerAction(() -> {
@@ -138,41 +311,54 @@ public class GamepadHandler {
             final GamepadSlot current = hidGamepad;
             boolean legacySent = sendLegacyDeviceAndNeutral(legacyGamepad);
             boolean hidSent = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT,
-                    ModernGamepadProtocol.hidDevice(current));
+                    hidDevicePacket(current));
             boolean neutralSent = sendNativeStatePacket(ModernGamepadProtocol.HID_PORT,
                     ModernGamepadProtocol.state(0, DINPUT_MAPPER_TYPE_XINPUT, new GamepadState()));
             boolean sent = legacySent && hidSent && current != null;
             final boolean prepared = sent && neutralSent;
-            winHandler.controllerDiagnostics.recordNativeReconnect(sent ? "attachSent" : "sendFailure");
-            if (sent && !prepared) winHandler.controllerDiagnostics.recordNativeReconnect("sendFailure");
+            if (identityRecovery) {
+                if (prepared) notifyIdentity(epoch, "attachSent", false);
+            }
+            else {
+                winHandler.controllerDiagnostics.recordNativeReconnect(sent ? "attachSent" : "sendFailure");
+                if (sent && !prepared) winHandler.controllerDiagnostics.recordNativeReconnect("sendFailure");
+            }
             reconnectHandler.post(() -> {
                 if (!reconnectCurrent(epoch, 2)) return;
                 if (prepared) {
+                    if (identityRecovery) return; // Wait for the matched Unix device-start acknowledgement.
                     // Old reports captured before/during the blackout cannot replay into the fresh HID instance.
                     inputGeneration++;
                     hidTopologyGeneration++;
                     hidReconnectPhase = 0;
                     reconnectHandler.removeCallbacksAndMessages(null);
                     winHandler.controllerDiagnostics.recordNativeReconnect("completed");
-                } else cancelNativeReconnect(true);
+                } else cancelNativeReconnect(true, identityRecovery ? "sendFailure" : "cancelled");
             });
         });
     }
 
     private void cancelNativeReconnect(boolean restore) {
+        cancelNativeReconnect(restore, "cancelled");
+    }
+
+    private void cancelNativeReconnect(boolean restore, String identityTerminal) {
         if (hidReconnectPhase == 0) return;
         final long epoch = ++hidReconnectGeneration;
         inputGeneration++;
         hidTopologyGeneration++;
         hidReconnectPhase = 0;
         reconnectHandler.removeCallbacksAndMessages(null);
-        winHandler.controllerDiagnostics.recordNativeReconnect("cancelled");
+        if (identityRecovery) {
+            identityRecovery = false;
+            notifyIdentity(epoch, identityTerminal, true);
+        } else winHandler.controllerDiagnostics.recordNativeReconnect("cancelled");
         // A modal may interrupt after removal: keep the device advertised, with neutral controls.
         if (restore && !stopped && hidSubscribed) winHandler.addControllerAction(() -> {
             if (stopped || hidReconnectGeneration != epoch || hidReconnectPhase != 0) return;
             GamepadSlot current = hidGamepad;
             boolean legacyRestored = sendLegacyDeviceAndNeutral(legacyGamepad);
-            boolean hidRestored = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, ModernGamepadProtocol.hidDevice(current));
+            boolean hidRestored = winHandler.sendPacket(ModernGamepadProtocol.HID_PORT, hidDevicePacket(current));
             boolean prepared = current == null || sendNativeStatePacket(ModernGamepadProtocol.HID_PORT,
                     ModernGamepadProtocol.state(0, DINPUT_MAPPER_TYPE_XINPUT, new GamepadState()));
             if (!legacyRestored || !hidRestored || !prepared) winHandler.controllerDiagnostics.recordNativeReconnect("sendFailure");
@@ -193,6 +379,7 @@ public class GamepadHandler {
     /** Successful packet categories only; never exports values, key codes or button identities. */
     private boolean sendNativeStatePacket(int port, byte[] packet) {
         if (stopped) return false;
+        if (port == ModernGamepadProtocol.HID_PORT) packet = Pd2HidProtocol.tag(packet, hidDeviceUid, hidSessionToken);
         boolean sent = winHandler.sendPacket(port, packet);
         boolean nonNeutral = false;
         int start = port == ModernGamepadProtocol.HID_PORT ? 2 : 6;
@@ -305,6 +492,12 @@ public class GamepadHandler {
                 index++;
             }
         }
+        int physicalId = -1;
+        for (GamepadSlot slot : gamepadSlots) if (slot instanceof ExternalController) {
+            physicalId = ((ExternalController)slot).getDeviceId();
+            break;
+        }
+        winHandler.controllerDiagnostics.setSelectedAndroidDevice(physicalId);
     }
 
     private boolean isAnyGamepadConnected() {
@@ -331,7 +524,7 @@ public class GamepadHandler {
             hidGamepad = selected;
             hidSubscribed = selected != null;
             winHandler.controllerDiagnostics.setSelectedDevice(selected != null ? selected.getName() : null);
-            final byte[] device = ModernGamepadProtocol.hidDevice(selected);
+            final byte[] device = hidDevicePacket(selected);
             final GamepadState state = selected != null ? snapshot(selected) : new GamepadState();
             final long generation = inputGeneration;
             final long topology = hidTopologyGeneration;
@@ -339,7 +532,7 @@ public class GamepadHandler {
                 if (stopped) return;
                 boolean detached = hidReconnectPhase == 1;
                 if (!detached && topology != hidTopologyGeneration) return;
-                byte[] advertised = detached ? ModernGamepadProtocol.hidDevice(null) : device;
+                byte[] advertised = detached ? hidDevicePacket(null) : device;
                 winHandler.sendPacket(port, advertised);
                 if (advertised[1] == 1) sendNativeStatePacket(port, ModernGamepadProtocol.state(0,
                         DINPUT_MAPPER_TYPE_XINPUT,

@@ -6,7 +6,6 @@ import android.system.OsConstants;
 
 import androidx.annotation.NonNull;
 
-import com.winlator.MainActivity;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -21,12 +20,41 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 public abstract class ProcessHelper {
     public enum PState {RUNNING, SLEEPING, WAITING, ZOMBIE, STOPPED, DEAD, OTHER}
     private static final ArrayList<Callback<String>> debugCallbacks = new ArrayList<>();
+    private static long debugGeneration;
+
+    /** A stream keeps its launch-time listeners and cannot follow a later activity's log registration. */
+    static final class DebugScope {
+        final long generation;
+        final List<Callback<String>> callbacks;
+        DebugScope(long generation, List<Callback<String>> callbacks) {
+            this.generation = generation; this.callbacks = callbacks;
+        }
+    }
+
+    static DebugScope captureDebugScope() {
+        synchronized (debugCallbacks) {
+            return new DebugScope(debugGeneration, new ArrayList<>(debugCallbacks));
+        }
+    }
+
+    static void deliverDebug(DebugScope scope, String line) {
+        synchronized (debugCallbacks) {
+            if (scope.generation != debugGeneration) return;
+            for (Callback<String> callback : scope.callbacks) {
+                if (scope.generation != debugGeneration) return;
+                if (!debugCallbacks.contains(callback)) continue;
+                try { callback.call(line); }
+                catch (RuntimeException failedSink) {
+                    // A diagnostic sink cannot stop draining the process or starve the other sinks.
+                }
+            }
+        }
+    }
 
     public static class PStat {
         public int pid = 0;
@@ -69,9 +97,10 @@ public abstract class ProcessHelper {
 
     public static int exec(String command, EnvVars envVars, File workingDir, Callback<Integer> terminationCallback) {
         int pid = -1;
+        DebugScope debugScope = captureDebugScope();
         try {
             ProcessBuilder processBuilder = (new ProcessBuilder(splitCommand(command))).directory(workingDir);
-            if (debugCallbacks.isEmpty()) processBuilder.redirectOutput(new File("/dev/null")).redirectErrorStream(true);
+            if (debugScope.callbacks.isEmpty()) processBuilder.redirectOutput(new File("/dev/null")).redirectErrorStream(true);
 
             Map<String, String> environment = processBuilder.environment();
             for (String name : envVars) environment.put(name, envVars.get(name));
@@ -82,52 +111,54 @@ public abstract class ProcessHelper {
             pid = pidField.getInt(process);
             pidField.setAccessible(false);
 
-            if (!debugCallbacks.isEmpty()) {
-                createDebugThread(process.getInputStream());
-                createDebugThread(process.getErrorStream());
+            if (!debugScope.callbacks.isEmpty()) {
+                createDebugThread(process.getInputStream(), debugScope);
+                createDebugThread(process.getErrorStream(), debugScope);
             }
 
-            if (terminationCallback != null) createWaitForThread(process, terminationCallback);
+            if (terminationCallback != null) createWaitForThread(process, terminationCallback, debugScope);
         }
         catch (Exception e) {
-            synchronized (debugCallbacks) {
-                for (Callback<String> callback : debugCallbacks)
-                    callback.call("Runtime launch failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-            }
+            deliverDebug(debugScope, "Runtime launch failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
         return pid;
     }
 
-    private static void createDebugThread(final InputStream inputStream) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+    static Thread createDebugThread(final InputStream inputStream, final DebugScope scope) {
+        Thread worker = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    synchronized (debugCallbacks) {
-                        if (!debugCallbacks.isEmpty()) {
-                            for (Callback<String> callback : debugCallbacks) callback.call(line);
-                        }
-                        else if (MainActivity.DEBUG_MODE) System.out.println(line);
-                    }
+                    deliverDebug(scope, line);
                 }
             }
             catch (IOException e) {}
-        });
+        }, "pd2-runtime-output");
+        worker.setDaemon(true);
+        worker.start();
+        return worker;
     }
 
-    private static void createWaitForThread(java.lang.Process process, final Callback<Integer> terminationCallback) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+    static Thread createWaitForThread(java.lang.Process process, final Callback<Integer> terminationCallback, final DebugScope scope) {
+        Thread worker = new Thread(() -> {
             try {
                 int status = process.waitFor();
-                terminationCallback.call(status);
+                try { terminationCallback.call(status); }
+                catch (RuntimeException failure) {
+                    deliverDebug(scope, "Runtime termination callback failed: " + failure.getClass().getSimpleName());
+                }
             }
-            catch (InterruptedException e) {}
-        });
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }, "pd2-runtime-wait");
+        worker.setDaemon(true);
+        worker.start();
+        return worker;
     }
 
     public static void removeAllDebugCallbacks() {
         synchronized (debugCallbacks) {
             debugCallbacks.clear();
+            debugGeneration++;
         }
     }
 

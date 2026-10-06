@@ -56,7 +56,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The current output is `app/build/distributions/PD2-Android-0.1.15-preview.apk` and a
+The current output is `app/build/distributions/PD2-Android-0.1.16-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 

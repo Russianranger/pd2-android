@@ -22,10 +22,11 @@ import java.security.NoSuchAlgorithmException;
 /** Install only the matching Wine 9 HID backend before the Windows session starts. */
 public final class Pd2ControllerRuntime {
     public static final String ENABLED_PREFERENCE = "pd2_controller_notifications";
-    public static final String REVISION = "wine9-hid-1";
+    public static final String REVISION = "wine9-hid-2";
     private static final String ASSET = "pd2/controller/winebus.so";
     private static final String MANIFEST = "pd2/controller/manifest.json";
     private static final String BASE_SHA256 = "4ca5b1dd5f2d56ae9ca3090f356b700f4e5282b6915a195719d0a1ab66128117";
+    private static final String PREVIOUS_SHA256 = "541523c1e21059a386cfd60f6f18354c05b28ca2457faf867221911b545c4b0e";
     private static final String MODULE_PATH = "opt/wine/lib/wine/x86_64-unix/winebus.so";
     private static final int MAX_MODULE_BYTES = 2 * 1024 * 1024;
     private static final Object INSTALL_LOCK = new Object();
@@ -43,7 +44,7 @@ public final class Pd2ControllerRuntime {
             File backup = new File(context.getFilesDir(), "pd2/runtime/winebus-original.so");
             try (InputStream source = context.getAssets().open(ASSET)) {
                 install(target, backup, source, manifest.optLong("bytes"), manifest.optString("sha256"),
-                        BASE_SHA256, enabled(context));
+                        BASE_SHA256, enabled(context), PREVIOUS_SHA256);
             }
         }
     }
@@ -81,10 +82,21 @@ public final class Pd2ControllerRuntime {
     /** Verify each staged file before replacing the live module; preserve unknown runtime files. */
     static void install(File target, File backup, InputStream source, long size, String expected,
                         String baseline, boolean enable) throws IOException {
+        install(target, backup, source, size, expected, baseline, enable, new String[0]);
+    }
+
+    static void install(File target, File backup, InputStream source, long size, String expected,
+                        String baseline, boolean enable, String... previousRevisions) throws IOException {
         if (!target.isFile()) throw new IOException("The Wine controller backend is missing");
         String installed = digest(target);
-        if (!installed.equals(baseline) && !installed.equals(expected))
+        boolean previous = false;
+        for (String revision : previousRevisions) previous |= installed.equals(revision);
+        if (!installed.equals(baseline) && !installed.equals(expected) && !previous)
             throw new IOException("The controller backend does not match this Wine runtime");
+        // A previous custom module is never an original backup. Its upgrade and rollback
+        // both require the already verified donor module retained by the prior installer.
+        if (previous && (!backup.isFile() || !digest(backup).equals(baseline)))
+            throw new IOException("The original controller backend backup is unavailable for upgrade");
         if (!enable) {
             if (installed.equals(baseline)) return;
             if (!backup.isFile() || !digest(backup).equals(baseline))
@@ -96,7 +108,7 @@ public final class Pd2ControllerRuntime {
         }
         if (installed.equals(expected)) return;
         // The verified original is saved before publishing a replacement.
-        if (!backup.isFile() || !digest(backup).equals(baseline)) {
+        if (installed.equals(baseline) && (!backup.isFile() || !digest(backup).equals(baseline))) {
             try (InputStream original = new FileInputStream(target)) {
                 replaceVerified(backup, original, target.length(), baseline);
             }

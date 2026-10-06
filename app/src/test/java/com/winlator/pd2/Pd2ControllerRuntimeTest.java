@@ -42,6 +42,49 @@ public final class Pd2ControllerRuntimeTest {
         assertNoStagingFiles(f);
     }
 
+    @Test public void recognizedPreviousRevisionUpgradesWithoutReplacingOriginalBackup() throws Exception {
+        Fixture f = fixture();
+        install(f, f.patch, hash(f.patch), true);
+        byte[] newer = elf((byte)3);
+        Pd2ControllerRuntime.install(f.target, f.backup, new ByteArrayInputStream(newer), newer.length,
+                hash(newer), hash(f.base), true, hash(f.patch));
+        assertArrayEquals(newer, Files.readAllBytes(f.target.toPath()));
+        assertArrayEquals(f.base, Files.readAllBytes(f.backup.toPath()));
+        Pd2ControllerRuntime.install(f.target, f.backup, new ByteArrayInputStream(newer), newer.length,
+                hash(newer), hash(f.base), false, hash(f.patch));
+        assertArrayEquals(f.base, Files.readAllBytes(f.target.toPath()));
+        assertNoStagingFiles(f);
+    }
+
+    @Test public void previousRevisionCanBeDisabledDirectly() throws Exception {
+        Fixture f = fixture();
+        install(f, f.patch, hash(f.patch), true);
+        byte[] newer = elf((byte)3);
+        Pd2ControllerRuntime.install(f.target, f.backup, new ByteArrayInputStream(newer), newer.length,
+                hash(newer), hash(f.base), false, hash(f.patch));
+        assertArrayEquals(f.base, Files.readAllBytes(f.target.toPath()));
+        assertArrayEquals(f.base, Files.readAllBytes(f.backup.toPath()));
+    }
+
+    @Test public void previousRevisionWithMissingOrCorruptOriginalBackupIsPreserved() throws Exception {
+        Fixture f = fixture();
+        install(f, f.patch, hash(f.patch), true);
+        byte[] newer = elf((byte)3);
+        for (boolean missing : new boolean[]{true, false}) {
+            if (missing) assertTrue(f.backup.delete());
+            else Files.write(f.backup.toPath(), elf((byte)9));
+            for (boolean enable : new boolean[]{true, false}) {
+                try {
+                    Pd2ControllerRuntime.install(f.target, f.backup, new ByteArrayInputStream(newer), newer.length,
+                            hash(newer), hash(f.base), enable, hash(f.patch));
+                    fail("An upgrade cannot manufacture an original backup from a custom revision");
+                } catch (IOException expected) { }
+                assertArrayEquals(f.patch, Files.readAllBytes(f.target.toPath()));
+            }
+        }
+        assertNoStagingFiles(f);
+    }
+
     @Test public void corruptedOrTruncatedPayloadCannotReplaceTheWorkingModule() throws Exception {
         Fixture f = fixture();
         byte[] corrupt = f.patch.clone(); corrupt[31] ^= 1;

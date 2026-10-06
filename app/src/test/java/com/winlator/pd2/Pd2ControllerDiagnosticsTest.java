@@ -113,6 +113,30 @@ public final class Pd2ControllerDiagnosticsTest {
         assertEquals(3, diagnostics.snapshot().getJSONObject("nativeFocusRecovery").getLong("requests"));
     }
 
+    @Test public void identityRecoverySeparatesUnixCallbacksFromGameAcceptanceAndRetainsOnlyLifecycleMetadata() throws Exception {
+        Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
+        diagnostics.setProducerGeneration(7); diagnostics.setSelectedAndroidDevice(92);
+        diagnostics.setSelectedAndroidDevice(92); diagnostics.setSelectedAndroidDevice(93); diagnostics.setHidDeviceUid(1);
+        for (String phase : new String[]{"requested", "detachSent", "detachObserved", "attachSent", "backendObserved",
+                "deviceStartObserved", "cancelled", "unavailable", "timedOut", "sendFailure"})
+            diagnostics.recordNativeIdentityRecovery(phase);
+        diagnostics.recordNativeIdentityRecovery("private-axis-value");
+        diagnostics.recordHidBackend(1, 1234, 3, 4, 9876, 123456, 2, 1, 2, 1, 25, 10, 0);
+        JSONObject report = diagnostics.snapshot(), producer = report.getJSONObject("controllerProducer");
+        assertEquals(7, producer.getLong("generation")); assertEquals(93, producer.getInt("selectedAndroidDeviceId"));
+        assertEquals(2, producer.getLong("androidDeviceChanges")); assertEquals(1, producer.getInt("hidDeviceUid"));
+        JSONObject recovery = report.getJSONObject("nativeIdentityRecovery");
+        for (String field : new String[]{"requests", "detachSent", "detachObserved", "attachSent", "backendObserved",
+                "deviceStartObserved", "cancelled", "unavailable", "timedOut", "sendFailures"}) assertEquals(field, 1, recovery.getLong(field));
+        assertEquals("sendFailure", recovery.getString("lastPhase")); assertTrue(recovery.getString("scope").contains("do not acknowledge"));
+        JSONObject backend = report.getJSONObject("hidBackend");
+        assertEquals(1234, backend.getInt("pid")); assertEquals(9876, backend.getLong("socketInode"));
+        assertEquals(25, backend.getLong("stateReceived")); assertEquals(10, backend.getLong("reportsQueued"));
+        backend.put("pid", 9999); assertEquals(1234, diagnostics.snapshot().getJSONObject("hidBackend").getInt("pid"));
+        assertFalse(report.toString().contains("private-axis-value")); assertFalse(backend.has("sessionToken"));
+        assertTrue(report.toString().getBytes(StandardCharsets.UTF_8).length < Pd2ControllerDiagnostics.MAX_REPORT_BYTES);
+    }
+
     @Test public void transitionsRetainMenuOwnershipAndLatestGatesWithinTheReportBound() throws Exception {
         Pd2ControllerDiagnostics diagnostics = new Pd2ControllerDiagnostics(null);
         diagnostics.setInputGate(true, false, false, false);
@@ -462,7 +486,7 @@ public final class Pd2ControllerDiagnosticsTest {
         diagnostics.recordReply((byte)9, 7950, false);
         JSONObject report = diagnostics.snapshot();
         assertEquals("legacy_xinput_7949_and_hid_7950", report.getString("nativeBridge"));
-        assertEquals("java-native-reconnect-v3", report.getString("bridgeRevision"));
+        assertEquals("java-native-identity-v1", report.getString("bridgeRevision"));
         JSONObject counts = report.getJSONObject("counts");
         assertEquals(1, counts.getLong("hidDiscoveryRequests7950"));
         assertEquals(1, counts.getLong("hidDeviceReplies7950"));

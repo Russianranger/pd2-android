@@ -24,7 +24,6 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class WinHandler {
@@ -34,12 +33,15 @@ public class WinHandler {
     protected final ByteBuffer sendData = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN);
     protected final ByteBuffer receiveData = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
     private final DatagramPacket sendPacket = new DatagramPacket(sendData.array(), sendData.capacity());
-    private final DatagramPacket receivePacket = new DatagramPacket(receiveData.array(), receiveData.capacity());
+    // One sentinel byte distinguishes an exact HID acknowledgement from UDP truncation.
+    private final DatagramPacket receivePacket = new DatagramPacket(new byte[receiveData.capacity() + 1], receiveData.capacity() + 1);
     private final ArrayDeque<Runnable> actions = new ArrayDeque<>();
     private final ArrayDeque<Runnable> controllerActions = new ArrayDeque<>();
     protected volatile boolean initReceived = false;
     private volatile boolean socketReady;
     private volatile boolean running = false;
+    private volatile boolean stopped;
+    private volatile Thread sendThread, receiveThread;
     private OnGetProcessInfoListener onGetProcessInfoListener;
     private OnPreExecListener onPreExecListener;
     private InetAddress localhost;
@@ -52,6 +54,7 @@ public class WinHandler {
     public WinHandler(XServerDisplayActivity activity) {
         this.activity = activity;
         controllerDiagnostics = new Pd2ControllerDiagnostics(activity);
+        controllerDiagnostics.setProducerGeneration(gamepadHandler.getProducerGeneration());
     }
 
     String getWineIdentifier() {
@@ -344,7 +347,7 @@ public class WinHandler {
     }
 
     private void startSendThread() {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        sendThread = new Thread(() -> {
             while (running) {
                 synchronized (actions) {
                     drainPendingActions();
@@ -354,24 +357,30 @@ public class WinHandler {
                     catch (InterruptedException e) {}
                 }
             }
-        });
+        }, "PD2-controller-send");
+        sendThread.setDaemon(true);
+        sendThread.start();
     }
 
     public void stop() {
-        running = false;
+        synchronized (this) {
+            stopped = true;
+            running = false;
+            initReceived = false;
+            if (socket != null) {
+                socket.close();
+                socket = null;
+            }
+        }
         gamepadHandler.stop();
         setSocketReady(false);
         controllerDiagnostics.save();
 
-        if (socket != null) {
-            socket.close();
-            socket = null;
-        }
-
         synchronized (actions) {
             controllerActions.clear();
             actions.clear();
-            actions.notify();
+            initReceived = false;
+            actions.notifyAll();
         }
 
         if (midiHandler != null) {
@@ -379,6 +388,12 @@ public class WinHandler {
             midiHandler.destroy();
             midiHandler = null;
         }
+    }
+
+    /** Diagnostics/tests can observe retirement without blocking the Android main thread. */
+    public boolean areControllerWorkersStopped() {
+        Thread sender = sendThread, receiver = receiveThread;
+        return (sender == null || !sender.isAlive()) && (receiver == null || !receiver.isAlive());
     }
 
     private void handleRequest(byte requestCode, final int port) throws IOException {
@@ -504,6 +519,11 @@ public class WinHandler {
         receiveData.limit(packetBytes);
         try {
             byte requestCode = receiveData.get();
+            if (requestCode == Pd2HidProtocol.ACK_CODE) {
+                boolean accepted = gamepadHandler.handleHidAcknowledgement(receiveData, port);
+                if (!accepted) controllerDiagnostics.recordInvalidPacket();
+                return accepted;
+            }
             controllerDiagnostics.recordRequest(requestCode, port);
             handleRequest(requestCode, port);
             return true;
@@ -514,7 +534,8 @@ public class WinHandler {
         }
     }
 
-    public void start() {
+    public synchronized void start() {
+        if (running || stopped) return; // A GamepadHandler is a single-session producer.
         try {
             localhost = InetAddress.getByName("127.0.0.1");
         }
@@ -527,23 +548,37 @@ public class WinHandler {
 
         running = true;
         startSendThread();
-        Executors.newSingleThreadExecutor().execute(() -> {
+        receiveThread = new Thread(() -> {
             DatagramSocket receiver = null;
             try {
                 receiver = new DatagramSocket(null);
-                socket = receiver;
+                synchronized (WinHandler.this) {
+                    if (!running || stopped) return;
+                    socket = receiver;
+                }
                 receiver.setReuseAddress(true);
                 receiver.bind(new InetSocketAddress(localhost, SERVER_PORT));
-                if (!running) return;
-                setSocketReady(true);
+                synchronized (WinHandler.this) {
+                    if (!running || stopped) return;
+                    setSocketReady(true);
+                }
 
                 while (running) {
-                    receivePacket.setLength(receiveData.capacity());
+                    receivePacket.setLength(receiveData.capacity() + 1);
                     receiver.receive(receivePacket);
                     if (!receivePacket.getAddress().equals(localhost) || receivePacket.getLength() == 0) continue;
 
                     synchronized (actions) {
-                        dispatchPacket(receivePacket.getLength(), receivePacket.getPort());
+                        if (!running) break;
+                        int received = receivePacket.getLength();
+                        if (received > receiveData.capacity() && receivePacket.getData()[0] == Pd2HidProtocol.ACK_CODE) {
+                            controllerDiagnostics.recordInvalidPacket();
+                            continue;
+                        }
+                        // Retain the existing fixed-width truncation for upstream runtime requests.
+                        int packetBytes = Math.min(received, receiveData.capacity());
+                        System.arraycopy(receivePacket.getData(), receivePacket.getOffset(), receiveData.array(), 0, packetBytes);
+                        dispatchPacket(packetBytes, receivePacket.getPort());
                     }
                 }
             }
@@ -553,9 +588,12 @@ public class WinHandler {
             finally {
                 setSocketReady(false);
                 if (receiver != null) receiver.close();
+                synchronized (WinHandler.this) { if (socket == receiver) socket = null; }
                 controllerDiagnostics.save();
             }
-        });
+        }, "PD2-controller-receive");
+        receiveThread.setDaemon(true);
+        receiveThread.start();
     }
 
     public boolean onGenericMotionEvent(MotionEvent event) {

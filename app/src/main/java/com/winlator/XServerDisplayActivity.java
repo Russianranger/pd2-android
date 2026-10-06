@@ -160,6 +160,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean pd2MenuCursor;
     private boolean pd2MenuOpen;
     private boolean pd2NativeReconnectPending;
+    private boolean pd2NativeIdentityRecoveryPending;
     private boolean pd2Paused;
     private boolean pd2HasWindowFocus = true;
     private volatile boolean pd2StopRequested;
@@ -468,6 +469,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             pd2Paused = true;
             if (pd2MemoryDiagnostics != null) pd2MemoryDiagnostics.setResumed(false);
             pd2NativeReconnectPending = false;
+            pd2NativeIdentityRecoveryPending = false;
             releasePd2Input();
             winHandler.gamepadHandler.setInputEnabled(false);
             updatePd2InputMode();
@@ -495,6 +497,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pd2Session) {
             pd2StopRequested = true;
             pd2NativeReconnectPending = false;
+            pd2NativeIdentityRecoveryPending = false;
             if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
             if (ownsSession) pd2ActiveSession.clear();
@@ -616,6 +619,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             if (pd2StopRequested) return;
             pd2StopRequested = true;
             pd2NativeReconnectPending = false;
+            pd2NativeIdentityRecoveryPending = false;
             if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
             releasePd2Input();
             winHandler.stop();
@@ -978,7 +982,18 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         winHandler.gamepadHandler.setInputEnabled(nativeActive);
         // A dialog can dismiss before Android returns window focus. Consume the explicit
         // Native selection only once its normal input gate is active, never on mere resume.
-        if (nativeActive && pd2NativeReconnectPending) {
+        if (nativeActive && pd2NativeIdentityRecoveryPending) {
+            pd2NativeIdentityRecoveryPending = false;
+            pd2NativeReconnectPending = false;
+            if (winHandler.gamepadHandler.recoverNativeIdentity(stage -> {
+                if (isFinishing() || isDestroyed() || pd2StopRequested) return;
+                if ("deviceStartObserved".equals(stage))
+                    Toast.makeText(this, "Wine started the new controller device. Test Native input, then export support logs.", Toast.LENGTH_LONG).show();
+                else if ("timedOut".equals(stage) || "sendFailure".equals(stage))
+                    Toast.makeText(this, "Controller recovery was not confirmed. Test input and export support logs.", Toast.LENGTH_LONG).show();
+            })) Toast.makeText(this, "Experimental controller recovery · creating a fresh Windows device. Wait for confirmation, up to eight seconds, then test input.", Toast.LENGTH_LONG).show();
+            else Toast.makeText(this, "Experimental recovery unavailable. Check Controller status.", Toast.LENGTH_LONG).show();
+        } else if (nativeActive && pd2NativeReconnectPending) {
             pd2NativeReconnectPending = false;
             if (winHandler.gamepadHandler.reconnectNativeDevice())
                 Toast.makeText(this, "Native controller · reconnecting. Wait one second, then press a controller button.", Toast.LENGTH_LONG).show();
@@ -1050,7 +1065,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             "Back to Launcher Menu",
             "Stop game",
             "Controller status",
-            "Hide white cursor: " + (preferences.getBoolean("pd2_hide_white_cursor", false) ? "On ✓" : "Off")
+            "Hide white cursor: " + (preferences.getBoolean("pd2_hide_white_cursor", false) ? "On ✓" : "Off"),
+            "Recover Native controller (experimental)"
         };
         pd2QuickDialog = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme)
             .setTitle("PD2 quick menu · " + current)
@@ -1063,6 +1079,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                         pd2MenuCursor = which == 2;
                         pd2MouseKeyboard = which == 3;
                         pd2NativeReconnectPending = which == 1;
+                        pd2NativeIdentityRecoveryPending = false;
                         preferences.edit().putBoolean("pd2_mouse_keyboard", pd2MouseKeyboard).apply();
                         if (which != 1) Toast.makeText(this, pd2MenuCursor ? "Menu cursor · choose Native controller after entering your character" : pd2InputModeLabel(), Toast.LENGTH_SHORT).show();
                         break;
@@ -1098,6 +1115,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                         preferences.edit().putBoolean("pd2_hide_white_cursor", hideWhiteCursor).apply();
                         applyPd2CursorVisibility();
                         Toast.makeText(this, hideWhiteCursor ? "White cursor hidden" : "White cursor shown", Toast.LENGTH_SHORT).show();
+                        break;
+                    case 14:
+                        releasePd2Input();
+                        pd2MenuCursor = false;
+                        pd2MouseKeyboard = false;
+                        pd2NativeReconnectPending = false;
+                        pd2NativeIdentityRecoveryPending = true;
+                        preferences.edit().putBoolean("pd2_mouse_keyboard", false).apply();
                         break;
                 }
             }).create();
@@ -1157,7 +1182,21 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (pointerOutput != null) message.append("\nMenu input requests: ").append(pointerOutput.optLong("moveEvents"))
                 .append(" moves, ").append(pointerOutput.optLong("buttonEvents")).append(" button events")
                 .append("\nWindows cursor feedback: ").append(pointerOutput.optLong("feedbackEvents"));
-        message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. After entering your character, choose Native controller to reconnect the gamepad, wait one second, and press a face button. Select Native controller again to retry.")
+        JSONObject recovery = report.optJSONObject("nativeIdentityRecovery");
+        if (recovery != null && !recovery.optString("lastPhase").isEmpty()) {
+            String phase = recovery.optString("lastPhase");
+            String label;
+            switch (phase) {
+                case "deviceStartObserved": label = "Wine started the new device; test gameplay input"; break;
+                case "timedOut": label = "No backend confirmation before timeout"; break;
+                case "sendFailure": label = "Controller request could not be sent"; break;
+                case "unavailable": label = "Controller backend not ready"; break;
+                case "cancelled": label = "Cancelled by a menu or session change"; break;
+                default: label = "Waiting for Wine device progress"; break;
+            }
+            message.append("\n\nLast experimental recovery: ").append(label);
+        }
+        message.append("\n\nInput pauses while this menu is open. Use Menu cursor for the title and character screens. If Native input stops after Save/Quit, enter gameplay and try Recover Native controller (experimental). This creates a fresh Windows controller identity; gameplay recovery still needs your test.")
                 .append("\n\nIf input still fails, export support logs from the launcher after trying the controller.");
         AlertDialog status = new AlertDialog.Builder(this, R.style.Pd2QuickMenuTheme).setTitle("Controller status")
                 .setMessage(message.toString()).setPositiveButton("Done", null).create();

@@ -46,9 +46,10 @@ class ControllerRuntimeTests(unittest.TestCase):
                             "-pthread", "-o", str(executable)], check=True, capture_output=True, text=True)
             # Wine's pinned HID helper intentionally uses unaligned x86 writes.
             # LeakSanitizer cannot inspect /proc in this runner; ASan/UBSan remain enabled.
-            result = subprocess.run([str(executable)], check=True, capture_output=True, text=True,
+            result = subprocess.run([str(executable)], check=False, capture_output=True, text=True,
                                     timeout=20, env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0:halt_on_error=1",
                                                      "UBSAN_OPTIONS": "halt_on_error=1"})
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("replug and shutdown tests passed", result.stdout)
 
 

@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <pthread.h>
@@ -36,17 +37,26 @@ struct pd2_gamepad {
     BOOL started;
     BOOL connected;
     BOOL has_report;
+    uint32_t uid, session_token;
     struct pd2_controls last_controls;
 };
 
 static pthread_mutex_t pd2_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct list pd2_events = LIST_INIT(pd2_events);
 static struct pd2_gamepad *pd2_pad;
+/* Non-owning: Wine's delivered-device / queued-event references keep this exact
+   object alive until its stop callback. Shutdown clears it before queue cleanup. */
+static struct pd2_gamepad *pd2_retiring_pad;
+static BOOL pd2_retirement_stopped;
 static struct pd2_controls pd2_latest = {.hat = 0xff};
 static _Atomic bool pd2_running;
 static int pd2_socket = -1;
 static struct sockaddr_in pd2_client;
 static uint64_t pd2_last_request, pd2_last_reply;
+static uint32_t pd2_session_token, pd2_uid, pd2_backend_pid;
+static uint64_t pd2_socket_inode;
+static uint32_t pd2_created, pd2_removed, pd2_started, pd2_stopped;
+static uint32_t pd2_states_received, pd2_reports_queued, pd2_invalid_packets;
 
 static uint64_t monotonic_millis(void) {
     struct timespec time;
@@ -59,6 +69,39 @@ static void send_request(unsigned char code) {
     packet[0] = code;
     if (pd2_socket >= 0)
         sendto(pd2_socket, packet, sizeof(packet), 0, (struct sockaddr *)&pd2_client, sizeof(pd2_client));
+}
+
+static void increment_count(uint32_t *count) {
+    if (*count != UINT32_MAX) ++*count;
+}
+
+/* Called with pd2_lock held. These bounded observations contain no input values.
+   Device-start means the Unix callback ran, not completed HID enumeration. */
+static void send_ack(enum pd2_ack_stage stage, uint32_t uid) {
+    unsigned char packet[PD2_ACK_BYTES] = {0};
+    if (!pd2_session_token || pd2_socket < 0) return;
+    packet[0] = PD2_BACKEND_ACK;
+    packet[1] = PD2_EXTENSION_VERSION;
+    if (pd2_pad && pd2_pad->uid == uid) {
+        packet[2] = (pd2_pad->connected ? 1 : 0) | (pd2_pad->started ? 2 : 0);
+    }
+    if (!pd2_pad && uid == pd2_uid && pd2_retirement_stopped)
+        packet[2] |= PD2_ACK_REMOVAL_STOP_OBSERVED;
+    packet[3] = stage;
+    pd2_write_u32(packet + 4, PD2_EXTENSION_MAGIC);
+    pd2_write_u32(packet + 8, pd2_session_token);
+    pd2_write_u32(packet + 12, uid);
+    pd2_write_u32(packet + 16, pd2_backend_pid);
+    pd2_write_u32(packet + 20, pd2_created);
+    pd2_write_u32(packet + 24, pd2_removed);
+    pd2_write_u32(packet + 28, pd2_started);
+    pd2_write_u32(packet + 32, pd2_stopped);
+    pd2_write_u32(packet + 36, pd2_states_received);
+    pd2_write_u32(packet + 40, pd2_reports_queued);
+    pd2_write_u32(packet + 44, pd2_invalid_packets);
+    pd2_write_u64(packet + 48, pd2_socket_inode);
+    pd2_write_u64(packet + 56, monotonic_millis());
+    sendto(pd2_socket, packet, sizeof(packet), 0, (struct sockaddr *)&pd2_client, sizeof(pd2_client));
 }
 
 /* Called with pd2_lock held; Wine queues copy the completed report. */
@@ -88,7 +131,10 @@ static void queue_controls(struct pd2_gamepad *pad) {
     for (index = 0; index < 6; index++) hid_device_set_abs_axis(device, index, pd2_latest.axes[index]);
     if (!bus_event_queue_input_report(&pd2_events, device, state->report_buf, state->report_len))
         ERR("PD2 HID report allocation failed.\n");
-    else { pad->last_controls = pd2_latest; pad->has_report = TRUE; }
+    else {
+        pad->last_controls = pd2_latest; pad->has_report = TRUE;
+        increment_count(&pd2_reports_queued);
+    }
 }
 
 static void pd2_destroy(struct unix_device *device) {
@@ -100,7 +146,11 @@ static NTSTATUS pd2_start(struct unix_device *device) {
     pthread_mutex_lock(&pd2_lock);
     if (!pad->started) {
         pad->started = TRUE;
-        if (pad == pd2_pad) queue_controls(pad);
+        if (pad == pd2_pad) {
+            queue_controls(pad);
+            increment_count(&pd2_started);
+            send_ack(PD2_ACK_DEVICE_START, pad->uid);
+        }
     }
     pthread_mutex_unlock(&pd2_lock);
     return STATUS_SUCCESS;
@@ -109,9 +159,17 @@ static NTSTATUS pd2_start(struct unix_device *device) {
 static void pd2_stop_device(struct unix_device *device) {
     struct pd2_gamepad *pad = CONTAINING_RECORD(device, struct pd2_gamepad, device);
     pthread_mutex_lock(&pd2_lock);
+    BOOL owned = pd2_pad == pad, retiring = pd2_retiring_pad == pad;
     pad->started = pad->connected = FALSE;
     /* A previous PnP removal must never erase a newly connected instance. */
-    if (pd2_pad == pad) pd2_pad = NULL;
+    if (owned) { pd2_pad = NULL; pd2_retirement_stopped = FALSE; }
+    if (retiring) { pd2_retiring_pad = NULL; pd2_retirement_stopped = TRUE; }
+    /* Same-UID replug objects are distinct too. A stale callback cannot confirm
+       a later object's removal, even if its UID and session token are identical. */
+    if (pad->session_token == pd2_session_token && (owned || retiring)) {
+        increment_count(&pd2_stopped);
+        send_ack(PD2_ACK_DEVICE_STOP, pad->uid);
+    }
     pthread_mutex_unlock(&pd2_lock);
 }
 
@@ -150,7 +208,8 @@ static BOOL build_descriptor(struct unix_device *device) {
 static void discover(BOOL connected) {
     struct pd2_gamepad *pad;
     struct device_desc description = {
-        .vid = PD2_VENDOR_ID, .pid = PD2_PRODUCT_ID, .input = (UINT)-1, .is_gamepad = TRUE,
+        .vid = PD2_VENDOR_ID, .pid = PD2_PRODUCT_ID, .uid = pd2_uid,
+        .input = (UINT)-1, .is_gamepad = TRUE,
         .manufacturer = {'P','D','2',' ','A','n','d','r','o','i','d',0},
         .product = {'X','b','o','x',' ','3','6','0',' ','C','o','n','t','r','o','l','l','e','r',0},
         .serialnumber = {'p','d','2','-','x','b','o','x','-','s','l','o','t','0',0}
@@ -159,7 +218,13 @@ static void discover(BOOL connected) {
         pd2_latest = (struct pd2_controls){.hat = 0xff};
         if (pd2_pad) {
             pd2_pad->connected = FALSE;
-            if (bus_event_queue_device_removed(&pd2_events, &pd2_pad->device)) pd2_pad = NULL;
+            if (bus_event_queue_device_removed(&pd2_events, &pd2_pad->device)) {
+                pd2_retiring_pad = pd2_pad;
+                pd2_retirement_stopped = FALSE;
+                pd2_pad = NULL;
+                increment_count(&pd2_removed);
+                send_ack(PD2_ACK_REMOVE_QUEUED, pd2_uid);
+            }
             else ERR("PD2 HID removal allocation failed.\n");
         }
         return;
@@ -167,6 +232,8 @@ static void discover(BOOL connected) {
     if (pd2_pad) { pd2_pad->connected = TRUE; return; }
     if (!(pad = hid_device_create(&pd2_vtable, sizeof(*pad)))) return;
     pad->connected = TRUE;
+    pad->uid = pd2_uid;
+    pad->session_token = pd2_session_token;
     if (!build_descriptor(&pad->device)
         || !bus_event_queue_device_created(&pd2_events, &pad->device, &description)) {
         pad->device.vtbl->destroy(&pad->device);
@@ -175,18 +242,51 @@ static void discover(BOOL connected) {
         return;
     }
     pd2_pad = pad;
+    pd2_retirement_stopped = FALSE;
+    increment_count(&pd2_created);
+    send_ack(PD2_ACK_CREATE_QUEUED, pad->uid);
     TRACE("PD2 Android virtual Xbox connected on UDP %u, VID %04x PID %04x.\n",
           PD2_HID_PORT, PD2_VENDOR_ID, PD2_PRODUCT_ID);
 }
 
-static void apply_packet(const struct pd2_packet *packet) {
+static BOOL apply_packet(const struct pd2_packet *packet) {
+    BOOL accepted = FALSE;
     pthread_mutex_lock(&pd2_lock);
-    if (packet->type == PD2_DISCOVERY) discover(packet->connected);
+    if (packet->extended) {
+        if (!pd2_session_token) {
+            /* A session handshake must precede controls; UID zero preserves the
+               accepted initial Windows identity. Never adopt an unsolicited reset. */
+            if (packet->type != PD2_DISCOVERY || packet->uid) goto rejected;
+            pd2_session_token = packet->session_token;
+            if (pd2_pad) pd2_pad->session_token = pd2_session_token;
+        }
+        if (packet->session_token != pd2_session_token || packet->uid < pd2_uid) goto rejected;
+        if (packet->uid > pd2_uid) {
+            /* Removal must be queued before creating a different instance. A
+               repeated discovery of the current UID is idempotent. */
+            if (packet->type != PD2_DISCOVERY || !packet->connected || pd2_pad
+                || !pd2_retirement_stopped) goto rejected;
+            pd2_uid = packet->uid;
+            pd2_retirement_stopped = FALSE;
+        }
+    }
+    else if (pd2_session_token) goto rejected;
+    if (packet->type == PD2_DISCOVERY) {
+        discover(packet->connected);
+        send_ack(PD2_ACK_DISCOVERY, pd2_uid);
+    }
     else if (packet->type == PD2_STATE && pd2_pad && pd2_pad->connected) {
+        increment_count(&pd2_states_received);
         pd2_latest = packet->controls;
         queue_controls(pd2_pad);
     }
+    accepted = TRUE;
+    goto done;
+rejected:
+    increment_count(&pd2_invalid_packets);
+done:
     pthread_mutex_unlock(&pd2_lock);
+    return accepted;
 }
 
 /* Replaces the unused SDL backend's three existing ABI slots, never its PE driver. */
@@ -204,6 +304,16 @@ NTSTATUS pd2_bus_init(void *ignored) {
     }
     pd2_client = (struct sockaddr_in){.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK),
                                     .sin_port = htons(PD2_JAVA_PORT)};
+    pthread_mutex_lock(&pd2_lock);
+    pd2_retiring_pad = NULL;
+    pd2_retirement_stopped = FALSE;
+    pd2_session_token = pd2_uid = 0;
+    pd2_created = pd2_removed = pd2_started = pd2_stopped = 0;
+    pd2_states_received = pd2_reports_queued = pd2_invalid_packets = 0;
+    pd2_backend_pid = (uint32_t)getpid();
+    struct stat socket_stat;
+    pd2_socket_inode = !fstat(pd2_socket, &socket_stat) ? (uint64_t)socket_stat.st_ino : 0;
+    pthread_mutex_unlock(&pd2_lock);
     pd2_last_reply = pd2_last_request = monotonic_millis();
     send_request(PD2_GET_DEVICE);
     return STATUS_SUCCESS;
@@ -230,8 +340,11 @@ NTSTATUS pd2_bus_wait(void *args) {
             if (sender_length == sizeof(sender) && sender.sin_family == AF_INET
                 && sender.sin_addr.s_addr == htonl(INADDR_LOOPBACK) && sender.sin_port == htons(PD2_JAVA_PORT)
                 && pd2_parse_packet(buffer, (size_t)length, &packet)) {
-                pd2_last_reply = monotonic_millis();
-                apply_packet(&packet);
+                if (apply_packet(&packet)) pd2_last_reply = monotonic_millis();
+            } else {
+                pthread_mutex_lock(&pd2_lock);
+                increment_count(&pd2_invalid_packets);
+                pthread_mutex_unlock(&pd2_lock);
             }
         } else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
             ERR("PD2 HID receive failed, errno %d.\n", errno);
@@ -239,7 +352,12 @@ NTSTATUS pd2_bus_wait(void *args) {
             break;
         }
         uint64_t now = monotonic_millis();
-        if (now - pd2_last_request >= 2000) { send_request(PD2_GET_DEVICE); pd2_last_request = now; }
+        if (now - pd2_last_request >= 2000) {
+            send_request(PD2_GET_DEVICE); pd2_last_request = now;
+            pthread_mutex_lock(&pd2_lock);
+            send_ack(PD2_ACK_HEARTBEAT, pd2_uid);
+            pthread_mutex_unlock(&pd2_lock);
+        }
         if (now - pd2_last_reply >= 6000) {
             pthread_mutex_lock(&pd2_lock);
             discover(FALSE);
@@ -253,6 +371,8 @@ NTSTATUS pd2_bus_wait(void *args) {
     pthread_mutex_lock(&pd2_lock);
     if (pd2_pad) pd2_pad->connected = FALSE;
     pd2_pad = NULL;
+    pd2_retiring_pad = NULL;
+    pd2_retirement_stopped = FALSE;
     pd2_latest = (struct pd2_controls){.hat = 0xff};
     /* A queued creation has not transferred its initial reference to the PE
        driver yet. Drop that creator reference as well as each queued reference.

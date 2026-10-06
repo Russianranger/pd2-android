@@ -227,7 +227,9 @@ public final class LegacyGamepadProtocolTest {
         assertEquals(1, discovery.bytes[3]);
         assertEquals(0x045e, littleEndian(discovery.bytes).getShort(5) & 0xffff);
         assertEquals(0x02a1, littleEndian(discovery.bytes).getShort(7) & 0xffff);
-        for (int index = 61; index < 256; index++) assertEquals(0, discovery.bytes[index]);
+        for (int index = 61; index < Pd2HidProtocol.SUFFIX_OFFSET; index++) assertEquals(0, discovery.bytes[index]);
+        assertEquals(Pd2HidProtocol.MAGIC, littleEndian(discovery.bytes).getInt(241));
+        assertEquals(0, littleEndian(discovery.bytes).getInt(246));
         assertEquals(256, initial.bytes.length);
         assertEquals(9, initial.bytes[0]);
         assertEquals(0, initial.bytes[1]);
@@ -297,7 +299,8 @@ public final class LegacyGamepadProtocolTest {
                 assertEquals(256, packet.bytes.length);
                 assertEquals(0, littleEndian(packet.bytes).getShort(2));
                 assertEquals(-1, packet.bytes[4]);
-                for (int index = 5; index < 256; index++) assertEquals(0, packet.bytes[index]);
+                int end = packet.port == 7950 ? Pd2HidProtocol.SUFFIX_OFFSET : 256;
+                for (int index = 5; index < end; index++) assertEquals(0, packet.bytes[index]);
                 if (packet.port == 7950) { hidPackets++; assertEquals(0, packet.bytes[1]); }
                 else modernPackets++;
             }
@@ -327,7 +330,9 @@ public final class LegacyGamepadProtocolTest {
         byte[] absent = handler.packets.get(0).bytes;
         assertEquals(256, absent.length);
         assertEquals(8, absent[0]);
-        for (int index = 1; index < absent.length; index++) assertEquals(0, absent[index]);
+        for (int index = 1; index < Pd2HidProtocol.SUFFIX_OFFSET; index++) assertEquals(0, absent[index]);
+        assertEquals(Pd2HidProtocol.MAGIC, littleEndian(absent).getInt(241));
+        assertEquals(0, littleEndian(absent).getInt(246));
     }
 
     @Test public void explicitReconnectExpiresQueuedControlsAndHeartbeatCannotReconnectBeforeSentRemovalGap() throws Exception {
@@ -536,6 +541,240 @@ public final class LegacyGamepadProtocolTest {
     private static void queueLegacyDiscovery(FixtureHandler handler) {
         handler.receiveData.clear(); handler.receiveData.put((byte)1).put((byte)1).putInt(123).flip();
         handler.gamepadHandler.handleLegacyGetGamepadRequest(7949);
+    }
+
+    @Test public void freshIdentityRequiresARecognizedBackendButOrdinaryNativeDeliveryDoesNot() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        assertFalse(handler.gamepadHandler.recoverNativeIdentity(null));
+        slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(2));
+        assertEquals(0, littleEndian(handler.packets.get(1).bytes).getInt(246));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("unavailable"));
+    }
+
+    @Test public void freshIdentityWaitsForOldStopAndNewStartWithoutDeliveringHeldControls() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 0, 1, 0);
+        ArrayList<String> phases = new ArrayList<>();
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(phases::add)); handler.drain();
+        assertBlackoutPackets(handler.packets); handler.packets.clear();
+        receiveAck(handler, token, 0, 0, 3, 1, 1, 0); // Removal queued, old device has not stopped.
+        advanceReconnect(600); handler.drain();
+        assertFalse(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        handler.packets.clear();
+        receiveAck(handler, token, 0, 4, 5, 1, 1, 1);
+        advanceReconnect(300); handler.drain(); advanceReconnect(0);
+        assertAttachPackets(handler.packets);
+        assertEquals(1, littleEndian(handler.packets.get(2).bytes).getInt(246));
+        handler.packets.clear(); slot.state.buttons = 1;
+        receiveAck(handler, token, 1, 1, 2, 1, 1, 1);
+        advanceReconnect(0); handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        for (Packet packet : handler.packets) assertNeutralControls(packet);
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        receiveAck(handler, token, 1, 3, 4, 1, 2, 1); advanceReconnect(0);
+        assertTrue(phases.contains("deviceStartObserved"));
+        handler.packets.clear(); slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(0).bytes).getShort(6));
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(2));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("requests"));
+        advanceReconnect(9000); assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("timedOut"));
+    }
+
+    @Test public void lostDetachOrStopAcknowledgementNeverAdvancesTheIdentityAndTimeoutRestoresTheOldDevice() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 0, 1, 0);
+        ArrayList<String> phases = new ArrayList<>();
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(phases::add)); handler.drain();
+        advanceReconnect(7900); handler.drain();
+        for (Packet packet : handler.packets) if (packet.port == 7950) assertEquals(0, littleEndian(packet.bytes).getInt(246));
+        assertTrue(handler.packets.stream().filter(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 0).count() > 1);
+        handler.packets.clear(); advanceReconnect(100); handler.drain(); advanceReconnect(0);
+        assertTrue(phases.contains("timedOut"));
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        for (Packet packet : handler.packets) if (packet.port == 7950) assertEquals(0, littleEndian(packet.bytes).getInt(246));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("timedOut"));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+    }
+
+    @Test public void lostStartAckCanBeRecoveredByAMatchedHeartbeatAndOldStopCannotCompleteTheNewIdentity() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 0, 1, 0);
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); handler.drain();
+        receiveAck(handler, token, 0, 4, 5, 1, 1, 1); advanceReconnect(600); handler.drain(); advanceReconnect(0);
+        receiveAck(handler, token, 0, 4, 5, 1, 1, 1); advanceReconnect(0);
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        receiveAck(handler, token, 1, 3, 0, 1, 2, 1); advanceReconnect(0);
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        assertTrue(handler.gamepadHandler.reconnectNativeDevice()); handler.drain();
+        advanceReconnect(600); handler.drain(); advanceReconnect(0);
+        for (Packet packet : handler.packets) if (packet.port == 7950 && packet.bytes[1] == 1 && packet.bytes[0] == 8)
+            assertEquals(1, littleEndian(packet.bytes).getInt(246)); // Ordinary reconnect retains the explicit UID.
+    }
+
+    @Test public void priorSameUidStopBeforeCurrentDetachCannotAuthorizeInheritedCounters() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler);
+        receiveAckWithCreated(handler, token, 0, 3, 4, 2, 1, 2, 0);
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); handler.drain(); handler.packets.clear();
+        // A prior ordinary reconnect's object stops after the baseline, before this removal is queued.
+        receiveAckWithCreated(handler, token, 0, 3, 5, 2, 1, 2, 1);
+        receiveAckWithCreated(handler, token, 0, 0, 3, 2, 2, 2, 1);
+        advanceReconnect(600); handler.drain();
+        assertFalse(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("detachObserved"));
+        handler.packets.clear();
+        receiveAckWithCreated(handler, token, 0, 4, 5, 2, 2, 2, 2);
+        advanceReconnect(300); handler.drain(); advanceReconnect(0);
+        assertAttachPackets(handler.packets);
+        assertEquals(1, littleEndian(handler.packets.get(2).bytes).getInt(246));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("detachObserved"));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        handler.gamepadHandler.stop();
+    }
+
+    @Test public void priorSameUidStopAfterCurrentDetachCannotAuthorizeItAndExactStopHeartbeatCan() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler);
+        receiveAckWithCreated(handler, token, 0, 3, 4, 2, 1, 2, 0);
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); handler.drain(); handler.packets.clear();
+        receiveAckWithCreated(handler, token, 0, 0, 3, 2, 2, 2, 0);
+        // The earlier object's delayed same-UID stop advances totals but lacks the exact-removal flag.
+        receiveAckWithCreated(handler, token, 0, 0, 5, 2, 2, 2, 1);
+        advanceReconnect(600); handler.drain();
+        assertFalse(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("detachObserved"));
+        handler.packets.clear();
+        // The exact stop event was lost; its persistent bit in a matched heartbeat still proves retirement.
+        receiveAckWithCreated(handler, token, 0, 4, 0, 2, 2, 2, 2);
+        advanceReconnect(300); handler.drain(); advanceReconnect(0);
+        assertAttachPackets(handler.packets);
+        assertEquals(1, littleEndian(handler.packets.get(2).bytes).getInt(246));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("detachObserved"));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        handler.gamepadHandler.stop();
+    }
+
+    @Test public void malformedWrongPortAndWrongSessionAcksCannotAuthorizeTheExperiment() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler); byte[] packet = acknowledgement(token, 0, 3, 4, 0, 1, 0);
+        handler.receiveData.clear(); handler.receiveData.put(packet);
+        assertFalse(handler.dispatchPacket(64, 7949));
+        handler.receiveData.clear(); handler.receiveData.put(acknowledgement(token + 1, 0, 3, 4, 0, 1, 0));
+        assertFalse(handler.dispatchPacket(64, 7950));
+        handler.receiveData.clear(); handler.receiveData.put(packet); assertFalse(handler.dispatchPacket(63, 7950));
+        assertFalse(handler.gamepadHandler.recoverNativeIdentity(null));
+        receiveAck(handler, token, 0, 3, 4, 0, 1, 0);
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); handler.gamepadHandler.stop(); advanceReconnect(9000); handler.drain();
+        assertTrue(handler.packets.isEmpty());
+    }
+
+    @Test public void modalCancellationExpiresFreshIdentityTimersAndKeepsControlsNeutral() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 0, 1, 0);
+        ArrayList<String> phases = new ArrayList<>();
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(phases::add)); handler.drain(); handler.packets.clear();
+        handler.gamepadHandler.setInputEnabled(false); handler.drain(); advanceReconnect(0);
+        assertTrue(phases.contains("cancelled"));
+        for (Packet packet : handler.packets) {
+            if (packet.bytes[0] == 9) assertNeutralControls(packet);
+            if (packet.port == 7950) assertEquals(0, littleEndian(packet.bytes).getInt(246));
+        }
+        int packets = handler.packets.size(); receiveAck(handler, token, 0, 4, 5, 1, 1, 1);
+        advanceReconnect(9000); handler.drain(); assertEquals(packets, handler.packets.size());
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+    }
+
+    @Test public void prematureNewStartAndUnchangedOldCountersCannotSkipTheAcknowledgedRemovalGap() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 0, 1, 0);
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); handler.drain(); handler.packets.clear();
+        handler.receiveData.clear(); handler.receiveData.put(acknowledgement(token, 1, 3, 4, 1, 2, 1));
+        assertFalse(handler.dispatchPacket(64, 7950));
+        receiveAck(handler, token, 0, 4, 5, 0, 1, 1); advanceReconnect(600); handler.drain();
+        assertFalse(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        receiveAck(handler, token, 0, 4, 5, 1, 1, 1); advanceReconnect(300); handler.drain(); advanceReconnect(0);
+        assertTrue(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1
+                && littleEndian(packet.bytes).getInt(246) == 1));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        handler.gamepadHandler.stop();
+    }
+
+    @Test public void failedFreshAttachNeutralReportCancelsWithoutClaimingDeviceStartAndExpiresAllAcks() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); FixtureSlot slot = connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 0, 1, 0);
+        ArrayList<String> phases = new ArrayList<>();
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(phases::add)); handler.drain();
+        receiveAck(handler, token, 0, 4, 5, 1, 1, 1); advanceReconnect(600);
+        handler.failNextHidState = true; handler.drain(); advanceReconnect(0); handler.drain(); advanceReconnect(0);
+        assertTrue(phases.contains("sendFailure"));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("sendFailures"));
+        receiveAck(handler, token, 1, 3, 4, 1, 2, 1); advanceReconnect(0);
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        handler.packets.clear(); slot.state.buttons = 1; handler.gamepadHandler.sendGamepadState(slot); handler.drain();
+        assertEquals(1, littleEndian(handler.packets.get(1).bytes).getShort(2));
+        int sent = handler.packets.size(); advanceReconnect(9000); handler.drain(); assertEquals(sent, handler.packets.size());
+    }
+
+    @Test public void outOfOrderSameUidAcksCannotRollBackTheBaselineAndChangedBackendCannotCompleteRecovery() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 1, 2, 1);
+        receiveAck(handler, token, 0, 3, 4, 0, 1, 0); // Older UDP datagram, accepted only as an ignored observation.
+        assertEquals(2, handler.controllerDiagnostics.snapshot().getJSONObject("hidBackend").getLong("started"));
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("hidAcknowledgements").getLong("outOfOrder"));
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); handler.drain(); handler.packets.clear();
+        receiveAck(handler, token, 0, 0, 5, 1, 2, 1); advanceReconnect(600); handler.drain();
+        assertFalse(handler.packets.stream().anyMatch(packet -> packet.port == 7950 && packet.bytes[0] == 8 && packet.bytes[1] == 1));
+        byte[] changed = acknowledgement(token, 0, 0, 5, 2, 2, 2);
+        littleEndian(changed).putInt(16, 4321).putLong(48, 999);
+        handler.receiveData.clear(); handler.receiveData.put(changed); assertTrue(handler.dispatchPacket(64, 7950));
+        advanceReconnect(0); handler.drain();
+        assertEquals(1, handler.controllerDiagnostics.snapshot().getJSONObject("hidAcknowledgements").getLong("backendIdentityChanges"));
+        assertEquals(4321, handler.controllerDiagnostics.snapshot().getJSONObject("hidBackend").getInt("pid"));
+        assertEquals(1234, handler.controllerDiagnostics.snapshot().getJSONObject("hidAcknowledgements")
+                .getJSONObject("latestRejected").getInt("previousPid"));
+        assertFalse(handler.gamepadHandler.recoverNativeIdentity(null));
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        handler.gamepadHandler.stop();
+    }
+
+    @Test public void aChangedHealthyBackendStartsANewBaselineForAFutureExplicitAction() throws Exception {
+        FixtureHandler handler = new FixtureHandler(); connectHid(handler);
+        int token = sessionToken(handler); receiveAck(handler, token, 0, 3, 4, 0, 10, 0);
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); handler.drain();
+        byte[] changed = acknowledgement(token, 0, 3, 4, 0, 1, 0);
+        littleEndian(changed).putInt(16, 4321).putLong(48, 999).putLong(56, 5);
+        handler.receiveData.clear(); handler.receiveData.put(changed); assertTrue(handler.dispatchPacket(64, 7950));
+        advanceReconnect(0); handler.drain();
+        assertEquals(0, handler.controllerDiagnostics.snapshot().getJSONObject("nativeIdentityRecovery").getLong("deviceStartObserved"));
+        assertTrue(handler.gamepadHandler.recoverNativeIdentity(null)); // Deliberate subsequent request, never automatic.
+        handler.gamepadHandler.stop();
+    }
+
+    private static int sessionToken(FixtureHandler handler) throws Exception {
+        Field token = GamepadHandler.class.getDeclaredField("hidSessionToken"); token.setAccessible(true);
+        return token.getInt(handler.gamepadHandler);
+    }
+
+    private static byte[] acknowledgement(int token, int uid, int flags, int stage, int removed, int started, int stopped) {
+        ByteBuffer packet = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN);
+        packet.put(0, (byte)0x50).put(1, (byte)1).put(2, (byte)flags).put(3, (byte)stage)
+                .putInt(4, Pd2HidProtocol.MAGIC).putInt(8, token).putInt(12, uid).putInt(16, 1234)
+                .putInt(20, uid + 1).putInt(24, removed).putInt(28, started).putInt(32, stopped)
+                .putLong(48, 555).putLong(56, 100 + started + removed + stopped);
+        return packet.array();
+    }
+
+    private static void receiveAck(FixtureHandler handler, int token, int uid, int flags, int stage, int removed, int started, int stopped) throws Exception {
+        handler.receiveData.clear(); handler.receiveData.put(acknowledgement(token, uid, flags, stage, removed, started, stopped));
+        assertTrue(handler.dispatchPacket(64, 7950));
+    }
+
+    private static void receiveAckWithCreated(FixtureHandler handler, int token, int uid, int flags, int stage,
+            int created, int removed, int started, int stopped) throws Exception {
+        byte[] packet = acknowledgement(token, uid, flags, stage, removed, started, stopped);
+        littleEndian(packet).putInt(20, created);
+        handler.receiveData.clear(); handler.receiveData.put(packet);
+        assertTrue(handler.dispatchPacket(64, 7950));
     }
 
     private static void queueLegacyPoll(FixtureHandler handler) {

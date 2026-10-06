@@ -387,11 +387,7 @@ public final class Pd2Activity extends AppCompatActivity {
                         new File(getFilesDir(), "pd2/logs/launch.json"));
                 zipSessionDiagnostics(out, "memory.json", Pd2MemoryDiagnostics.getFile(this),
                         new File(getFilesDir(), "pd2/logs/launch.json"), Pd2MemoryDiagnostics.MAX_REPORT_BYTES);
-                File[] attempts = Pd2SessionLog.getAttemptsDirectory(this).listFiles();
-                if (attempts != null) for (File file : attempts) {
-                    if (file.isFile() && file.getName().matches("runtime-attempt-[0-9]{13,19}\\.log"))
-                        zipLog(out, "attempts/" + file.getName(), file);
-                }
+                Pd2AttemptReports.exportArchived(getFilesDir(), out);
                 if (installation != null && installation.valid) {
                     out.putNextEntry(new ZipEntry("installation-files.json"));
                     out.write(Pd2LaunchDiagnostics.installationFiles(Pd2Installer.installedDirectory(this), installation)

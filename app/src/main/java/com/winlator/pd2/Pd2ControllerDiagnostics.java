@@ -48,6 +48,16 @@ public final class Pd2ControllerDiagnostics {
     private String lastReconnectPhase = "";
     private long hidNonNeutralStateSent, hidNeutralStateSent, xinputNonNeutralStateSent, xinputNeutralStateSent;
     private long nativeStateSendFailures, lastNonNeutralStateSentAt;
+    private long producerGeneration, androidDeviceChanges;
+    private int selectedAndroidDeviceId = -1;
+    private long identityRequests, identityDetachSent, identityDetachObserved, identityAttachSent, identityBackendObserved;
+    private long identityStartedObserved, identityCancelled, identityUnavailable, identityTimedOut, identitySendFailures;
+    private String lastIdentityPhase = "";
+    private long lastIdentityAt;
+    private int hidDeviceUid;
+    private JSONObject latestHidBackend;
+    private long hidBackendIdentityChanges, hidOutOfOrderAcks;
+    private JSONObject latestRejectedHidBackend;
     private boolean gateKnown, windowFocus, paused, quickMenu, drawer;
     private final ArrayDeque<JSONObject> recentTransitions = new ArrayDeque<>();
     private final ArrayDeque<JSONObject> recentPointerContexts = new ArrayDeque<>();
@@ -173,6 +183,56 @@ public final class Pd2ControllerDiagnostics {
     public synchronized void setNativeInputEnabled(boolean enabled) { nativeInputEnabled = enabled; }
     public synchronized void setSocketReady(boolean ready) { socketReady = ready; }
     public synchronized void setSelectedDevice(String name) { selectedDevice = bounded(name); }
+    public synchronized void setProducerGeneration(long generation) { producerGeneration = generation; }
+    public synchronized void setSelectedAndroidDevice(int id) {
+        if (selectedAndroidDeviceId != id) androidDeviceChanges = increment(androidDeviceChanges);
+        selectedAndroidDeviceId = id;
+    }
+    public synchronized void setHidDeviceUid(int uid) { hidDeviceUid = uid; }
+
+    /** An observed Unix HID callback is not a PD2 input or Windows enumeration acknowledgement. */
+    public synchronized void recordNativeIdentityRecovery(String phase) {
+        if (phase == null) return;
+        switch (phase) {
+            case "requested": identityRequests = increment(identityRequests); break;
+            case "detachSent": identityDetachSent = increment(identityDetachSent); break;
+            case "detachObserved": identityDetachObserved = increment(identityDetachObserved); break;
+            case "attachSent": identityAttachSent = increment(identityAttachSent); break;
+            case "backendObserved": identityBackendObserved = increment(identityBackendObserved); break;
+            case "deviceStartObserved": identityStartedObserved = increment(identityStartedObserved); break;
+            case "cancelled": identityCancelled = increment(identityCancelled); break;
+            case "unavailable": identityUnavailable = increment(identityUnavailable); break;
+            case "timedOut": identityTimedOut = increment(identityTimedOut); break;
+            case "sendFailure": identitySendFailures = increment(identitySendFailures); break;
+            default: return;
+        }
+        lastIdentityPhase = phase;
+        lastIdentityAt = System.currentTimeMillis();
+    }
+
+    public synchronized void recordHidBackend(int uid, int pid, int flags, int stage, long socketInode,
+            long monotonicMillis, long created, long removed, long started, long stopped,
+            long stateReceived, long reportsQueued, long invalidPackets) {
+        try {
+            latestHidBackend = new JSONObject().put("deviceUid", uid).put("pid", pid).put("flags", flags)
+                    .put("stage", stage).put("socketInode", socketInode).put("monotonicMillis", monotonicMillis)
+                    .put("created", created).put("removed", removed).put("started", started).put("stopped", stopped)
+                    .put("stateReceived", stateReceived).put("reportsQueued", reportsQueued)
+                    .put("invalidPackets", invalidPackets).put("receivedAt", System.currentTimeMillis());
+        } catch (JSONException ignored) { }
+    }
+
+    public synchronized void recordRejectedHidBackend(String reason, int pid, long socketInode, int uid) {
+        if ("identityChanged".equals(reason)) hidBackendIdentityChanges = increment(hidBackendIdentityChanges);
+        else if ("outOfOrder".equals(reason)) hidOutOfOrderAcks = increment(hidOutOfOrderAcks);
+        else return;
+        try {
+            latestRejectedHidBackend = new JSONObject().put("reason", reason).put("pid", pid)
+                    .put("socketInode", socketInode).put("deviceUid", uid).put("receivedAt", System.currentTimeMillis())
+                    .put("previousPid", latestHidBackend == null ? JSONObject.NULL : latestHidBackend.optInt("pid"))
+                    .put("previousSocketInode", latestHidBackend == null ? JSONObject.NULL : latestHidBackend.optLong("socketInode"));
+        } catch (JSONException ignored) { }
+    }
     public synchronized void recordInit() { initReceived = true; initMessages = increment(initMessages); }
     public synchronized void recordInvalidPacket() { invalidPackets = increment(invalidPackets); }
     public synchronized void recordSocketFailure() { socketFailures = increment(socketFailures); }
@@ -362,7 +422,21 @@ public final class Pd2ControllerDiagnostics {
                                 .put("handledKeyAt", lastHandledKeyAt).put("hidStateReplyAt", lastHidReplyAt)
                                 .put("xinputStateReplyAt", lastXInputReplyAt))
                         .put("nativeBridge", "legacy_xinput_7949_and_hid_7950")
-                        .put("bridgeRevision", "java-native-reconnect-v3")
+                        .put("bridgeRevision", "java-native-identity-v1")
+                        .put("controllerProducer", new JSONObject().put("generation", producerGeneration)
+                                .put("selectedAndroidDeviceId", selectedAndroidDeviceId).put("androidDeviceChanges", androidDeviceChanges)
+                                .put("hidDeviceUid", hidDeviceUid))
+                        .put("nativeIdentityRecovery", new JSONObject().put("requests", identityRequests)
+                                .put("detachSent", identityDetachSent).put("detachObserved", identityDetachObserved).put("attachSent", identityAttachSent)
+                                .put("backendObserved", identityBackendObserved).put("deviceStartObserved", identityStartedObserved)
+                                .put("cancelled", identityCancelled).put("unavailable", identityUnavailable)
+                                .put("timedOut", identityTimedOut).put("sendFailures", identitySendFailures)
+                                .put("lastPhase", lastIdentityPhase).put("lastPhaseAt", lastIdentityAt)
+                                .put("scope", "Explicit fresh Wine HID instance; matched backend callbacks do not acknowledge Windows enumeration or PD2 acceptance"))
+                        .put("hidBackend", latestHidBackend == null ? JSONObject.NULL : new JSONObject(latestHidBackend.toString()))
+                        .put("hidAcknowledgements", new JSONObject().put("backendIdentityChanges", hidBackendIdentityChanges)
+                                .put("outOfOrder", hidOutOfOrderAcks).put("latestRejected", latestRejectedHidBackend == null
+                                        ? JSONObject.NULL : new JSONObject(latestRejectedHidBackend.toString())))
                         .put("nativeInputEnabled", nativeInputEnabled)
                         .put("socketReady", socketReady).put("winHandlerInitReceived", initReceived)
                         .put("selectedDevice", selectedDevice == null ? JSONObject.NULL : selectedDevice)

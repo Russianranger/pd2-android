@@ -38,7 +38,10 @@ public final class Pd2LaunchDiagnostics {
     public static synchronized String begin(Context context, Container container, String arguments) throws IOException, JSONException {
         File logs = logs(context);
         if (!logs.isDirectory() && !logs.mkdirs()) throw new IOException("Cannot create diagnostic directory");
-        Pd2SessionLog.archivePrevious(context);
+        File previousAttempt = Pd2SessionLog.archivePrevious(context);
+        boolean reportArchiveFailed = false;
+        try { Pd2AttemptReports.archivePrevious(context.getFilesDir(), previousAttempt); }
+        catch (IOException archivalFailure) { reportArchiveFailed = true; }
         String id = UUID.randomUUID().toString();
         JSONObject report = new JSONObject().put("launchId", id).put("startedAt", System.currentTimeMillis())
                 .put("controllerRuntime", Pd2ControllerRuntime.status(context))
@@ -48,6 +51,7 @@ public final class Pd2LaunchDiagnostics {
                 .put("runtimeRevision", Pd2Runtime.RUNTIME_REVISION)
                 .put("prefixRevision", container.getExtra("pd2RuntimeRevision"))
                 .put("rootfsVersion", RootFS.find(context).getVersion())
+                .put("priorAttemptReportArchiveFailed", reportArchiveFailed)
                 .put("registry", Pd2Runtime.registrySnapshot(container))
                 .put("interpreter", PreferenceManager.getDefaultSharedPreferences(context)
                         .getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false));

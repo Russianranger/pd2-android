@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
@@ -37,9 +38,14 @@ public final class Pd2SessionLog {
 
     public static File archivePrevious(File filesDirectory) throws IOException {
         synchronized (LOCK) {
-            File source = new File(filesDirectory, "pd2/logs/runtime.log");
-            File directory = getAttemptsDirectory(filesDirectory);
-            if (!source.isFile() || source.length() == 0) {
+            File base = filesDirectory.getCanonicalFile();
+            File pd2 = new File(base, "pd2");
+            File logs = new File(pd2, "logs");
+            File source = new File(logs, "runtime.log");
+            File directory = new File(logs, "attempts");
+            if (Files.isSymbolicLink(pd2.toPath()) || Files.isSymbolicLink(logs.toPath())
+                    || Files.isSymbolicLink(directory.toPath())) return null;
+            if (!safeFile(logs, source) || source.length() == 0) {
                 if (directory.isDirectory()) { removeStaleTemporaries(directory); retainLatest(directory); }
                 return null;
             }
@@ -70,6 +76,7 @@ public final class Pd2SessionLog {
      */
     public static void writeSnapshot(File source, OutputStream output) throws IOException {
         synchronized (LOCK) {
+            if (Files.isSymbolicLink(source.toPath())) throw new IOException("Runtime log must be a regular private file");
             try (RandomAccessFile input = new RandomAccessFile(source, "r")) {
                 long originalBytes = input.length();
                 byte[] header = ("PD2 Android runtime log snapshot\nCaptured: " + new Date()
@@ -136,7 +143,7 @@ public final class Pd2SessionLog {
     }
 
     private static File[] archives(File directory) throws IOException {
-        File[] files = directory.listFiles(file -> file.isFile() && file.getName().matches(ARCHIVE_PATTERN));
+        File[] files = directory.listFiles(file -> safeFile(directory, file) && file.getName().matches(ARCHIVE_PATTERN));
         if (files == null) throw new IOException("Cannot read attempt log directory");
         Arrays.sort(files, Comparator.comparing(File::getName));
         return files;
@@ -162,17 +169,30 @@ public final class Pd2SessionLog {
         File[] files = archives(directory);
         for (int index = 0; index < files.length - MAX_ATTEMPTS; index++) {
             if (!files[index].delete()) throw new IOException("Cannot prune old attempt log");
+            String name = files[index].getName();
+            String stamp = name.substring(PREFIX.length(), name.length() - 4);
+            for (String type : new String[]{"launch", "controller", "memory"}) {
+                File report = new File(directory, type + "-attempt-" + stamp + ".json");
+                if (safeFile(directory, report)) report.delete();
+            }
         }
     }
 
     private static void removeStaleTemporaries(File directory) throws IOException {
-        File[] files = directory.listFiles(file -> file.isFile()
+        File[] files = directory.listFiles(file -> safeFile(directory, file)
                 && file.getName().matches(ARCHIVE_PATTERN + "\\.tmp"));
         if (files == null) throw new IOException("Cannot read temporary attempt logs");
         for (File file : files) {
             if (!file.delete()) throw new IOException("Cannot remove interrupted attempt log");
             File reservation = new File(directory, file.getName().substring(0, file.getName().length() - 4));
-            if (reservation.isFile() && reservation.length() == 0) reservation.delete();
+            if (safeFile(directory, reservation) && reservation.length() == 0) reservation.delete();
         }
+    }
+
+    private static boolean safeFile(File directory, File file) {
+        try {
+            return !Files.isSymbolicLink(file.toPath()) && file.isFile()
+                    && file.getCanonicalFile().getParentFile().equals(directory.getCanonicalFile());
+        } catch (IOException | SecurityException ignored) { return false; }
     }
 }

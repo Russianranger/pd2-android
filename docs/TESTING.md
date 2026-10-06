@@ -1,4 +1,26 @@
-# 0.1.15 gameplay memory diagnostic preview
+# 0.1.16 Native identity and cleanup test
+
+Install **0.1.16 over the existing app**. Keep the accepted Wine 9.2 Custom, Box64 0.4.4, rootfs 24, import/prefix/saves, Turnip + Zink, GameNative Glide arguments, Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.** LT/thumb, shoulders, Menu cursor and cursor/icon work are accepted and need no repeated qualification.
+
+The latest 0.1.15 trial stayed open, lost Native after Save/Quit, and refused Play because controller ports remained occupied after server wait. This preview corrects server/client shutdown and adds a separate opt-in fresh Windows controller identity. [Evidence/research](evidence/2026-10-06-controller-session-recovery.md) records the diagnosis and limits.
+
+1. Fresh app launch → **Play** → same character. Confirm ordinary Native movement and one face-button action; this checks the changed controller module's baseline. Save/Quit, use Menu cursor to re-enter, switch back to Native and test again.
+2. If Native fails, return to launcher and **Export support logs before stopping or experimenting**. Resume the same client. This is the unchanged failing Save/Quit state.
+3. In gameplay, open the gear and choose **Recover Native controller (experimental)** once. Wait for its message, up to eight seconds, then test movement and a face button. Record the message and whether input responds. Return to launcher and export again **before Stop**. If recovery is unavailable or times out, export that result too.
+4. Save/Quit normally, then completely **Stop client** from the launcher. Wait for cleanup. Keep the Android app open, press **Play**, enter the same character and test ordinary Native again. **Export support logs** whether it works, fails or says cleanup not ready. Do not force-stop Android between Stop and Play.
+5. If the Android app or client closes unexpectedly, reopen and export **before another Play**, with approximate duration and whole-app versus client-only closure. This one stable 0.1.15 trial did not establish a general memory-kill fix.
+
+Report three outcomes separately: Native after Save/Quit; Native after the explicit identity experiment; Native after full same-app Stop/Play. A **Wine started the new controller device** message observes the Unix start callback, not completed Windows enumeration or PD2 acceptance. Native remains physically unqualified on this preview until these results arrive.
+
+If full Stop/Play restores Native, accept that repair while keeping in-place Save/Quit separate. If fresh identity restores input, its repeatability remains to be established. If clean Stop/Play still fails, compare old/new backend PID/socket/session and Java input/state versus backend report counters; do not repeat blind focus/reconnect tests. If cleanup is refused, include the exact message and its verified residual-process/unknown-field/7949/7950 results.
+
+New `controller.json` sections `nativeIdentityRecovery`, `hidBackend` and `controllerProducer` retain phases, generation/UID, selected Android device ID, backend PID/socket inode and aggregate lifecycle/state/report counts without input values. `launch.json.wineSessionCleanup` records shutdown signal, bounded server escalation, verified client identities and each exclusive port result. Support ZIPs retain matching launch/controller/memory JSON beside the last four runtime attempts, so subsequent refused Play attempts preserve future gameplay reports. Old overwritten reports cannot be recovered.
+
+Current/older container management is retained and optional; deleting containers is not a cleanup or controller workaround. The older sections below preserve reference behavior and history. Use the 0.1.16 sequence above for this trial.
+
+---
+
+# 0.1.15 historical gameplay memory diagnostic preview
 
 Install **0.1.15 over the existing app** and keep the accepted Wine 9.2/rootfs 24, imported installation, prefix, Turnip + Zink / Glide (GameNative arguments), Stability and controller notifications. **Do not Prepare runtime, re-import, uninstall or clear storage.**
 
@@ -33,7 +55,7 @@ The current/persisted-selected/runtime-selected container is protected. With the
 
 If full Stop/Play restores Native, accept that restart repair while in-place Save/Quit remains separate. If it fails after clean cleanup, investigate surviving backend/process/device ownership using the records rather than repeating blind reconnect/focus experiments.
 
-The older reference/checklists below preserve accepted behavior and historical boundaries; use the current 0.1.14 test above.
+The older reference/checklists below preserve accepted behavior and historical boundaries; use the current 0.1.16 test above.
 
 ---
 

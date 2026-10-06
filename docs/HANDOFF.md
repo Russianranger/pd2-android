@@ -14,7 +14,27 @@ The preceding 0.1.11 preview was version code 12. Initial Native gameplay and Me
 
 Install over the existing app and reuse Wine 9.2/rootfs 24/prefix/import: **no Prepare runtime or re-import**. Keep GameNative-arguments Glide, Stability, and controller notifications enabled. See [Testing](TESTING.md), [0.1.11 release notes](RELEASE-0.1.11.md), and the [controller research evidence](evidence/2026-10-04-controller-research.md).
 
-## 0.1.15 continuation
+## 0.1.16 continuation
+
+Current implementation is **0.1.16/code 17**, continued from live main `188aecc84c636b12edc2819d94ab66c31de86fba`. The newest user report accepts that the 0.1.15 trial did not crash, still rejects Native after Save/Quit and reports cleanup not ready on same-app Play. The locally inspected support ZIP `pd2-support-20261006-010338.zip` is 114,901 bytes, SHA-256 `37fc076be853b273bd651584bb1a7144b4589628a90c99bfabcc9f3eb6c5bec0`. The current launch/controller/memory reports describe a refused replacement; the actual gameplay trace survives in an older runtime attempt. Six same-UID PPID-1 Wine clients survive server wait while controller ports remain occupied. [New evidence/research](evidence/2026-10-06-controller-session-recovery.md) preserves timings, process identities and attribution limits.
+
+The custom Wine 9.2 source proves that `-k9` bypasses server-side client termination. Immediate `-k2` enters that path before bounded wait; server SIGKILL is only a bounded escalation after failed wait. Verified legacy orphan clients are retired after server wait using real UID, exact private Box64 executable, captured canonical WINEPREFIX and revalidated PID/start ticks. Independent exclusive binds verify both controller ports. Scope/permission uncertainty is exported and cannot authorize a kill; an unverified stored-PID fallback no longer bypasses cleanup. Whole-environment serialization and stale session guards remain.
+
+The gear adds **Recover Native controller (experimental)**. Unlike the failed previous reconnects, it changes Wine's HID instance UID after matched old-device removal and Unix stop observations. Its transport is session/UID bound, with bounded retries/watchdog, neutral delivery and cancellation. New device-start confirmation is only the Unix callback boundary. Backend PID/socket inode/lifecycle/state/report counts and selected Android device ID/producer generation support the next capture. Baseline UID 0, the Xbox descriptor/VID/PID, controller slot/bindings and ordinary input remain unchanged until opt-in. A new identity path is source-proven; PD2 recovery remains a hypothesis.
+
+The dedicated matching Unix controller module advances to `wine9-hid-2`. All 55 vendored Wine 9 sources and the 17-entry ABI are retained. Upgrade recognizes only the exact prior module hash and requires its verified original backup; unknown modules are preserved. Disabling notifications restores the verified donor backend. This is not a runtime-stack replacement. Wine 9.2 Custom, Box64 0.4.4, rootfs 24, PE HID/XInput/game files, relocation, graphics/GameNative/Stability, prefix/import/saves, accepted LT/thumb/shoulder/Menu/cursor/icon work, containers and signer remain.
+
+One-shot controller/process workers now end with their task, and old process output cannot inherit a replacement launch's debug callbacks. Matching launch/controller/memory JSON is archived before a new attempt and exported with four bounded runtime archives. The already overwritten 0.1.15 gameplay JSON is unrecoverable. These worker/evidence defects are corrected without claiming they caused Native failure.
+
+Next physical gate: install over the app **without Prepare runtime, re-import or repeated binding qualification**. Capture Save/Quit failure before mutation, try the explicit fresh identity once and export its result, then save/quit, fully Stop client and Play within the same Android process. Export again if cleanup is refused. Accept full-session recovery separately from in-place recovery. The prior memory-kill cause remains unresolved despite this one stable trial. Standing approval to publish validated changes to main applies; no tagged release requested. [Testing](TESTING.md) and [0.1.16 notes](RELEASE-0.1.16.md) give the focused sequence.
+
+Local verification passed **253 unit tests across 28 suites**, zero failures/errors/skips, and ARM64 assembly. The 24 runtime composition/fetch/relocation tests and three controller source/artifact/real-UDP ASan/UBSan checks passed; all 206 final runtime pins and relocation checks passed. The eight existing import/input/pointer/crash/log host scripts passed. The local AF_UNIX permission restriction still prevents that real socket check; CI supplies it. Additional scratch harnesses verified Wine's instance-ID formatter and the actual C/Java tag/ACK round trip, without claiming Android/Wine/PD2 integration.
+
+The final local fallback APK is 174,248,431 bytes, SHA-256 `426f4ebdbcd1fa37b4f66b0f4401a86aff9329e4d76005e705e59adb5af13d4e`; it is not the offered artifact. Identity/signature/ZIP integrity/alignment passed: `com.pd2.thor`, 0.1.16/code 17, ARM64 only, min SDK 26/target 28, unchanged V2 preview signer. Only the two controller assets change; 70 assets remain identical to 0.1.15. Twenty-six JNI files match that CI baseline and nine differ from local recompilation, as in prior build-path comparisons. The CI-built artifact will be verified separately before delivery. Do not assign the local fallback digest to CI.
+
+Research completion, source publication and offered CI APK identity are recorded below after final verification.
+
+## 0.1.15 historical continuation
 
 Current implementation: **0.1.15/code 16**, a diagnostic follow-up to a new gameplay termination. The user reports a crash shortly after entering the character on 0.1.14. Support ZIP `pd2-support-20261005-220232.zip` (66,911 bytes, SHA-256 `e1b7fe516fb9024110ee39f74bae8cf052402dad78b01b04afd85293afeb11cf`) records Android reason **3 = LOW_MEMORY**, status 0, at 03:02:29.540 UTC October 6, 34.804 seconds after launch. Game.exe/ProjectDiablo.dll loaded and a fresh game log exists. No fatal runtime tail, caught startup error, afterStop, normal guest exit or crash.txt is captured. The saved controller snapshot predates gameplay; its near-zero counters do not establish absent gameplay input. [Evidence](evidence/2026-10-06-gameplay-low-memory.md) preserves exact timing and limits.
 
@@ -345,7 +365,7 @@ Published 0.1.7 CI run 37169294205 passed. The user rejected its physical menu t
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Native failure after Save/Exit/character re-entry remain unconfirmed.
 
-The current physical step first collects 0.1.15 gameplay memory evidence, then continues the retained Save/Quit-versus-Stop/Play comparison if gameplay stays open. The table preserves historical gates with the latest accepted LT/shoulder result. Runtime preparation and import are not repeated:
+The current physical step tests 0.1.16 fresh identity and full-session cleanup as described above. The table preserves historical gates with the latest accepted LT/shoulder result. Runtime preparation and import are not repeated:
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
@@ -356,7 +376,7 @@ The current physical step first collects 0.1.15 gameplay memory evidence, then c
 | Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
 | Native controller | In-character input accepted on 0.1.6 | User report; detailed independent aiming/buttons/triggers still pending |
 | Menu cursor | Accepted on 0.1.8 | User report; retain this navigation path |
-| Native after Save/Quit/re-entry | Failed through 0.1.11; full Stop/Play also fails until Android is killed | 0.1.12 fixes the confirmed leftover Wine/HID receiver on restart; same-Wine Save/Quit remains unconfirmed |
+| Native after Save/Quit/re-entry | Failed through the latest 0.1.15 trial; Stop/Play was refused with cleanup not ready | 0.1.16 corrects server/client teardown and adds an explicit fresh-identity experiment; both physical results remain pending |
 | Native combinations / shoulder tabs | Accepted by user on 0.1.11 | Preserve LT/thumb and shoulder behavior; no repeated qualification requested |
 | White cursor toggle | Main-menu white cursor persists in latest report | Check expanded hiding in main menu and in-game independently of Native response |
 | Input switching | Pending | Gear/chord and repeated mode switches leave no held input |

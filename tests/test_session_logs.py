@@ -164,6 +164,19 @@ public class SessionLogTest {
    File old=new File(folder,"runtime-attempt-0000000000000.log"); Files.writeString(old.toPath(),"stale attempt");
    source.delete();check(Pd2SessionLog.archivePrevious(work)==null && !old.exists() && attempts(folder).length==4,
      "missing current log still prunes stale attempt history");
+   // Archive and snapshot paths never follow a runtime file or attempt-directory link.
+   File privateFile=new File(work,"private.txt");Files.writeString(privateFile.toPath(),"private contents");
+   Files.createSymbolicLink(source.toPath(),privateFile.toPath());
+   check(Pd2SessionLog.archivePrevious(work)==null && read(privateFile).equals("private contents"),
+     "linked runtime source cannot be archived or altered");
+   boolean linkedSnapshotRejected=false;
+   try {Pd2SessionLog.writeSnapshot(source,new ByteArrayOutputStream());}catch(IOException expected){linkedSnapshotRejected=true;}
+   check(linkedSnapshotRejected,"stream snapshot does not follow a runtime source link");
+   source.delete();Files.writeString(source.toPath(),"safe current runtime");
+   File priorFolder=new File(folder.getParentFile(),"old-attempts");check(folder.renameTo(priorFolder),"move fixture archive directory");
+   File outside=new File(work,"outside-attempts");outside.mkdir();Files.createSymbolicLink(folder.toPath(),outside.toPath());
+   check(Pd2SessionLog.archivePrevious(work)==null && outside.listFiles().length==0,
+     "attempt directory link cannot redirect archive writes");
    System.out.println("PD2 session log tests passed: "+checks+" checks");
   }finally {
    try(var paths=Files.walk(work.toPath())) {

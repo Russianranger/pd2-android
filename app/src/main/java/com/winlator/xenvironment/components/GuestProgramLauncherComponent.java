@@ -104,11 +104,16 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         synchronized (lock) {
             processGeneration++;
             if (pd2WineSession != null) {
-                Pd2WineSession.Result result = pd2WineSession.stop();
-                if (!pd2CleanupRecorded) { recordCleanup(result); pd2CleanupRecorded = true; }
-                if (result.passed) pid = -1;
+                try {
+                    Pd2WineSession.Result result = pd2WineSession.stop();
+                    if (!pd2CleanupRecorded) { recordCleanup(result); pd2CleanupRecorded = true; }
+                } finally {
+                    // Scoped cleanup verifies client identity. A saved numeric root PID may already
+                    // have exited/reused while its callback waited for this lock; never kill it here.
+                    pid = -1;
+                }
             }
-            killRootProcess();
+            else killRootProcess();
         }
     }
 
