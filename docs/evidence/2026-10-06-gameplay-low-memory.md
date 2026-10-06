@@ -81,10 +81,25 @@ include exact process identity, reason labels, importance and sampled PSS/RSS.
 This is an evidence collection preview, **not a claimed memory-kill repair**.
 The next device attempt must preserve its post-kill export before another Play.
 Automated validation and offered APK provenance are recorded in the handoff
-after CI completes. No runtime preparation, re-import, container deletion,
+with CI and offered APK provenance. No runtime preparation, re-import, container deletion,
 graphics experiment, or repeat of accepted controller bindings is requested.
 
 Local validation passed 184 tests across 23 suites (24 new diagnostic tests),
 with zero failures/errors/skips, and ARM64 assembly. New checks cover the
 rolling history under count and byte limits, stale generation rejection,
 worker shutdown, proc identity/UID/privacy/unknown fields and matching export.
+
+CI [37408126420](https://github.com/Russianranger/pd2-android/actions/runs/37408126420)
+passed on source `a9ed9f009a7bba226ed0fb0d1fe16942681e2261`, tree
+`3f9b4a0d2ba41b019d12f2746bf4ed7d8273d21a`: 184 tests/23 suites, zero
+failures or ignored tests, all runtime/controller checks, ARM64 assembly and
+packaging. The unrestricted real Unix test reproduced six missing-parent
+failures and passed 19 prepared binds, retaining a live neighboring endpoint.
+
+Offered CI APK SHA-256
+`3f1da6364f354ab2bfd0ef878fdcfadab6d077e09ef819261b28f1ab3baa9704`,
+174,055,701 bytes. Its package/version/signer/integrity/alignment verify. All
+72 assets and 35 ARM64 JNI libraries match the 0.1.14 CI artifact exactly.
+ZIP-wrapper and unoffered local APK checksums are separate in the handoff.
+Physical gameplay stability, memory owner/cause and Native recovery remain
+unresolved; the next export is necessary before choosing a runtime change.
