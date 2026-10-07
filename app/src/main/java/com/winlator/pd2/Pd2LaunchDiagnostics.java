@@ -111,6 +111,21 @@ public final class Pd2LaunchDiagnostics {
         } catch (IOException | JSONException ignored) { }
     }
 
+    /** Preserve trace setup/restoration status only for the captured launch. */
+    public static synchronized void inputTraceRuntime(Context context, String id, String phase, JSONObject status) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (id == null || !file.isFile() || file.length() > 128 * 1024) return;
+            JSONObject report = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            if (!id.equals(report.optString("launchId"))) return;
+            JSONObject phases = report.optJSONObject("inputTraceRuntime");
+            if (phases == null) phases = new JSONObject();
+            phases.put(phase, status);
+            report.put("inputTraceRuntime", phases);
+            write(file, report);
+        } catch (IOException | JSONException ignored) { }
+    }
+
     /** Include the failed component/endpoint without an unbounded exception or stack dump. */
     public static String startupFailure(RuntimeException failure) {
         String detail = failure.getMessage();

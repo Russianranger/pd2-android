@@ -3,6 +3,9 @@ package com.winlator.renderer;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.opengl.EGL14;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
@@ -49,6 +52,10 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private final WindowMaterial windowMaterial = new WindowMaterial();
     public final ViewTransformation viewTransformation = new ViewTransformation();
     private final Drawable rootCursorDrawable;
+    private final Drawable menuPointerCursorDrawable;
+    private static final int MENU_POINTER_HOTSPOT = 14;
+    private static final int MENU_POINTER_COLOR = 0xE2B966;
+    private static final int MENU_POINTER_OUTLINE = 0x291C0D;
     private final ArrayList<RenderableWindow> renderableWindows = new ArrayList<>();
     private boolean forceWindowsFullscreen;
     private boolean fullscreen = false;
@@ -58,6 +65,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private volatile boolean forceRootCursor;
     private volatile boolean rootCursorVisible = true;
     private volatile boolean cursorOverlayVisible = true;
+    private volatile boolean menuPointerCursorVisible;
     private float cursorScale = 1.0f;
     private int cursorBackColor = 0xffffff;
     private int cursorForeColor = 0x000000;
@@ -71,6 +79,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         this.xServerView = xServerView;
         this.xServer = xServer;
         rootCursorDrawable = createRootCursorDrawable();
+        menuPointerCursorDrawable = createMenuPointerCursorDrawable();
 
         quadVertices.put(new float[]{
             0.0f, 0.0f,
@@ -196,6 +205,10 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     }
 
     private void renderCursorDrawable(Drawable drawable, int x, int y) {
+        renderCursorDrawable(drawable, x, y, cursorBackColor, cursorForeColor);
+    }
+
+    private void renderCursorDrawable(Drawable drawable, float x, float y, int backColor, int foreColor) {
         synchronized (drawable.renderLock) {
             Texture texture = drawable.getTexture();
             texture.updateFromDrawable();
@@ -203,8 +216,8 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             XForm.set(tmpXForm1, x, y, drawable.width * cursorScale, drawable.height * cursorScale);
             XForm.multiply(tmpXForm1, tmpXForm1, tmpXForm2);
 
-            cursorMaterial.setUniformColor(cursorMaterial.uniforms.backColor, cursorBackColor);
-            cursorMaterial.setUniformColor(cursorMaterial.uniforms.foreColor, cursorForeColor);
+            cursorMaterial.setUniformColor(cursorMaterial.uniforms.backColor, backColor);
+            cursorMaterial.setUniformColor(cursorMaterial.uniforms.foreColor, foreColor);
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture.getTextureId());
@@ -265,7 +278,13 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             short x = xServer.pointer.getClampedX();
             short y = xServer.pointer.getClampedY();
 
-            switch (cursorSource(cursor, forceRootCursor, rootCursorVisible, cursorOverlayVisible)) {
+            switch (cursorSource(cursor, forceRootCursor, rootCursorVisible, cursorOverlayVisible,
+                    menuPointerCursorVisible)) {
+                case MENU_POINTER:
+                    // The reticle center is the Windows feedback position, including cursor scale.
+                    renderCursorDrawable(menuPointerCursorDrawable, x - MENU_POINTER_HOTSPOT * cursorScale,
+                            y - MENU_POINTER_HOTSPOT * cursorScale, MENU_POINTER_COLOR, MENU_POINTER_OUTLINE);
+                    break;
                 case ROOT:
                     renderCursorDrawable(rootCursorDrawable, x, y);
                     break;
@@ -291,6 +310,31 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         options.inScaled = false;
         Bitmap bitmap = BitmapFactory.decodeResource(context.getResources(), R.drawable.cursor, options);
         return Drawable.fromBitmap(bitmap);
+    }
+
+    /** A monochrome mask tinted amber by CursorMaterial; independent of Wine's cursor image. */
+    private static Drawable createMenuPointerCursorDrawable() {
+        Bitmap bitmap = Bitmap.createBitmap(28, 28, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setStyle(Paint.Style.STROKE);
+        for (int pass = 0; pass < 2; pass++) {
+            paint.setColor(pass == 0 ? Color.BLACK : Color.WHITE);
+            paint.setStrokeWidth(pass == 0 ? 4.0f : 2.0f);
+            canvas.drawCircle(MENU_POINTER_HOTSPOT, MENU_POINTER_HOTSPOT, 7, paint);
+            canvas.drawLine(14, 2, 14, 7, paint);
+            canvas.drawLine(14, 21, 14, 26, paint);
+            canvas.drawLine(2, 14, 7, 14, paint);
+            canvas.drawLine(21, 14, 26, 14, paint);
+        }
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.BLACK);
+        canvas.drawCircle(MENU_POINTER_HOTSPOT, MENU_POINTER_HOTSPOT, 2, paint);
+        paint.setColor(Color.WHITE);
+        canvas.drawCircle(MENU_POINTER_HOTSPOT, MENU_POINTER_HOTSPOT, 1, paint);
+        Drawable result = Drawable.fromBitmap(bitmap);
+        bitmap.recycle();
+        return result;
     }
 
     private void updateScene() {
@@ -398,10 +442,26 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         return cursorOverlayVisible;
     }
 
-    enum CursorSource { ROOT, GUEST, NONE }
+    /** Dedicated Menu cursor feedback remains visible when white X cursor overlays are hidden. */
+    public void setMenuPointerCursorVisible(boolean visible) {
+        menuPointerCursorVisible = visible;
+        xServerView.requestRender();
+    }
+
+    public boolean isMenuPointerCursorVisible() {
+        return menuPointerCursorVisible;
+    }
+
+    enum CursorSource { ROOT, GUEST, MENU_POINTER, NONE }
 
     static CursorSource cursorSource(Cursor cursor, boolean forceRootCursor, boolean rootCursorVisible,
                                      boolean cursorOverlayVisible) {
+        return cursorSource(cursor, forceRootCursor, rootCursorVisible, cursorOverlayVisible, false);
+    }
+
+    static CursorSource cursorSource(Cursor cursor, boolean forceRootCursor, boolean rootCursorVisible,
+                                     boolean cursorOverlayVisible, boolean menuPointerCursorVisible) {
+        if (menuPointerCursorVisible) return CursorSource.MENU_POINTER;
         if (!cursorOverlayVisible) return CursorSource.NONE;
         if (rootCursorVisible && (forceRootCursor || cursor == null)) return CursorSource.ROOT;
         if (cursor != null && cursor.isVisible()) return CursorSource.GUEST;

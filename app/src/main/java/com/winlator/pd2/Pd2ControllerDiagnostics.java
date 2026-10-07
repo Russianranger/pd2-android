@@ -471,7 +471,7 @@ public final class Pd2ControllerDiagnostics {
             JSONObject clean = new JSONObject();
             for (String name : new String[]{"screenWidth", "screenHeight"}) copyInteger(state, clean, name, 0, 65536);
             for (String name : new String[]{"pointerX", "pointerY"}) copyInteger(state, clean, name, -65536, 65536);
-            for (String name : new String[]{"relative", "gameCursorVisible", "forceRoot", "rootCursorVisible", "cursorOverlayVisible"}) {
+            for (String name : new String[]{"relative", "gameCursorVisible", "forceRoot", "rootCursorVisible", "cursorOverlayVisible", "menuPointerCursorVisible"}) {
                 Object value = state.opt(name);
                 if (value instanceof Boolean) clean.put(name, value);
             }

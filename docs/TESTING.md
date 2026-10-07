@@ -1,4 +1,20 @@
-# Current 0.1.17 first-boot restoration
+# 0.1.18 Menu visibility and Windows API return test
+
+The latest [0.1.17 capture](evidence/2026-10-07-controller-boundaries.md) confirms both settings were restored but both input modes still fail by user report. Android input, non-neutral HID/legacy delivery and Menu movement/click requests continue. There is one physical pad; an overriding duplicate is not established. The previous configuration-only explanation is insufficient for this restored run.
+
+0.1.18 provides a gold Menu pointer when **Hide white cursor** is On, plus a one-launch API return diagnostic. It does not claim Native or in-place Save/Quit recovery. Install over the existing app, preserving runtime/import/prefix/saves, graphics, GameNative arguments and Stability. **No Prepare runtime, re-import, uninstall or clear storage.**
+
+1. Fully **Stop client**. Keep **Controller notifications enabled (default)** and **Save/Quit experiment → Original Wine driver (default)**.
+2. Select **Launch settings → Controller → Input trace → Trace the next Play only**, then **Play**. This preference is consumed once; the trace stays active until Stop. Use a short test because tracing adds overhead. Existing runtime log retention remains bounded.
+3. Select **Menu cursor**. With white cursors hidden, a **gold reticle** should mark the Windows pointer position. Test stick movement and one **A click** on the title/character screen, then enter the same character. Record visibility, movement and clicks separately. If entry fails, export now; do not infer a Native gameplay result from a title-screen test.
+4. In character gameplay, select **Native controller**, press/release one face button and test ordinary movement for roughly 20–30 seconds. Avoid touch/mouse input during that short check. **Export support logs before Stop** whether it works or fails, reporting whether gameplay was reached.
+5. Complete **Stop client**. Temporary relay filters restore their exact prior raw values/types/presence when still owned; unrelated and externally changed values are preserved. The next ordinary Play has no added relay channel. If restoration reports an error, export and retain the existing data.
+
+`launch.json.inputTraceRuntime` records preparation/restoration for the matching launch, including the applied flag and pending restoration. `runtime.log` adds mode/active timestamps and selected relay Call/Ret lines. XInput return 0 establishes success status, **not fresh packet/state or accepted game actions**. A Raw Input size query can legitimately return 0; its buffer presence and command must be considered. The trace records scalar arguments and addresses, without dereferencing controller values. Menu SendInput success establishes OS insertion, not PD2 handling. The captured renderer flag `menuPointerCursorVisible` distinguishes the dedicated reticle from hidden white overlays.
+
+Keep accepted LT/thumb and shoulder mappings. Do not repeat focus, ordinary reconnect, fresh identity or legacy-only experiments. Full-session cleanup is retained; the latest between-run Stop released all nine verified clients and both ports in 731 ms. Current Native failure after a clean session remains distinct from the older accepted 0.1.16 restart result.
+
+# Historical 0.1.17 first-boot restoration
 
 The latest user report says Native and Menu cursor fail on first boot. Its [support evidence](evidence/2026-10-07-first-boot-controller-settings.md) shows **Controller notifications disabled** and the original Winebus module, while the HID read experiment is enabled. Android receives controller events but the accepted HID backend never appears. This mixed configuration cannot qualify the experiment. Menu cursor has movement requests and cursor-position replies, but the reported game response remains unresolved.
 

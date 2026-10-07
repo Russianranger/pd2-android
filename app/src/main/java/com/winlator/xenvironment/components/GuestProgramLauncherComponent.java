@@ -23,6 +23,7 @@ import com.winlator.pd2.Pd2WineSession;
 import com.winlator.pd2.Pd2LaunchDiagnostics;
 import com.winlator.pd2.Pd2Activity;
 import com.winlator.pd2.Pd2HidReadRuntime;
+import com.winlator.pd2.Pd2InputTraceRuntime;
 import com.winlator.pd2.Pd2LaunchPolicy;
 
 import java.io.File;
@@ -37,6 +38,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private EnvVars launchEnvironment;
     private boolean pd2CleanupRecorded;
     private String pd2LaunchFailure;
+    private boolean pd2InputTraceApplied;
+    private boolean pd2InputTraceRestoreAttempted;
     private EnvVars envVars;
     private String box64Preset = Box64Preset.CONSERVATIVE;
     private Callback<Integer> terminationCallback;
@@ -74,12 +77,22 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                     try { hidReadStatus.put("appliedForLaunch", hidReadApplied); }
                     catch (org.json.JSONException ignored) { }
                     Pd2LaunchDiagnostics.hidReadRuntime(environment.getContext(), pd2LaunchId, hidReadStatus);
+                    pd2InputTraceApplied = Pd2InputTraceRuntime.prepareAfterCleanup(environment.getContext(), result,
+                            new File(launchEnvironment.get("WINEPREFIX"), "user.reg"), pd2LaunchId);
+                    if (pd2InputTraceApplied) {
+                        String debug = launchEnvironment.get("WINEDEBUG");
+                        launchEnvironment.put("WINEDEBUG", (debug == null || debug.isEmpty() ? "-all" : debug) + ",+relay");
+                    }
+                    recordInputTrace("beforeLaunch", null);
                     return true;
                 } catch (java.io.IOException | RuntimeException error) {
-                    recordLaunchFailure("Cannot apply the HID read experiment: " + error.getMessage());
+                    recordLaunchFailure("Cannot prepare the controller runtime: " + error.getMessage());
+                    recordInputTrace("beforeLaunch", error.getMessage());
                     // A prepared session owns the global lease even before guest startup.
                     // Release it on installation failure so the next clean Play is possible.
-                    recordCleanup(pd2WineSession.stop());
+                    Pd2WineSession.Result stopped = pd2WineSession.stop();
+                    recordCleanup(stopped);
+                    restoreInputTrace(stopped);
                     pd2CleanupRecorded = true;
                     return false;
                 }
@@ -127,6 +140,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 try {
                     Pd2WineSession.Result result = pd2WineSession.stop();
                     if (!pd2CleanupRecorded) { recordCleanup(result); pd2CleanupRecorded = true; }
+                    restoreInputTrace(result);
                 } finally {
                     // Scoped cleanup verifies client identity. A saved numeric root PID may already
                     // have exited/reused while its callback waited for this lock; never kill it here.
@@ -135,6 +149,32 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             }
             else killRootProcess();
         }
+    }
+
+    private void restoreInputTrace(Pd2WineSession.Result cleanup) {
+        if (!cleanup.passed || launchEnvironment == null || pd2InputTraceRestoreAttempted) return;
+        // Wine stop is idempotent and returns its captured result on later calls. A delayed
+        // old component must never use that result to restore a replacement launch's journal.
+        // Pending restoration after an error belongs to the next clean preflight.
+        pd2InputTraceRestoreAttempted = true;
+        try {
+            Pd2InputTraceRuntime.restoreAfterCleanup(environment.getContext(), cleanup,
+                    new File(launchEnvironment.get("WINEPREFIX"), "user.reg"), pd2LaunchId);
+            recordInputTrace("afterStop", null);
+        } catch (java.io.IOException | RuntimeException error) {
+            String message = "Controller input trace restoration needs attention: " + error.getMessage();
+            Pd2Activity.appendLauncherLog(environment.getContext(), message);
+            recordInputTrace("afterStop", message);
+        }
+    }
+
+    private void recordInputTrace(String phase, String error) {
+        org.json.JSONObject status = Pd2InputTraceRuntime.status(environment.getContext());
+        try {
+            status.put("appliedForLaunch", pd2InputTraceApplied);
+            if (error != null) status.put("error", error.substring(0, Math.min(512, error.length())));
+        } catch (org.json.JSONException ignored) { }
+        Pd2LaunchDiagnostics.inputTraceRuntime(environment.getContext(), pd2LaunchId, phase, status);
     }
 
     private void killRootProcess() {

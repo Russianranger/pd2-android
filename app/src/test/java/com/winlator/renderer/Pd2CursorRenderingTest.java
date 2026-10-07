@@ -69,4 +69,34 @@ public final class Pd2CursorRenderingTest {
         assertEquals(GLRenderer.CursorSource.NONE, GLRenderer.cursorSource(null, false, true, false));
         assertEquals(GLRenderer.CursorSource.ROOT, GLRenderer.cursorSource(null, false, true, true));
     }
+
+    @Test public void activeMenuReticleSurvivesHidingWhiteCursorsWithoutDrawingGuestOrRoot() {
+        for (Cursor cursor : new Cursor[]{null, guestCursor(true), guestCursor(false)}) {
+            for (boolean forcedMenuArrow : new boolean[]{false, true}) {
+                for (boolean rootArrowVisible : new boolean[]{false, true}) {
+                    assertEquals(GLRenderer.CursorSource.MENU_POINTER,
+                            GLRenderer.cursorSource(cursor, forcedMenuArrow, rootArrowVisible, false, true));
+                }
+            }
+        }
+    }
+
+    @Test public void closingMenuRouteHidesReticleWhileWhiteCursorsRemainHidden() {
+        Cursor cursor = guestCursor(false);
+        assertEquals(GLRenderer.CursorSource.MENU_POINTER,
+                GLRenderer.cursorSource(cursor, true, false, false, true));
+        assertEquals(GLRenderer.CursorSource.NONE,
+                GLRenderer.cursorSource(cursor, false, false, false, false));
+        assertEquals(GLRenderer.CursorSource.MENU_POINTER,
+                GLRenderer.cursorSource(cursor, true, false, false, true));
+    }
+
+    @Test public void inactiveReticlePreservesNativeFullMouseAndUnhiddenMenuPolicy() {
+        assertEquals(GLRenderer.CursorSource.NONE,
+                GLRenderer.cursorSource(guestCursor(true), false, false, false, false));
+        assertEquals(GLRenderer.CursorSource.GUEST,
+                GLRenderer.cursorSource(guestCursor(true), false, true, true, false));
+        assertEquals(GLRenderer.CursorSource.ROOT,
+                GLRenderer.cursorSource(guestCursor(false), true, true, true, false));
+    }
 }

@@ -100,6 +100,25 @@ public final class Pd2LaunchDiagnosticsTest {
         assertTrue(current.getLong("hidReadPreparedAt") > 0);
     }
 
+    @Test public void inputTracePhasesRetainLaunchIdentityAndSetupBeforeRestoration() throws Exception {
+        Application application = RuntimeEnvironment.getApplication();
+        File file = new File(application.getFilesDir(), "pd2/logs/launch.json");
+        assertTrue(file.getParentFile().mkdirs() || file.getParentFile().isDirectory());
+        Files.write(file.toPath(), new JSONObject().put("launchId", "current").toString().getBytes(StandardCharsets.UTF_8));
+        Pd2LaunchDiagnostics.inputTraceRuntime(application, "old", "beforeLaunch", new JSONObject());
+        assertFalse(new JSONObject(read(file)).has("inputTraceRuntime"));
+        Pd2LaunchDiagnostics.inputTraceRuntime(application, "current", "beforeLaunch",
+                new JSONObject().put("appliedForLaunch", true));
+        Pd2LaunchDiagnostics.inputTraceRuntime(application, "current", "afterStop",
+                new JSONObject().put("journalPending", false));
+        JSONObject phases = new JSONObject(read(file)).getJSONObject("inputTraceRuntime");
+        assertTrue(phases.getJSONObject("beforeLaunch").getBoolean("appliedForLaunch"));
+        assertFalse(phases.getJSONObject("afterStop").getBoolean("journalPending"));
+        Pd2LaunchDiagnostics.inputTraceRuntime(application, "old", "afterStop", new JSONObject());
+        assertFalse(new JSONObject(read(file)).getJSONObject("inputTraceRuntime")
+                .getJSONObject("afterStop").getBoolean("journalPending"));
+    }
+
     @Test public void interpreterOverridesDefaultAndRetainsExceptionDiagnostics() {
         EnvVars merged = Box64PresetManager.getEnvVars(RuntimeEnvironment.getApplication(), Pd2LaunchPolicy.cpuPreset());
         merged.put("BOX64_DYNAREC", "1");

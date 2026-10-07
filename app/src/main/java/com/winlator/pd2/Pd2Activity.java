@@ -268,7 +268,21 @@ public final class Pd2Activity extends AppCompatActivity {
                 operation = "Controller setting saved. Restart the app before launching the game to apply it.";
                 d.dismiss(); updateUi();
             }).setNeutralButton("Save/Quit experiment", (d, w) -> showHidReadSettings())
+              .setPositiveButton("Input trace", (d, w) -> showInputTraceSettings())
               .setNegativeButton("Close", null).show());
+    }
+    private void showInputTraceSettings() {
+        String[] choices = {"Off (default)", "Trace the next Play only"};
+        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Controller input trace")
+            .setMessage("Records selected Windows API calls and return codes, without controller values. "
+                    + "Use a short test, then export logs before Stop. Trace overhead lasts until Stop; "
+                    + "the existing runtime log size limit still applies. Existing Wine debug settings are restored after clean cleanup.")
+            .setSingleChoiceItems(choices, Pd2InputTraceRuntime.requested(this) ? 1 : 0, (d, which) -> {
+                preferences.edit().putBoolean(Pd2InputTraceRuntime.PREFERENCE, which == 1).apply();
+                operation = which == 1 ? "Input trace selected for the next clean Play. Export after a short test, before Stop."
+                        : "Input trace off. Stop client to finish any running trace.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
     }
     private void showHidReadSettings() {
         String[] modes = {"Original Wine driver (default)", "HID read cancellation fix (experimental)"};
@@ -376,6 +390,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("inputModeScope", "Saved gameplay preference; current session mode and transitions are in controller.json")
                 .put("controllerRuntime", Pd2ControllerRuntime.status(this))
                 .put("hidReadRuntime", Pd2HidReadRuntime.status(this))
+                .put("inputTraceRuntime", Pd2InputTraceRuntime.status(this))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
                 .put("cpuMode", preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability")
                 .put("installation", installation == null ? "unchecked" : installation.details).put("lastOperation", operation);

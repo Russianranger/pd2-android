@@ -176,6 +176,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private Pd2MenuPointer pd2MenuPointer;
     private Pd2NativeFocusRecovery pd2NativeFocusRecovery;
     private boolean pd2MenuPointerActive;
+    private String pd2LastLoggedInputPhase;
     private long pd2LastPointerContextAt;
     private AlertDialog pd2QuickDialog;
     private Button pd2Gear;
@@ -497,6 +498,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         boolean ownsSession = pd2ActiveSession.get() == this;
         if (pd2Session) {
             pd2StopRequested = true;
+            if (xServerView != null) xServerView.getRenderer().setMenuPointerCursorVisible(false);
             pd2NativeReconnectPending = false;
             pd2NativeIdentityRecoveryPending = false;
             if (pd2NativeFocusRecovery != null) pd2NativeFocusRecovery.setActive(false);
@@ -948,6 +950,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             GLRenderer renderer = xServerView.getRenderer();
             renderer.setRootCursorVisible(visible);
             renderer.setCursorOverlayVisible(visible);
+            renderer.setMenuPointerCursorVisible(pd2MenuPointerActive && !visible);
             xServerView.setPointerIcon(PointerIcon.getSystemIcon(this,
                     visible ? PointerIcon.TYPE_DEFAULT : PointerIcon.TYPE_NULL));
         }
@@ -966,6 +969,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private void updatePd2InputMode() {
         if (!pd2Session || pd2InputRouter == null) return;
         boolean inputAvailable = !pd2StopRequested && !pd2MenuOpen && !pd2Paused && pd2HasWindowFocus && !drawerLayout.isDrawerOpen(GravityCompat.START);
+        String phase = pd2InputModeName() + " active=" + inputAvailable;
+        if (debugDialog != null && !phase.equals(pd2LastLoggedInputPhase)) {
+            pd2LastLoggedInputPhase = phase;
+            debugDialog.call("PD2_INPUT_PHASE at=" + System.currentTimeMillis()
+                    + " launchId=" + getIntent().getStringExtra("pd2_launch_id") + " mode=" + phase);
+        }
         winHandler.gamepadHandler.setStickDeadzone(pd2InputRouter.getDeadzone());
         pd2InputRouter.setMenuControls(pd2MenuCursor);
         winHandler.controllerDiagnostics.setMode(pd2InputModeName(), inputAvailable);
@@ -1041,6 +1050,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         try {
             state.put("forceRoot", xServerView.getRenderer().isForceRootCursor());
             state.put("rootCursorVisible", xServerView.getRenderer().isRootCursorVisible());
+            state.put("menuPointerCursorVisible", xServerView.getRenderer().isMenuPointerCursorVisible());
             state.put("cursorOverlayVisible", xServerView.getRenderer().isCursorOverlayVisible());
         }
         catch (org.json.JSONException ignored) { }
