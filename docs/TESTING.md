@@ -1,4 +1,17 @@
-# 0.1.17 HID read-cancellation test
+# Current 0.1.17 first-boot restoration
+
+The latest user report says Native and Menu cursor fail on first boot. Its [support evidence](evidence/2026-10-07-first-boot-controller-settings.md) shows **Controller notifications disabled** and the original Winebus module, while the HID read experiment is enabled. Android receives controller events but the accepted HID backend never appears. This mixed configuration cannot qualify the experiment. Menu cursor has movement requests and cursor-position replies, but the reported game response remains unresolved.
+
+Use the **existing 0.1.17 APK**, without reinstalling or rebuilding:
+
+1. Fully **Stop client** and wait for cleanup.
+2. Open **Launch settings → Controller**, select **Controller notifications enabled (default)**, then reopen that panel and choose **Save/Quit experiment → Original Wine driver (default)**.
+3. Press **Play**. Check **Menu cursor** stick movement and an **A click** on the frontend, then enter the same character and check ordinary **Native** movement and one face-button action. Record the two results separately.
+4. If either fails, **export support logs immediately before Stop**. The settings and installed module hashes in the new capture will establish whether the accepted baseline is restored.
+
+No Prepare runtime, re-import, uninstall, clear storage, container deletion or old reconnect/identity experiment. Full same-app cleanup remains accepted and also passed in this capture. Save/Quit recovery remains unresolved. Resume the optional experiment below only after initial input works with both accepted settings restored.
+
+# Historical 0.1.17 HID read-cancellation test
 
 The new 0.1.16 physical result accepts Native after full **Stop client → Play in the same Android app process**. Save/Quit still fails, and both fresh-identity attempts failed despite successful Wine removal/start observations. The [new controller census](evidence/2026-10-06-controller-census.md) finds one physical pad and one active Wine HID parent, with paired child interfaces and an independent legacy XInput representation. Do not repeat the failed identity/reconnect/focus experiments or accepted binding tests.
 
