@@ -1417,10 +1417,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (pd2Session && pd2InputRouter != null) {
             if (ExternalController.isGameController(event.getDevice())) {
+                // Synthetic fallback keys must not trigger the reserved thumb chord
+                // before the Native/router event filters get a chance to reject them.
+                if ((event.getFlags() & KeyEvent.FLAG_FALLBACK) != 0
+                        || event.getAction() != KeyEvent.ACTION_DOWN && event.getAction() != KeyEvent.ACTION_UP) return true;
                 int code = event.getKeyCode();
                 boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
                 if (code == KeyEvent.KEYCODE_BUTTON_THUMBL || code == KeyEvent.KEYCODE_BUTTON_THUMBR) {
-                    if (event.getAction() != KeyEvent.ACTION_DOWN && event.getAction() != KeyEvent.ACTION_UP) return true;
                     boolean available = !pd2StopRequested && !pd2MenuOpen && pd2HasWindowFocus
                             && !pd2Paused && !drawerLayout.isDrawerOpen(GravityCompat.START);
                     Pd2ThumbButtons.Action action = pd2ThumbButtons.event(event.getDeviceId(),

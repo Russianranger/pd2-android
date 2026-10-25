@@ -158,8 +158,8 @@ public class ExternalController implements GamepadSlot {
     private void processJoystickInput(MotionEvent event, int historyPos) {
         state.thumbLX = getCenteredAxis(event, MotionEvent.AXIS_X, historyPos);
         state.thumbLY = getCenteredAxis(event, MotionEvent.AXIS_Y, historyPos);
-        state.thumbRX = getCenteredAxis(event, MotionEvent.AXIS_Z, historyPos);
-        state.thumbRY = getCenteredAxis(event, MotionEvent.AXIS_RZ, historyPos);
+        state.thumbRX = getCenteredAxis(event, rightStickAxis(event, true), historyPos);
+        state.thumbRY = getCenteredAxis(event, rightStickAxis(event, false), historyPos);
 
         if (historyPos == -1) {
             float axisX = getCenteredAxis(event, MotionEvent.AXIS_HAT_X, historyPos);
@@ -175,14 +175,41 @@ public class ExternalController implements GamepadSlot {
     private void processTriggerButton(MotionEvent event) {
         // Mixed controllers can report digital full-press events as well as axes.
         // Each side's declared axis remains authoritative throughout the session.
-        if (hasTriggerAxis(event.getDevice(), true))
-            state.triggerL = triggerAxis(event, MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_BRAKE);
-        if (hasTriggerAxis(event.getDevice(), false))
-            state.triggerR = triggerAxis(event, MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_GAS);
+        if (hasTriggerAxis(event, true))
+            state.triggerL = getTriggerAxis(event, true);
+        if (hasTriggerAxis(event, false))
+            state.triggerR = getTriggerAxis(event, false);
     }
 
-    private static float triggerAxis(MotionEvent event, int axis, int alias) {
-        return Mathf.clamp(Math.max(event.getAxisValue(axis), event.getAxisValue(alias)) - Mathf.EPSILON, 0.0f, 1.0f);
+    /** A composite pad can declare trigger ranges on another input source, absent from this event. */
+    public static boolean hasTriggerAxis(MotionEvent event, boolean left) {
+        InputDevice device = event.getDevice();
+        return device != null && (device.getMotionRange(left ? MotionEvent.AXIS_LTRIGGER : MotionEvent.AXIS_RTRIGGER,
+                event.getSource()) != null || device.getMotionRange(left ? MotionEvent.AXIS_BRAKE : MotionEvent.AXIS_GAS,
+                event.getSource()) != null);
+    }
+
+    /** Read only this event source's declared trigger axes; normalize ranges starting at -1. */
+    public static float getTriggerAxis(MotionEvent event, boolean left) {
+        return Math.max(normalizedTrigger(event, left ? MotionEvent.AXIS_LTRIGGER : MotionEvent.AXIS_RTRIGGER),
+                normalizedTrigger(event, left ? MotionEvent.AXIS_BRAKE : MotionEvent.AXIS_GAS));
+    }
+
+    private static float normalizedTrigger(MotionEvent event, int axis) {
+        InputDevice device = event.getDevice();
+        if (device == null) return 0;
+        InputDevice.MotionRange range = device.getMotionRange(axis, event.getSource());
+        if (range == null) return 0;
+        float value = event.getAxisValue(axis), min = range.getMin(), max = range.getMax();
+        if (!Float.isFinite(value) || !Float.isFinite(min) || !Float.isFinite(max) || max <= min) return 0;
+        return Mathf.clamp((value - min) / (max - min) - Mathf.EPSILON, 0.0f, 1.0f);
+    }
+
+    public static int rightStickAxis(MotionEvent event, boolean horizontal) {
+        InputDevice device = event.getDevice();
+        int primary = horizontal ? MotionEvent.AXIS_Z : MotionEvent.AXIS_RZ;
+        return device != null && device.getMotionRange(primary, event.getSource()) != null ? primary
+                : horizontal ? MotionEvent.AXIS_RX : MotionEvent.AXIS_RY;
     }
 
     private static boolean hasTriggerAxis(InputDevice device, boolean left) {
@@ -191,7 +218,7 @@ public class ExternalController implements GamepadSlot {
     }
 
     public boolean updateStateFromMotionEvent(MotionEvent event) {
-        if (isJoystickDevice(event)) {
+        if (isJoystickDevice(event) && event.getDevice() != null) {
             processTriggerButton(event);
             int historySize = event.getHistorySize();
             for (int i = 0; i < historySize; i++) processJoystickInput(event, i);
@@ -202,7 +229,11 @@ public class ExternalController implements GamepadSlot {
     }
 
     public boolean updateStateFromKeyEvent(KeyEvent event) {
-        boolean pressed = event.getAction() == KeyEvent.ACTION_DOWN;
+        if ((event.getFlags() & KeyEvent.FLAG_FALLBACK) != 0) return false;
+        int action = event.getAction();
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) return false;
+        if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() > 0) return true;
+        boolean pressed = action == KeyEvent.ACTION_DOWN;
         int keyCode = event.getKeyCode();
         int buttonIdx = getButtonIdxByKeyCode(keyCode);
         if (buttonIdx != -1) {
@@ -324,11 +355,11 @@ public class ExternalController implements GamepadSlot {
         }
         else {
             InputDevice device = event.getDevice();
-            InputDevice.MotionRange range = device.getMotionRange(axis, event.getSource());
+            InputDevice.MotionRange range = device != null ? device.getMotionRange(axis, event.getSource()) : null;
             if (range != null) {
                 float flat = range.getFlat();
                 float value = historyPos < 0 ? event.getAxisValue(axis) : event.getHistoricalAxisValue(axis, historyPos);
-                if (Math.abs(value) > flat) return value;
+                if (Float.isFinite(value) && Math.abs(value) > flat) return value;
             }
         }
         return 0;

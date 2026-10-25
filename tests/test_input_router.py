@@ -29,21 +29,23 @@ import java.util.HashSet;
 public class InputDevice {
  public final HashSet<Integer> axes = new HashSet<>();
  public boolean gamepad = true;
+ public InputDevice() { axes.add(MotionEvent.AXIS_LTRIGGER); axes.add(MotionEvent.AXIS_RTRIGGER); axes.add(MotionEvent.AXIS_BRAKE); axes.add(MotionEvent.AXIS_GAS); }
  public static class MotionRange {}
  public MotionRange getMotionRange(int axis, int source) { return axes.contains(axis) ? new MotionRange() : null; }
 }
 """,
     "android/view/KeyEvent.java": """package android.view;
 public class KeyEvent {
- public static final int ACTION_DOWN=0, ACTION_UP=1;
+ public static final int ACTION_DOWN=0, ACTION_UP=1, ACTION_MULTIPLE=2, FLAG_FALLBACK=0x400;
  public static final int KEYCODE_BUTTON_A=96, KEYCODE_BUTTON_B=97, KEYCODE_BUTTON_X=99, KEYCODE_BUTTON_Y=100,
  KEYCODE_BUTTON_L1=102, KEYCODE_BUTTON_R1=103, KEYCODE_BUTTON_L2=104, KEYCODE_BUTTON_R2=105,
  KEYCODE_BUTTON_THUMBL=106, KEYCODE_BUTTON_THUMBR=107, KEYCODE_BUTTON_START=108, KEYCODE_BUTTON_SELECT=109,
  KEYCODE_DPAD_UP=19, KEYCODE_DPAD_DOWN=20, KEYCODE_DPAD_LEFT=21, KEYCODE_DPAD_RIGHT=22;
- private final int deviceId, code, action;
+ private final int deviceId, code; public int action, flags, repeats;
  public boolean gamepad = true;
  public KeyEvent(int id, int code, int action) { deviceId=id; this.code=code; this.action=action; }
- public int getRepeatCount() { return 0; }
+ public int getRepeatCount() { return repeats; }
+ public int getFlags() { return flags; }
  public int getAction() { return action; }
  public int getDeviceId() { return deviceId; }
  public int getKeyCode() { return code; }
@@ -57,7 +59,7 @@ public class MotionEvent {
  AXIS_HAT_X=15, AXIS_HAT_Y=16, AXIS_LTRIGGER=17, AXIS_RTRIGGER=18, AXIS_BRAKE=23, AXIS_GAS=22;
  public final HashMap<Integer, Float> values = new HashMap<>();
  public boolean joystick = true;
- private final InputDevice device = new InputDevice();
+ public InputDevice device = new InputDevice();
  public MotionEvent axis(int id, float value) { values.put(id,value); device.axes.add(id); return this; }
  public float getAxisValue(int id) { return values.getOrDefault(id,0f); }
  public int getDeviceId() { return 1; }
@@ -68,6 +70,16 @@ public class MotionEvent {
     "com/winlator/inputcontrols/ExternalController.java": """package com.winlator.inputcontrols;
 import android.view.*;
 public class ExternalController {
+ public static int rightStickAxis(MotionEvent e, boolean horizontal) {
+  int primary=horizontal?MotionEvent.AXIS_Z:MotionEvent.AXIS_RZ;
+  return e.getDevice()!=null && e.getDevice().getMotionRange(primary,e.getSource())!=null ? primary : horizontal?MotionEvent.AXIS_RX:MotionEvent.AXIS_RY;
+ }
+ public static boolean hasTriggerAxis(MotionEvent e,boolean left) {
+  return e.getDevice()!=null && (e.getDevice().getMotionRange(left?MotionEvent.AXIS_LTRIGGER:MotionEvent.AXIS_RTRIGGER,e.getSource())!=null || e.getDevice().getMotionRange(left?MotionEvent.AXIS_BRAKE:MotionEvent.AXIS_GAS,e.getSource())!=null);
+ }
+ public static float getTriggerAxis(MotionEvent e,boolean left) {
+  return Math.max(e.getAxisValue(left?MotionEvent.AXIS_LTRIGGER:MotionEvent.AXIS_RTRIGGER),e.getAxisValue(left?MotionEvent.AXIS_BRAKE:MotionEvent.AXIS_GAS));
+ }
  public static boolean isGameController(InputDevice d) { return d != null && d.gamepad; }
  public static boolean isJoystickDevice(MotionEvent e) { return e.joystick; }
  public static float getCenteredAxis(MotionEvent e, int id, int history) { return e.getAxisValue(id); }
@@ -333,8 +345,48 @@ public class RouterTest {
   }
   check(sink.events.isEmpty(),"old menu owner cleanup leaked to new X11 mode");
  }
+ static void triggerNoiseUsesHysteresisWithoutLosingSourceOwnership() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink);
+  for(float value:new float[]{0.2f,0.34f,0.35f}) router.motion(new MotionEvent().axis(MotionEvent.AXIS_LTRIGGER,value));
+  check(sink.events.isEmpty(),"partial resting trigger pressed before existing threshold");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_LTRIGGER,0.36f));
+  for(float value:new float[]{0.34f,0.36f,0.31f,0.26f}) router.motion(new MotionEvent().axis(MotionEvent.AXIS_LTRIGGER,value));
+  check(sink.events.size()==1 && sink.keys.contains(XKeycode.KEY_1),"trigger noise repeatedly tapped potion or lost hold");
+  MotionEvent unrelated = new MotionEvent();
+  unrelated.device.axes.remove(MotionEvent.AXIS_LTRIGGER); unrelated.device.axes.remove(MotionEvent.AXIS_BRAKE);
+  router.motion(unrelated);
+  check(sink.keys.contains(XKeycode.KEY_1),"unrelated source released analog trigger owner");
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_L2,true));
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_LTRIGGER,0.24f));
+  check(sink.keys.contains(XKeycode.KEY_1),"analog release cancelled independent digital trigger owner");
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_L2,false));
+  check(sink.events.size()==2 && sink.keys.isEmpty(),"combined trigger owners did not release exactly once");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_RTRIGGER,0.6f));
+  router.releaseAll(); sink.events.clear();
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_RTRIGGER,0.3f));
+  check(sink.events.isEmpty(),"releaseAll retained hysteresis state into a new ownership interval");
+ }
+ static void syntheticKeysNeverPressOrReleaseAndNullMotionIsRejected() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink);
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  KeyEvent fallback=event(1,KeyEvent.KEYCODE_BUTTON_A,false); fallback.flags=KeyEvent.FLAG_FALLBACK;
+  router.keyEvent(fallback);
+  check(sink.buttons.contains(Pointer.Button.BUTTON_LEFT),"synthetic release cancelled physical click");
+  KeyEvent multiple=event(1,KeyEvent.KEYCODE_BUTTON_A,false); multiple.action=KeyEvent.ACTION_MULTIPLE;
+  router.keyEvent(multiple);
+  check(sink.buttons.contains(Pointer.Button.BUTTON_LEFT),"ACTION_MULTIPLE released held click");
+  KeyEvent repeat=event(1,KeyEvent.KEYCODE_BUTTON_B,true); repeat.repeats=2; router.keyEvent(repeat);
+  check(!sink.buttons.contains(Pointer.Button.BUTTON_RIGHT),"repeat resurrected mouse button");
+  KeyEvent up=event(1,KeyEvent.KEYCODE_BUTTON_A,false); up.repeats=1; router.keyEvent(up);
+  check(sink.buttons.isEmpty(),"real key-up was dropped due to repeat metadata");
+  MotionEvent detached=new MotionEvent(); detached.device=null;
+  check(!router.motion(detached),"detached controller motion accepted");
+  router.releaseAll();
+ }
  public static void main(String[] args) {
   fallbackCompatibility();
+  triggerNoiseUsesHysteresisWithoutLosingSourceOwnership();
+  syntheticKeysNeverPressOrReleaseAndNullMotionIsRejected();
   menuCursorEitherStickAndRightPriority();
   menuClicksBackConfirmAndSharedSources();
   menuDpadArrows();
@@ -344,7 +396,7 @@ public class RouterTest {
   configurationAndRejectedEventsNeverInject();
   injectedMenuBackendKeepsFallbackSeparateAndBalancesOwner();
   sharedSourcesReleaseEachOwnedButtonAndKeyOnlyOnce();
-  System.out.println("PASS: 10 router scenarios: fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary, injected backend ownership, shared-source balanced cleanup");
+  System.out.println("PASS: 12 router scenarios: trigger hysteresis/ownership, synthetic/detached inputs, fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary, injected backend ownership, shared-source balanced cleanup");
  }
 }
 """,

@@ -751,8 +751,13 @@ public class GamepadHandler {
         if (!inputEnabled) return false;
         boolean handled = false;
         ExternalController controller = getConnectedControllerById(event.getDeviceId());
-        if (controller != null && event.getRepeatCount() == 0) {
+        if (controller != null) {
             int action = event.getAction();
+            // Android may synthesize a fallback key after an unhandled pad key.
+            // Consume it without duplicating input or treating ACTION_MULTIPLE as up.
+            if ((event.getFlags() & KeyEvent.FLAG_FALLBACK) != 0
+                    || action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP
+                    || action == KeyEvent.ACTION_DOWN && event.getRepeatCount() > 0) return true;
 
             if (action == KeyEvent.ACTION_DOWN) {
                 handled = controller.updateStateFromKeyEvent(event);

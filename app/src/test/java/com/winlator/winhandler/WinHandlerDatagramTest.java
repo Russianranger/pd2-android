@@ -117,6 +117,62 @@ public final class WinHandlerDatagramTest {
         assertFalse(handler.isInputReady());
     }
 
+    @Test public void menuReleasesReachTheSendSocketBeforeLaterNativeState() throws Exception {
+        RecordingSocket socket = new RecordingSocket();
+        WinHandler handler = configured(socket); handler.initReceived = true;
+        byte[] nativeState = LegacyGamepadProtocol.state(1, true, null);
+        handler.mouseEvent(MouseEventFlags.LEFTUP, 0, 0, 0);
+        handler.keyboardEvent((byte)0x0d, 2);
+        handler.addControllerAction(() -> handler.sendPacket(7949, nativeState));
+        handler.mouseEvent(MouseEventFlags.MOVE, 2, 0, 0);
+
+        assertEquals(4, handler.drainPendingActions());
+        assertEquals(4, socket.packets.size());
+        java.nio.ByteBuffer release = java.nio.ByteBuffer.wrap(socket.packets.get(0)).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(RequestCodes.MOUSE_EVENT, release.get(0));
+        assertEquals(MouseEventFlags.LEFTUP, release.getInt(5));
+        assertEquals(RequestCodes.KEYBOARD_EVENT, socket.packets.get(1)[0]);
+        assertArrayEquals(nativeState, socket.packets.get(2));
+        assertEquals(RequestCodes.MOUSE_EVENT, socket.packets.get(3)[0]);
+        assertEquals(0, handler.drainPendingActions());
+    }
+
+    @Test public void controllerCanInitializeHelperBeforeWaitingRuntimeActionsRejoinEnqueueOrder() throws Exception {
+        WinHandler handler = configured(new RecordingSocket());
+        ArrayList<String> delivered = new ArrayList<>();
+        handler.addAction(() -> delivered.add("runtime-before-init"));
+        handler.addControllerAction(() -> { delivered.add("controller-init"); handler.initReceived = true; });
+        handler.addAction(() -> delivered.add("runtime-after-controller"));
+        handler.addControllerAction(() -> delivered.add("controller-after-runtime"));
+
+        handler.setSocketReady(false);
+        assertEquals(0, handler.drainPendingActions());
+        assertTrue(delivered.isEmpty());
+        handler.setSocketReady(true);
+        assertEquals(4, handler.drainPendingActions());
+        assertEquals(Arrays.asList("controller-init", "runtime-before-init", "runtime-after-controller",
+                "controller-after-runtime"), delivered);
+    }
+
+    @Test public void reentrantEnqueuesKeepGlobalOrderAndSocketLossLeavesRemainingActionsQueued() throws Exception {
+        WinHandler handler = configured(new RecordingSocket()); handler.initReceived = true;
+        ArrayList<String> delivered = new ArrayList<>();
+        handler.addAction(() -> {
+            delivered.add("runtime-first");
+            handler.addControllerAction(() -> delivered.add("controller-added"));
+            handler.addAction(() -> delivered.add("runtime-added"));
+        });
+        handler.addControllerAction(() -> { delivered.add("controller-second"); handler.setSocketReady(false); });
+
+        assertEquals(2, handler.drainPendingActions());
+        assertEquals(Arrays.asList("runtime-first", "controller-second"), delivered);
+        assertEquals(0, handler.drainPendingActions());
+        handler.setSocketReady(true);
+        assertEquals(2, handler.drainPendingActions());
+        assertEquals(Arrays.asList("runtime-first", "controller-second", "controller-added", "runtime-added"), delivered);
+        assertEquals(0, handler.drainPendingActions());
+    }
+
     @Test public void nativeFocusPacketTargetsTheCurrentGameHandleAndExpiredRequestsCannotStealFocus() throws Exception {
         RecordingSocket socket = new RecordingSocket();
         WinHandler handler = configured(socket); handler.initReceived = true;

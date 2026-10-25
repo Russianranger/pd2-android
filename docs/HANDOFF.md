@@ -1,5 +1,40 @@
 # PD2 Android handoff
 
+## 0.1.19 controller and rendering pass
+
+Continued from live main `a0107242f2817af45981022d13dbc2e682dbd1aa` under explicit
+implementation/main-push authorization. Version **0.1.19/code 20** fixes global
+enqueue ordering across helper/controller queues after INIT, declared trigger
+normalization and alternate right-stick axes, synthetic/repeat/action filtering,
+detached-device motion safety and fallback trigger hysteresis. It suppresses
+motion-only compositor redraws for hidden cursors across X11 and Windows cursor
+feedback, preserving the gold Menu reticle and pointer-following views.
+[Evidence](evidence/2026-10-24-controller-render-pass.md) describes source causes,
+D2Android research provenance and compatibility boundaries.
+
+Wine 9.2 Custom, Box64 0.4.4, rootfs 24, the accepted `wine9-hid-2` backend,
+HID/PE/XInput binaries, bindings, import/prefix/saves, graphics/GameNative/Stability,
+cleanup, container protection and signer are retained. No new identity/reconnect
+experiment or vanilla-game injected module is included. Install over the app,
+without runtime preparation or re-import, and follow [the combined test](TESTING.md).
+
+Local host regressions reproduce failures in the previous trigger/dispatch code.
+The final controller host checks passed 10 Native-input and 12 fallback-router
+scenarios, including source isolation and retained analog holds;
+the actual production scheduler passed 779 assertions over 256 lane interleavings,
+pre-INIT independence, reentrancy and socket readiness. The pure rendering-policy
+regressions and six existing thumb-ownership tests passed with real JUnit 4
+(nine tests total). All 24 runtime fixture tests and both existing controller/HID
+source/artifact/ABI checks passed. Existing import, Menu pointer, pointer cleanup, captured input,
+crash and session-log host checks passed. Local real AF_UNIX socket creation is
+denied before bind; Java network restrictions also prevent local Gradle/SDK
+bootstrap. Full Android/Robolectric, real socket and APK qualification therefore
+remain pending CI at this checkpoint. Do not describe a pending job as passed.
+
+Physical initial Native, Menu click acceptance, return-to-Native and Save/Quit
+recovery remain unresolved until tested. Global host send order does not prove
+cross-port guest processing order. No measured FPS/temperature benefit is claimed.
+
 ## Scope and current state
 
 The user requested the first milestone of a dedicated Project Diablo 2 Android app in `Russianranger/pd2-android`: import an existing working installation, play using PD2's own controller support, and switch to mouse/keyboard input from a quick menu. The primary target is the AYN Thor Max, Android 13, Snapdragon 8 Gen 2/Adreno 740, ARM64, 16 GB RAM.
@@ -8,7 +43,7 @@ The initial implementation used Winlator 11.2's embedded Wine 10.10/Box64 0.4.4 
 
 Runtime archives are deterministically relocated from the original `com.winlator` data paths to the equal-length `com.pd2.thor` identity, including embedded binary paths. This is runtime packaging, not a change to imported PD2 binaries. Preserve this relocation when updating the donor runtime; merely changing the Android application ID is insufficient.
 
-The historical **0.1.12 same-app Wine cleanup preview** was version code 13; current 0.1.18 state is recorded below. The earlier physical 0.1.16 result **accepts full Stop/Play within the same Android app process**. The latest 0.1.17 report rejects both input modes even with the accepted backend and original HID driver restored. Preserve cleanup, LT/thumb and shoulder behavior while resolving this new input report. In-place Save/Quit and fresh identity recovery still fail. See [latest evidence](evidence/2026-10-07-controller-boundaries.md); earlier cleanup history is retained below.
+The historical **0.1.12 same-app Wine cleanup preview** was version code 13; the 0.1.18 baseline is recorded below and current 0.1.19 work is recorded above. The earlier physical 0.1.16 result **accepts full Stop/Play within the same Android app process**. The latest 0.1.17 report rejects both input modes even with the accepted backend and original HID driver restored. Preserve cleanup, LT/thumb and shoulder behavior while resolving this new input report. In-place Save/Quit and fresh identity recovery still fail. See [latest evidence](evidence/2026-10-07-controller-boundaries.md); earlier cleanup history is retained below.
 
 The preceding 0.1.11 preview was version code 12. Initial Native gameplay and Menu cursor navigation are accepted. The latest 0.1.10 report still rejects Native on Save/Quit and adds unreliable LT + L3 and shoulder-tab navigation. Earlier 0.1.9 recovery also failed after gameplay re-entry. The matching 0.1.10 log shows two actual Wine HID detach/attach cycles and continuing game-side controller calls; it does not establish accepted controller values or game actions. The full recovery cause remains unconfirmed.
 

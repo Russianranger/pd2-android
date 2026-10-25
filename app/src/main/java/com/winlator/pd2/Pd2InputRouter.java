@@ -120,7 +120,7 @@ public final class Pd2InputRouter {
     }
 
     public boolean motion(MotionEvent event) {
-        if (!ExternalController.isJoystickDevice(event)) return false;
+        if (!ExternalController.isJoystickDevice(event) || event.getDevice() == null) return false;
         String device = event.getDeviceId() + ":";
         float leftX = axis(event, MotionEvent.AXIS_X);
         float leftY = axis(event, MotionEvent.AXIS_Y);
@@ -128,8 +128,8 @@ public final class Pd2InputRouter {
             directions(device + "lx", leftX, XKeycode.KEY_A, XKeycode.KEY_D);
             directions(device + "ly", leftY, XKeycode.KEY_W, XKeycode.KEY_S);
         }
-        int rightX = event.getDevice().getMotionRange(MotionEvent.AXIS_Z, event.getSource()) != null ? MotionEvent.AXIS_Z : MotionEvent.AXIS_RX;
-        int rightY = event.getDevice().getMotionRange(MotionEvent.AXIS_RZ, event.getSource()) != null ? MotionEvent.AXIS_RZ : MotionEvent.AXIS_RY;
+        int rightX = ExternalController.rightStickAxis(event, true);
+        int rightY = ExternalController.rightStickAxis(event, false);
         mouseX = axis(event, rightX);
         mouseY = axis(event, rightY);
         if (menuControls && mouseX == 0 && mouseY == 0) {
@@ -145,19 +145,31 @@ public final class Pd2InputRouter {
             directions(device + "haty", event.getAxisValue(MotionEvent.AXIS_HAT_Y), XKeycode.KEY_UP, XKeycode.KEY_DOWN);
             return true;
         }
-        float lt = Math.max(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE));
-        float rt = Math.max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS));
-        key(device + "lt", XKeycode.KEY_1, lt > 0.35f);
-        key(device + "rt", XKeycode.KEY_2, rt > 0.35f);
+        float lt = ExternalController.getTriggerAxis(event, true);
+        float rt = ExternalController.getTriggerAxis(event, false);
+        // Keep the existing press threshold, with a lower release threshold so noise
+        // around 0.35 cannot repeatedly drink potions. Digital and analog sources
+        // retain independent ownership until both have released.
+        if (ExternalController.hasTriggerAxis(event, true))
+            key(device + "lt", XKeycode.KEY_1, triggerHeld(device + "lt", lt));
+        if (ExternalController.hasTriggerAxis(event, false))
+            key(device + "rt", XKeycode.KEY_2, triggerHeld(device + "rt", rt));
         directions(device + "hatx", event.getAxisValue(MotionEvent.AXIS_HAT_X), XKeycode.KEY_F6, XKeycode.KEY_F4);
         directions(device + "haty", event.getAxisValue(MotionEvent.AXIS_HAT_Y), XKeycode.KEY_F3, XKeycode.KEY_F5);
         return true;
     }
 
+    private boolean triggerHeld(String source, float value) {
+        return value > (heldKeys.containsKey(source) ? 0.25f : 0.35f);
+    }
+
     public boolean keyEvent(KeyEvent event) {
         if (!ExternalController.isGameController(event.getDevice())) return false;
-        if (event.getRepeatCount() != 0) return true;
-        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        if ((event.getFlags() & KeyEvent.FLAG_FALLBACK) != 0) return true;
+        int action = event.getAction();
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) return true;
+        if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() > 0) return true;
+        boolean down = action == KeyEvent.ACTION_DOWN;
         String source = event.getDeviceId() + ":key" + event.getKeyCode();
         XKeycode keycode;
         if (menuControls) {

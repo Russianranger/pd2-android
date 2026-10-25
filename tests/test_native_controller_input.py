@@ -23,10 +23,17 @@ STUBS = {
 import java.util.HashMap;
 public class InputDevice {
  public static final int SOURCE_GAMEPAD=0x401, SOURCE_JOYSTICK=0x1000010;
- private final HashMap<Integer,MotionRange> ranges=new HashMap<>();
- public static class MotionRange { public float getFlat() { return 0.05f; } }
- public InputDevice axes(int... axes) { for(int axis:axes) ranges.put(axis,new MotionRange()); return this; }
- public MotionRange getMotionRange(int axis,int source) { return ranges.get(axis); }
+ private final HashMap<String,MotionRange> ranges=new HashMap<>();
+ public static class MotionRange {
+  float min=0,max=1;
+  MotionRange() {} MotionRange(float min,float max) { this.min=min; this.max=max; }
+  public float getFlat() { return 0.05f; }
+  public float getMin() { return min; } public float getMax() { return max; }
+ }
+ public InputDevice range(int axis,float min,float max) { return rangeFor(SOURCE_JOYSTICK,axis,min,max); }
+ public InputDevice rangeFor(int source,int axis,float min,float max) { ranges.put(source+":"+axis,new MotionRange(min,max)); return this; }
+ public InputDevice axes(int... axes) { for(int axis:axes) range(axis,0,1); return this; }
+ public MotionRange getMotionRange(int axis,int source) { return ranges.get(source+":"+axis); }
  public static int[] getDeviceIds() { return new int[0]; }
  public static InputDevice getDevice(int id) { return null; }
  public String getDescriptor() { return "fixture"; }
@@ -40,14 +47,16 @@ public class InputDevice {
 """,
     "android/view/KeyEvent.java": """package android.view;
 public class KeyEvent {
- public static final int ACTION_DOWN=0,ACTION_UP=1;
+ public static final int ACTION_DOWN=0,ACTION_UP=1,ACTION_MULTIPLE=2,FLAG_FALLBACK=0x400;
  public static final int KEYCODE_BUTTON_A=96,KEYCODE_BUTTON_B=97,KEYCODE_BUTTON_X=99,KEYCODE_BUTTON_Y=100,
  KEYCODE_BUTTON_L1=102,KEYCODE_BUTTON_R1=103,KEYCODE_BUTTON_L2=104,KEYCODE_BUTTON_R2=105,
  KEYCODE_BUTTON_THUMBL=106,KEYCODE_BUTTON_THUMBR=107,KEYCODE_BUTTON_START=108,KEYCODE_BUTTON_SELECT=109,
  KEYCODE_DPAD_UP=19,KEYCODE_DPAD_DOWN=20,KEYCODE_DPAD_LEFT=21,KEYCODE_DPAD_RIGHT=22;
- private final InputDevice device; private final int code,action;
+ private final InputDevice device; private final int code; public int action,flags,repeats;
  public KeyEvent(InputDevice device,int code,boolean down) { this.device=device; this.code=code; action=down?0:1; }
  public int getAction() { return action; }
+ public int getFlags() { return flags; }
+ public int getRepeatCount() { return repeats; }
  public int getKeyCode() { return code; }
  public InputDevice getDevice() { return device; }
 }
@@ -56,13 +65,15 @@ public class KeyEvent {
 import java.util.HashMap;
 public class MotionEvent {
  public static final int ACTION_MOVE=2;
- public static final int AXIS_X=0,AXIS_Y=1,AXIS_Z=11,AXIS_RZ=14,
+ public static final int AXIS_X=0,AXIS_Y=1,AXIS_Z=11,AXIS_RZ=14,AXIS_RX=12,AXIS_RY=13,
  AXIS_HAT_X=15,AXIS_HAT_Y=16,AXIS_LTRIGGER=17,AXIS_RTRIGGER=18,AXIS_BRAKE=23,AXIS_GAS=22;
  private final InputDevice device; private final HashMap<Integer,Float> axes=new HashMap<>();
+ private int source=InputDevice.SOURCE_JOYSTICK;
  public MotionEvent(InputDevice device) { this.device=device; }
+ public MotionEvent source(int value) { source=value; return this; }
  public MotionEvent axis(int code,float value) { axes.put(code,value); return this; }
  public InputDevice getDevice() { return device; }
- public int getSource() { return InputDevice.SOURCE_JOYSTICK; }
+ public int getSource() { return source; }
  public int getAction() { return ACTION_MOVE; }
  public int getHistorySize() { return 0; }
  public float getHistoricalAxisValue(int code,int history) { return getAxisValue(code); }
@@ -142,11 +153,72 @@ public class NativeControllerInputTest {
   check(c.getGamepadState().isPressed(ExternalController.IDX_BUTTON_R1),"LB release cancelled RB");
   key(c,d,KeyEvent.KEYCODE_BUTTON_R1,false); check(c.getGamepadState().buttons==0,"shoulder stuck");
  }
+ static void triggerRangesAreNormalizedAndAliasesIndependent() {
+  InputDevice d=pad().range(MotionEvent.AXIS_LTRIGGER,-1,1).range(MotionEvent.AXIS_GAS,0,255);
+  ExternalController c=new ExternalController();
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_LTRIGGER,-1));
+  value(0,c.getGamepadState().triggerL,"signed-range resting LT was not released");
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_LTRIGGER,0).axis(MotionEvent.AXIS_GAS,127.5f));
+  value(0.5f,c.getGamepadState().triggerL,"signed-range LT midpoint was lost");
+  value(0.5f,c.getGamepadState().triggerR,"GAS range was not normalized");
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_LTRIGGER,1).axis(MotionEvent.AXIS_GAS,255));
+  value(1,c.getGamepadState().triggerL,"signed LT full press changed");
+  value(1,c.getGamepadState().triggerR,"GAS full press changed");
+  d.range(MotionEvent.AXIS_BRAKE,0,1);
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_LTRIGGER,-1).axis(MotionEvent.AXIS_BRAKE,0.6f));
+  value(0.6f,c.getGamepadState().triggerL,"declared alias was not usable independently");
+ }
+ static void alternateRightStickAndDetachedDeviceAreSafe() {
+  InputDevice d=new InputDevice().axes(MotionEvent.AXIS_X,MotionEvent.AXIS_Y,MotionEvent.AXIS_RX,MotionEvent.AXIS_RY);
+  ExternalController c=new ExternalController();
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_RX,0.7f).axis(MotionEvent.AXIS_RY,-0.8f));
+  value(0.7f,c.getGamepadState().thumbRX,"RX alternate axis was dropped");
+  value(-0.8f,c.getGamepadState().thumbRY,"RY alternate axis was dropped");
+  check(!c.updateStateFromMotionEvent(new MotionEvent(null)),"detached device should not update controller state");
+  value(0,ExternalController.getCenteredAxis(new MotionEvent(null),MotionEvent.AXIS_X,-1),"detached centered-axis read was unsafe");
+ }
+ static void syntheticAndRepeatedKeysDoNotAlterHeldButtons() {
+  InputDevice d=pad(); ExternalController c=new ExternalController();
+  key(c,d,KeyEvent.KEYCODE_BUTTON_L1,true);
+  KeyEvent fallback=new KeyEvent(d,KeyEvent.KEYCODE_BUTTON_L1,false); fallback.flags=KeyEvent.FLAG_FALLBACK;
+  check(!c.updateStateFromKeyEvent(fallback),"synthetic fallback was treated as controller input");
+  check(c.getGamepadState().isPressed(ExternalController.IDX_BUTTON_L1),"synthetic release cancelled physical shoulder hold");
+  KeyEvent multiple=new KeyEvent(d,KeyEvent.KEYCODE_BUTTON_L1,false); multiple.action=KeyEvent.ACTION_MULTIPLE;
+  check(!c.updateStateFromKeyEvent(multiple),"ACTION_MULTIPLE was treated as release");
+  check(c.getGamepadState().isPressed(ExternalController.IDX_BUTTON_L1),"ACTION_MULTIPLE released held shoulder");
+  KeyEvent repeat=new KeyEvent(d,KeyEvent.KEYCODE_BUTTON_R1,true); repeat.repeats=3;
+  c.updateStateFromKeyEvent(repeat);
+  check(!c.getGamepadState().isPressed(ExternalController.IDX_BUTTON_R1),"repeat resurrected a released button");
+  KeyEvent up=new KeyEvent(d,KeyEvent.KEYCODE_BUTTON_L1,false); up.repeats=1; c.updateStateFromKeyEvent(up);
+  check(!c.getGamepadState().isPressed(ExternalController.IDX_BUTTON_L1),"repeat metadata on real key-up suppressed release");
+ }
+ static void triggerRangesBelongToTheMotionSource() {
+  InputDevice d=pad().rangeFor(InputDevice.SOURCE_GAMEPAD,MotionEvent.AXIS_LTRIGGER,-1,1);
+  ExternalController c=new ExternalController();
+  MotionEvent stickOnly=new MotionEvent(d).axis(MotionEvent.AXIS_X,0.6f);
+  motion(c,stickOnly);
+  value(0,c.getGamepadState().triggerL,"unrelated joystick source manufactured a half-pressed signed trigger");
+  value(0,ExternalController.getTriggerAxis(stickOnly,true),"trigger helper read a different source's range");
+  d.range(MotionEvent.AXIS_BRAKE,0,1);
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_BRAKE,0.2f));
+  value(0.2f,c.getGamepadState().triggerL,"other-source primary trigger overrode applicable BRAKE alias");
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_BRAKE,0.8f));
+  int otherSource=InputDevice.SOURCE_JOYSTICK|InputDevice.SOURCE_GAMEPAD;
+  d.rangeFor(otherSource,MotionEvent.AXIS_X,0,1);
+  motion(c,new MotionEvent(d).source(otherSource).axis(MotionEvent.AXIS_X,0.7f));
+  value(0.8f,c.getGamepadState().triggerL,"unrelated-source stick motion released previous analog hold");
+  key(c,d,KeyEvent.KEYCODE_BUTTON_L2,true); key(c,d,KeyEvent.KEYCODE_BUTTON_L2,false);
+  value(0.8f,c.getGamepadState().triggerL,"source isolation changed digital-key analog authority");
+  motion(c,new MotionEvent(d).axis(MotionEvent.AXIS_BRAKE,0));
+  value(0,c.getGamepadState().triggerL,"applicable trigger source failed to release prior analog hold");
+ }
  public static void main(String[] args) {
   mixedTriggerKeysNeverDisableEitherAnalogTrigger(); mixedTriggerDigitalReleasePreservesAnalogPartialHold();
   oneDigitalTriggerDoesNotDisableTheOtherAnalogTrigger(); digitalTriggersSurviveStickMovementAndReleaseIndependently();
   brakeAndGasAliasesAndAnalogOnlyTriggers(); shoulderTapsAndOverlapHaveSeparateEdges();
-  System.out.println("PASS: 6 native Android input scenarios: mixed triggers, partial hold, asymmetric sources, digital triggers, aliases, shoulder edges");
+  triggerRangesBelongToTheMotionSource();
+  triggerRangesAreNormalizedAndAliasesIndependent(); alternateRightStickAndDetachedDeviceAreSafe(); syntheticAndRepeatedKeysDoNotAlterHeldButtons();
+  System.out.println("PASS: 10 native Android input scenarios: source-qualified trigger isolation/retention, mixed triggers, partial hold, asymmetric sources, digital triggers, aliases, shoulder edges, normalized ranges, alternate/detached axes, synthetic/repeat filtering");
  }
 }
 """,

@@ -1,4 +1,34 @@
-# 0.1.18 Menu visibility and Windows API return test
+# 0.1.19 combined controller and pointer test
+
+Install **0.1.19 over the existing app** and reuse the runtime, import and saves.
+Keep **Controller notifications enabled**, **Original Wine driver**, accepted
+GameNative/graphics arguments and Stability. No Prepare runtime or re-import.
+
+1. Fully **Stop client**, then **Play** and enter the same character. Check
+   initial **Native** movement and one ordinary button action. If entry/input
+   fails, export immediately before Stop and report which stage failed.
+2. Enable **Hide white cursor**, select **Menu cursor**, and check gold pointer
+   movement plus one deliberate A click. Return to **Native**, release the
+   controls, then check movement and a button again. This targets the changed
+   release/send ordering and reticle redraw path.
+3. **Save/Quit** once, re-enter using Menu cursor, return to Native and check
+   movement/button acceptance. **Export support logs before Stop**, whether it
+   passes or fails. State initial Native, Menu clicks, return-to-Native and
+   post-Save/Quit results separately. If it fails, avoid reconnect/identity
+   experiments before exporting.
+
+Fallback users can separately confirm that LT/RT potion presses balance after
+release; its mapping and the accepted Native LT/thumb/shoulder bindings are
+preserved. Do not repeat the earlier controller identity/focus trials.
+
+The existing **Input trace → Trace the next Play only** can capture Windows API
+returns on a short follow-up if input fails. It is not needed for ordinary play;
+keep trace Off for any performance or temperature comparison. Reduced hidden
+pointer redraw requests are an automated policy result, not a measured Thor FPS
+or power claim. Initial Native and Save/Quit recovery remain unqualified until
+the physical results above are available.
+
+# Historical 0.1.18 Menu visibility and Windows API return test
 
 The latest [0.1.17 capture](evidence/2026-10-07-controller-boundaries.md) confirms both settings were restored but both input modes still fail by user report. Android input, non-neutral HID/legacy delivery and Menu movement/click requests continue. There is one physical pad; an overriding duplicate is not established. The previous configuration-only explanation is insufficient for this restored run.
 

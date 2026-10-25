@@ -35,8 +35,19 @@ public class WinHandler {
     private final DatagramPacket sendPacket = new DatagramPacket(sendData.array(), sendData.capacity());
     // One sentinel byte distinguishes an exact HID acknowledgement from UDP truncation.
     private final DatagramPacket receivePacket = new DatagramPacket(new byte[receiveData.capacity() + 1], receiveData.capacity() + 1);
-    private final ArrayDeque<Runnable> actions = new ArrayDeque<>();
-    private final ArrayDeque<Runnable> controllerActions = new ArrayDeque<>();
+    private static final class PendingAction {
+        final long sequence;
+        final Runnable action;
+
+        PendingAction(long sequence, Runnable action) {
+            this.sequence = sequence;
+            this.action = action;
+        }
+    }
+
+    private final ArrayDeque<PendingAction> actions = new ArrayDeque<>();
+    private final ArrayDeque<PendingAction> controllerActions = new ArrayDeque<>();
+    private long nextActionSequence;
     protected volatile boolean initReceived = false;
     private volatile boolean socketReady;
     private volatile boolean running = false;
@@ -301,7 +312,7 @@ public class WinHandler {
 
     protected void addAction(Runnable action) {
         synchronized (actions) {
-            actions.add(action);
+            actions.add(new PendingAction(nextActionSequence++, action));
             actions.notify();
         }
     }
@@ -309,7 +320,7 @@ public class WinHandler {
     /** Wine controller DLLs have their own UDP connection, independent of winhandler.exe. */
     protected void addControllerAction(Runnable action) {
         synchronized (actions) {
-            controllerActions.add(action);
+            controllerActions.add(new PendingAction(nextActionSequence++, action));
             actions.notify();
         }
     }
@@ -325,9 +336,18 @@ public class WinHandler {
     int drainPendingActions() {
         synchronized (actions) {
             int count = 0;
-            if (!socketReady) return count;
-            while (!controllerActions.isEmpty()) { controllerActions.poll().run(); count++; }
-            while (initReceived && !actions.isEmpty()) { actions.poll().run(); count++; }
+            while (socketReady) {
+                PendingAction controller = controllerActions.peekFirst();
+                PendingAction runtime = initReceived ? actions.peekFirst() : null;
+                if (controller == null && runtime == null) break;
+                // Controllers may run before the Windows helper initializes. Once it
+                // is ready, preserve enqueue order across both routes: a new Native
+                // state must not overtake an earlier Menu mouse/key release.
+                PendingAction next = controller == null || (runtime != null && runtime.sequence < controller.sequence)
+                        ? actions.removeFirst() : controllerActions.removeFirst();
+                next.action.run();
+                count++;
+            }
             return count;
         }
     }
@@ -447,7 +467,7 @@ public class WinHandler {
                 xServer.pointer.setX(x);
                 xServer.pointer.setY(y);
                 activity.onPd2CursorFeedback(x, y);
-                activity.getXServerView().requestRender();
+                activity.getXServerView().getRenderer().onPointerMove(x, y);
                 break;
             }
             case RequestCodes.OPEN_URL: {

@@ -61,7 +61,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private boolean fullscreen = false;
     private boolean toggleFullscreen = false;
     protected boolean viewportNeedsUpdate = true;
-    private boolean cursorVisible = true;
+    private volatile boolean cursorVisible = true;
     private volatile boolean forceRootCursor;
     private volatile boolean rootCursorVisible = true;
     private volatile boolean cursorOverlayVisible = true;
@@ -69,8 +69,8 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private float cursorScale = 1.0f;
     private int cursorBackColor = 0xffffff;
     private int cursorForeColor = 0x000000;
-    private boolean screenOffsetYRelativeToCursor = false;
-    private float magnifierZoom = 1.0f;
+    private volatile boolean screenOffsetYRelativeToCursor = false;
+    private volatile float magnifierZoom = 1.0f;
     protected short surfaceWidth;
     protected short surfaceHeight;
     public final EffectComposer effectComposer = new EffectComposer(this);
@@ -196,12 +196,16 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
 
     @Override
     public void onUpdateWindowAttributes(Window window, Bitmask mask) {
+        // A shape change can hide the last drawn guest cursor; retain its invalidation.
         if (mask.isSet(WindowAttributes.FLAG_CURSOR)) xServerView.requestRender();
     }
 
     @Override
     public void onPointerMove(short x, short y) {
-        xServerView.requestRender();
+        if (PointerRenderPolicy.needsMotionFrame(cursorVisible, cursorOverlayVisible,
+                menuPointerCursorVisible, magnifierZoom != 1.0f || screenOffsetYRelativeToCursor)) {
+            xServerView.requestRender();
+        }
     }
 
     private void renderCursorDrawable(Drawable drawable, int x, int y) {
