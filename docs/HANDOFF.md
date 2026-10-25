@@ -18,18 +18,37 @@ cleanup, container protection and signer are retained. No new identity/reconnect
 experiment or vanilla-game injected module is included. Install over the app,
 without runtime preparation or re-import, and follow [the combined test](TESTING.md).
 
-Local host regressions reproduce failures in the previous trigger/dispatch code.
-The final controller host checks passed 10 Native-input and 12 fallback-router
-scenarios, including source isolation and retained analog holds;
-the actual production scheduler passed 779 assertions over 256 lane interleavings,
-pre-INIT independence, reentrancy and socket readiness. The pure rendering-policy
-regressions and six existing thumb-ownership tests passed with real JUnit 4
-(nine tests total). All 24 runtime fixture tests and both existing controller/HID
-source/artifact/ABI checks passed. Existing import, Menu pointer, pointer cleanup, captured input,
-crash and session-log host checks passed. Local real AF_UNIX socket creation is
-denied before bind; Java network restrictions also prevent local Gradle/SDK
-bootstrap. Full Android/Robolectric, real socket and APK qualification therefore
-remain pending CI at this checkpoint. Do not describe a pending job as passed.
+### Qualified implementation and offered APK
+
+Implementation [`ac38e72278fdac9e8fc0850c986db4a3b13ad26b`](https://github.com/Russianranger/pd2-android/commit/ac38e72278fdac9e8fc0850c986db4a3b13ad26b),
+tree `b3ee3bee367c1bbcc24c403c96c185c3e247151d`, is published on main.
+[CI 40162132513](https://github.com/Russianranger/pd2-android/actions/runs/40162132513)
+passed for that exact commit, job `121075713576`. Independently downloaded raw
+reports confirm **312 unit tests across 33 suites**, zero failures or ignored
+tests. Completed logs confirm all 206 runtime pins, retained host checks,
+controller/HID source/artifact/ABI checks, 19 prepared real AF_UNIX binds,
+ARM64 assembly and packaging. Local checks also passed 10 Native-input and
+12 router scenarios, the actual scheduler's 779 assertions over 256 lane
+interleavings, nine rendering/thumb JUnit tests and 24 runtime fixture tests.
+The previous trigger and dispatcher implementations fail the new regressions.
+
+The offered **CI-built** `PD2-Android-0.1.19-preview.apk` is **174,118,214 bytes**,
+SHA-256 **`6a2596ea5a23c5a63d66d1bd19480b9d0a04233bad6c3537f76c7f753d9c758c`**.
+Internal SHA256SUMS, ZIP integrity, duplicate-entry rejection, four-byte
+alignment, `com.pd2.thor`, 0.1.19/code 20, min SDK 26/target 28, ARM64-only
+packaging and V2 signing were independently verified. The certificate remains
+`a61297bef1be2652b53b763730275e1f0e0975222294602ed8ffa5f8147ddb1e`.
+All **74 runtime assets and 35 native libraries** match the verified offered
+0.1.18 CI APK byte-for-byte (baseline SHA-256
+`31e76bbc066e0ad2b1cdd4064b52844b4dbb691b2212b01a19fabd745f8a42cc`).
+The verified APK was saved successfully for direct delivery. Git tag publication
+could not authenticate in this environment; **no GitHub release/tag was published**.
+
+Artifact `12585834202` is the separate **173,190,593-byte ZIP wrapper**, digest
+`54b9431934a39a42a84210f988729d80475a40ac90347c36bf0e6e096708772a`.
+Test-report artifact `12586633498` is **55,137 bytes**, digest
+`0bc88d46c8f5acb691310f33ccc6b7bcc49c4258e6c14dced4591e402c4abb03`.
+Both wrapper hashes match GitHub's metadata. Do not assign either to the APK.
 
 Physical initial Native, Menu click acceptance, return-to-Native and Save/Quit
 recovery remain unresolved until tested. Global host send order does not prove
