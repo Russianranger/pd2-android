@@ -16,11 +16,13 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import queue
+import re
 import shutil
 import signal
 import socket
 import struct
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -379,12 +381,83 @@ def seed_common_dlls(rootfs: Path, prefix: Path, common: dict) -> None:
             shutil.copy2(source, target)
 
 
+def configure_essential_services(prefix: Path) -> dict:
+    # Mirror WineUtils.changeServicesStatus(ESSENTIAL) for a managed PD2
+    # container with controller notifications enabled. Only existing keys in
+    # this private, hash-pinned template are eligible; no service is invented.
+    starts = {name.lower(): 4 for name in (
+        "BITS", "Eventlog", "HTTP", "LanmanServer", "NDIS", "PlugPlay", "RpcSs", "scardsvr",
+        "Schedule", "Spooler", "StiSvc", "TermService", "Winmgmt", "wuauserv", "winebth")}
+    starts.update({"plugplay": 2, "rpcss": 3, "nsiproxy": 2, "msiserver": 3, "fontcache": 3})
+    hive = prefix / "system.reg"
+    text = hive.read_text()
+    pattern = re.compile(r"(?ms)^\[([^\r\n]+)\][^\r\n]*\r?\n.*?(?=^\[|\Z)")
+    sections = list(pattern.finditer(text))
+    control_set = "System\\CurrentControlSet"
+    for section in sections:
+        key = section.group(1).replace("\\\\", "\\")
+        if key.lower() != "system\\currentcontrolset":
+            continue
+        link = re.search(r'(?m)^"SymbolicLinkValue"=hex\(6\):([0-9a-fA-F,\\\s]+)', section.group(0))
+        if link:
+            encoded = link.group(1).replace("\\", "")
+            values = [value.strip() for value in encoded.split(",") if value.strip()]
+            assert len(values) <= 1024 and all(re.fullmatch(r"[0-9a-fA-F]{2}", value) for value in values)
+            decoded = bytes(int(value, 16) for value in values).decode("utf-16-le").rstrip("\0")
+            prefix_name = "\\Registry\\Machine\\"
+            if decoded.lower().startswith(prefix_name.lower()):
+                decoded = decoded[len(prefix_name):]
+            assert re.fullmatch(r"System\\ControlSet[0-9]{3}", decoded, re.IGNORECASE), decoded
+            control_set = decoded
+        break
+    wanted = (control_set + "\\Services\\").lower()
+    replacements = []
+    applied = {}
+    for section in sections:
+        key = section.group(1).replace("\\\\", "\\")
+        if not key.lower().startswith(wanted):
+            continue
+        name = key[len(wanted):].lower()
+        if name not in starts:
+            continue
+        assert name not in applied, "duplicate service key"
+        body = section.group(0)
+        value = '"Start"=dword:' + format(starts[name], "08x")
+        updated, count = re.subn(r'(?m)^"Start"=dword:[0-9a-fA-F]{8}[ \t]*$', value, body)
+        assert count <= 1, "duplicate service Start value"
+        if count == 0:
+            updated = body.rstrip("\r\n") + "\n" + value + "\n\n"
+        replacements.append((section.start(), section.end(), updated))
+        applied[name] = starts[name]
+    for begin, end, replacement in reversed(replacements):
+        text = text[:begin] + replacement + text[end:]
+    hive.write_text(text)
+    print("Host prefix essential-service policy: " + json.dumps({"control_set": control_set, "starts": applied}), flush=True)
+    return applied
+
+
+def use_existing_virtual_display(arguments: list[str]) -> None:
+    if os.environ.get("PD2_WINE_TEST_XVFB") == "1":
+        assert os.environ.get("DISPLAY"), "private Xvfb did not provide DISPLAY"
+        return
+    available = {name: shutil.which(name) for name in ("xvfb-run", "Xvfb", "xauth")}
+    if all(available.values()):
+        environment = os.environ.copy()
+        environment["PD2_WINE_TEST_XVFB"] = "1"
+        print("Using existing xvfb-run tools for a private host test display.", flush=True)
+        command = [available["xvfb-run"], "--auto-servernum", "--server-args=-screen 0 640x480x24 -nolisten tcp",
+                   sys.executable, str(Path(__file__).resolve()), *arguments]
+        os.execve(command[0], command, environment)
+    print("Host virtual-display tools: " + json.dumps({key: bool(value) for key, value in available.items()}), flush=True)
+
+
 def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executable: Path, donor: bool) -> dict:
     attempt = work / ("donor" if donor else "repaired")
     attempt.mkdir()
     extract_archive(template, attempt)
     prefix = attempt / ".wine"
     seed_common_dlls(rootfs, prefix, common)
+    configure_essential_services(prefix)
     shutil.copy2(executable, prefix / "drive_c/pd2-xinput-probe.exe")
     wine = rootfs / "opt/wine"
     environment = os.environ.copy()
@@ -396,7 +469,7 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
         "WINEDLLPATH": str(wine / "lib/wine"),
         "WINEDLLOVERRIDES": "xinput1_4=b;winemenubuilder.exe=d",
         "WINEDEBUG": "-all,err+all,warn+all,+loaddll",
-        "DISPLAY": "",
+        "DISPLAY": os.environ.get("DISPLAY", "") if os.environ.get("PD2_WINE_TEST_XVFB") == "1" else "",
         # Winlator's virtual.c caps vprot bookkeeping at 39 bits. The native
         # upstream preloader reserves 47-bit ranges and corrupts that table on
         # x86-64 CI. Keep Wine's own patched 39-bit fallback reservations instead.
@@ -421,7 +494,9 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
                                        stdout=subprocess.PIPE, stderr=stderr, text=True, start_new_session=True)
             reader = threading.Thread(target=read_lines, args=(process.stdout, lines), daemon=True)
             reader.start()
-            deadline = time.monotonic() + 55
+            started = time.monotonic()
+            deadline = started + 120  # Cold Wine/service bootstrap only, before the C probe starts.
+            cold_bootstrap_millis = None
             completed = False
             held_discovery_start = 0
             while time.monotonic() < deadline:
@@ -435,7 +510,10 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
                 if line is None:
                     break
                 output.append(line)
-                if line.startswith("PROBE INITIAL "):
+                if line.startswith("PROBE MODULE "):
+                    cold_bootstrap_millis = round((time.monotonic() - started) * 1000)
+                    deadline = time.monotonic() + 55
+                elif line.startswith("PROBE INITIAL "):
                     peer.fault()
                     process.stdin.write("fault\n")
                     process.stdin.flush()
@@ -479,7 +557,8 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
             assert "PD2_XINPUT_READER" in wine_log and "wine9-xinput-reader-1" in wine_log, "new DLL telemetry absent"
         print("\n".join(output), flush=True)
         return {"donor": donor, "discoveries": peer.discoveries, "states_sent": peer.states,
-                "builtin_load": True, "telemetry": "PD2_XINPUT_READER" in wine_log}
+                "builtin_load": True, "telemetry": "PD2_XINPUT_READER" in wine_log,
+                "cold_bootstrap_millis": cold_bootstrap_millis}
     finally:
         if process is not None and process.poll() is None:
             os.killpg(process.pid, signal.SIGTERM)
@@ -508,6 +587,7 @@ def main() -> None:
     executable = verify_probe_fixture(args.cc)
     if args.check_fixture:
         return
+    use_existing_virtual_display(sys.argv[1:])
     assert os.uname().machine == "x86_64", "exact packaged Wine9 qualification requires x86-64 Linux"
     # A failure here is an environment failure, never a skipped/passed Wine test.
     test_socket = socket.socket(socket.AF_UNIX)
