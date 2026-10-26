@@ -5,13 +5,21 @@ import com.winlator.container.Container;
 
 /** Runtime-only choices; never change DLLs in the imported installation. */
 public final class Pd2LaunchPolicy {
-    public static final String WINE_DEBUG = "-all,err+all,warn+all,+seh,+loaddll,+xinput,+rawinput";
+    // Keep errors, warnings and the reader's bounded OutputDebugStringA records.
+    // Per-input and exception tracing belongs to the explicitly armed capture.
+    public static final String WINE_DEBUG = "-all,err+all,warn+all";
     public static final String CPU_PREFERENCE = "pd2_interpreter";
     public static final String GAMENATIVE_ARGUMENTS = "-3dfx -dxnocompatmodefix";
 
     private Pd2LaunchPolicy() {}
 
     public static String cpuPreset() { return Box64Preset.STABILITY; }
+
+    /** Called only after the one-launch controller trace has been applied. */
+    public static String inputTraceDebug(String existing) {
+        return (existing == null || existing.isEmpty() ? WINE_DEBUG : existing)
+                + ",+seh,+loaddll,+xinput,+rawinput,+relay";
+    }
 
     /** Wine treats .sys as part of the name. Cover its full, wildcard and basename lookups. */
     public static String hidReadOverrides(String existing, boolean experimental) {

@@ -39,8 +39,20 @@ public final class Pd2MemoryDiagnostics implements AutoCloseable {
     private volatile long trimAt;
 
     public static Pd2MemoryDiagnostics start(Context context, String id, Runnable controllerCheckpoint) {
+        return start(context, id, controllerCheckpoint, null);
+    }
+
+    public static Pd2MemoryDiagnostics start(Context context, String id, Runnable controllerCheckpoint,
+                                            Supplier<JSONObject> displaySnapshot) {
         Context app = context.getApplicationContext();
-        return new Pd2MemoryDiagnostics(app.getFilesDir(), id, () -> collect(app), controllerCheckpoint, INTERVAL_MS);
+        return new Pd2MemoryDiagnostics(app.getFilesDir(), id, () -> {
+            JSONObject sample = collect(app);
+            if (displaySnapshot != null) {
+                try { sample.put("displayRefresh", displaySnapshot.get()); }
+                catch (JSONException | RuntimeException ignored) { }
+            }
+            return sample;
+        }, controllerCheckpoint, INTERVAL_MS);
     }
 
     Pd2MemoryDiagnostics(File filesDirectory, String id, Supplier<JSONObject> collector,
@@ -94,7 +106,7 @@ public final class Pd2MemoryDiagnostics implements AutoCloseable {
         return new JSONObject().put("launchId", launchId).put("sampleIntervalMs", intervalMs)
                 .put("maxSamples", MAX_SAMPLES).put("maxReportBytes", MAX_REPORT_BYTES)
                 .put("retainedSamples", samples.size()).put("byteLimitTrimmed", byteTrimmed)
-                .put("scope", "Device memory, app heaps and visible same-UID processes; sampled, not final memory at death. RSS sums double-count shared pages; GPU/hidden processes may be absent.")
+                .put("scope", "Device memory, app heaps, visible same-UID processes, battery temperature and Android thermal status; sampled, not final values at death. RSS sums double-count shared pages; GPU/hidden processes may be absent. Battery temperature is not CPU/GPU temperature.")
                 .put("samples", new JSONArray(samples));
     }
 
@@ -136,6 +148,7 @@ public final class Pd2MemoryDiagnostics implements AutoCloseable {
     private static JSONObject collect(Context app) {
         JSONObject sample = new JSONObject();
         try {
+            sample.put("thermal", Pd2ThermalDiagnostics.collect(app));
             Runtime java = Runtime.getRuntime();
             sample.put("appPid", Process.myPid()).put("appUid", Process.myUid())
                     .put("javaUsedBytes", java.totalMemory() - java.freeMemory())

@@ -1,4 +1,16 @@
-# 0.1.21 XInput reader recovery test
+# 0.1.22 defaults, power and launcher check
+
+The user confirms the 0.1.21 XInput reader repair works, including Save/Quit recovery. Keep that accepted DLL and the 0.1.20 cursor behavior unchanged. This pass promotes the repair to the default and reduces avoidable diagnostic/display work; it does not claim measured Thor FPS or temperature gains.
+
+1. Install over the existing app, reuse the runtime/import/saves, **Stop client**, then **Play**. No manual controller selection is required. Keep notifications enabled, the original Wine HID driver, accepted graphics/GameNative arguments and Stability.
+2. Check initial Native movement/button input, one Save/Quit/re-entry and centered-stick cursor stopping. Do not use the old identity/reconnect experiments during this regression check.
+3. Check the gothic launcher and settings with the physical D-pad/sticks and touch. Verify clear focus, readable labels and access to all actions on the Thor's landscape display.
+4. For a useful power comparison, keep screen brightness, charging state, game area, graphics settings and room conditions consistent. Leave Input trace Off. Play the same route for 10–15 minutes and export support logs before Stop. Battery temperature and Android thermal status are sampled observations; neither is GPU temperature or a direct power measurement.
+5. **Performance & temperature** exposes **60 Hz display request (default)** and **Device refresh rate**. Stop and Play after changing it. Android may choose a different refresh rate; this is not a game FPS cap. Compare smoothness and battery/thermal history before concluding it helps on the Thor.
+
+**Native input path → Standard Native** remains a manual fallback. Defaults migrate once; selecting a fallback afterward remains saved. Normal Wine logs keep warnings/errors and bounded reader diagnostics. Use **Input trace → Trace the next Play only** only for short failure investigations, not performance measurements.
+
+# Historical 0.1.21 XInput reader recovery test
 
 The user provisionally accepts the 0.1.20 cursor fix. Its Save/Quit experiment
 still fails. The new repair targets Wine's XInput receive lifecycle and stale

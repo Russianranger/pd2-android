@@ -166,8 +166,8 @@ public final class Pd2Runtime {
             container.putExtra("startupSelection", "");
         }
         container.putExtra("pd2ControllerNotifications", notifications);
-        int controllerBackend = PreferenceManager.getDefaultSharedPreferences(context).getInt(
-                Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD);
+        int controllerBackend = Pd2ControllerBackendPreferences.get(
+                PreferenceManager.getDefaultSharedPreferences(context));
         container.putExtra("pd2ControllerBackend", Pd2ControllerBackendPolicy.modeName(controllerBackend));
         WineUtils.changeServicesStatus(container, container.getStartupSelection());
         container.setEnvVars(environment(context, controllerBackend));
@@ -360,8 +360,7 @@ public final class Pd2Runtime {
 
     private static String environment(Context context) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-        return environment(context, preferences.getInt(Pd2ControllerBackendPolicy.PREFERENCE,
-                Pd2ControllerBackendPolicy.STANDARD));
+        return environment(context, Pd2ControllerBackendPreferences.get(preferences));
     }
 
     private static String environment(Context context, int controllerBackend) {

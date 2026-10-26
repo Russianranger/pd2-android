@@ -3,9 +3,7 @@ package com.winlator.pd2;
 import android.app.ActivityManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -14,12 +12,13 @@ import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.Gravity;
+import android.widget.ImageView;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
 import androidx.preference.PreferenceManager;
@@ -60,7 +59,7 @@ public final class Pd2Activity extends AppCompatActivity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences preferences;
     private TextView status;
-    private Button play, prepare, folder, zip, settings, stop;
+    private Button play, prepare, folder, zip, settings, stop, performance;
     private static volatile boolean runtimePreparing;
     private static volatile boolean containerPreparing;
     private long lastStickNavigation;
@@ -73,6 +72,7 @@ public final class Pd2Activity extends AppCompatActivity {
     }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
+        setTheme(R.style.Pd2LauncherTheme);
         super.onCreate(savedInstanceState);
         if (Pd2CrashLog.hasPending(this)) {
             startActivity(new Intent(this, Pd2RecoveryActivity.class));
@@ -106,33 +106,64 @@ public final class Pd2Activity extends AppCompatActivity {
     private void buildUi() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(23, 15, 15));
+        scroll.setBackgroundResource(R.drawable.pd2_launcher_background);
+        scroll.setClipToPadding(false);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(26), dp(18), dp(26), dp(18));
+        layout.setPadding(dp(18), dp(16), dp(18), dp(20));
         scroll.addView(layout);
-        TextView title = new TextView(this);
-        title.setText("PROJECT DIABLO II");
-        title.setTextColor(Color.rgb(241, 202, 129));
-        title.setTextSize(27); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        layout.addView(title);
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Android launcher · Preview " + appVersion());
-        subtitle.setTextColor(Color.rgb(190, 164, 148)); subtitle.setTextSize(14);
-        layout.addView(subtitle);
-        status = new TextView(this);
-        status.setTextColor(Color.rgb(234, 225, 207)); status.setTextSize(16);
-        status.setPadding(0, dp(16), 0, dp(12));
-        layout.addView(status);
-        LinearLayout row = row(layout);
+
+        LinearLayout hero = new LinearLayout(this);
+        hero.setGravity(Gravity.CENTER_VERTICAL);
+        hero.setPadding(dp(6), 0, dp(6), dp(14));
+        ImageView crest = new ImageView(this);
+        crest.setImageResource(R.drawable.pd2_launcher_crest);
+        crest.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        hero.addView(crest, new LinearLayout.LayoutParams(dp(48), dp(64)));
+        LinearLayout wordmark = new LinearLayout(this);
+        wordmark.setOrientation(LinearLayout.VERTICAL);
+        wordmark.setPadding(dp(14), 0, 0, 0);
+        TextView title = Pd2LauncherTheme.heading(this, "PROJECT DIABLO II", 25);
+        title.setMaxLines(2);
+        wordmark.addView(title);
+        TextView subtitle = Pd2LauncherTheme.body(this, "Android launcher · Preview " + appVersion(), 12);
+        subtitle.setPadding(0, dp(4), 0, 0);
+        wordmark.addView(subtitle);
+        hero.addView(wordmark, new LinearLayout.LayoutParams(0, -2, 1));
+        layout.addView(hero, new LinearLayout.LayoutParams(-1, -2));
+
+        boolean wide = getResources().getConfiguration().screenWidthDp >= 600;
+        LinearLayout columns = new LinearLayout(this);
+        columns.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        layout.addView(columns, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout session = section(columns, "Your journey", wide);
+        status = Pd2LauncherTheme.body(this, "", 14);
+        status.setTextColor(Pd2LauncherTheme.BONE);
+        status.setPadding(0, dp(8), 0, dp(10));
+        session.addView(status);
+        LinearLayout row = row(session, false);
         play = button(row, "Play", this::play);
-        stop = button(row, "Stop client", () -> Pd2ControllerDialogs.enable(new AlertDialog.Builder(this)
+        Pd2LauncherTheme.styleButton(play, true);
+        stop = button(row, "Stop client", () -> Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
             .setTitle("Stop client?").setMessage("Save and exit your game first. This stops the running Windows client.")
             .setNegativeButton("Cancel", null).setPositiveButton("Stop", (d, w) -> XServerDisplayActivity.stopPd2Session(this)).show()));
-        row = row(layout);
+
+        LinearLayout launch = section(columns, "Launch & display", wide);
+        TextView launchHelp = Pd2LauncherTheme.body(this, "Prepare once. Keep your preferred launch settings.", 13);
+        launchHelp.setPadding(0, dp(7), 0, dp(7));
+        launch.addView(launchHelp);
+        row = row(launch);
         prepare = button(row, "Prepare runtime", this::prepareRuntime);
         settings = button(row, "Launch settings", this::showSettings);
-        row = row(layout);
+        performance = button(row(launch, true), "Performance & temperature", this::showPerformanceSettings);
+
+        LinearLayout installationPanel = section(layout, "Your installation", false);
+        TextView importHelp = Pd2LauncherTheme.body(this,
+                "Import the complete Diablo II folder, including Lord of Destruction and ProjectD2. Your original files stay in place.", 13);
+        importHelp.setPadding(0, dp(7), 0, dp(7));
+        installationPanel.addView(importHelp);
+        row = row(installationPanel);
         folder = button(row, "Import installation folder", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
@@ -143,37 +174,56 @@ public final class Pd2Activity extends AppCompatActivity {
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             startActivityForResult(intent, IMPORT_ZIP);
         });
-        row = row(layout);
+        LinearLayout utilities = section(layout, "Tools & support", false);
+        row = row(utilities);
         button(row, "Export support logs", this::exportSupport);
         button(row, "Advanced runtime settings", () -> startActivity(new Intent(this, MainActivity.class)));
-        TextView help = new TextView(this);
-        help.setText("Import the whole Diablo II folder, including the base MPQ files and ProjectD2. Your original files stay in place.\n\nIn game: use the gear button or press L3 + R3 together to switch between PD2 controller controls and mouse/keyboard controls.\n\nRuntime and game files are stored privately by this app. Winlator or GameNative does not need to be installed.");
-        help.setTextColor(Color.rgb(190, 175, 156)); help.setTextSize(14);
-        help.setPadding(0, dp(16), 0, 0); layout.addView(help);
+        TextView help = Pd2LauncherTheme.body(this,
+                "IN GAME  ·  Gear or L3 + R3 opens the quick menu for controller and mouse controls.\n"
+                + "Your runtime and game files stay private to this app. Winlator or GameNative does not need to be installed.", 12);
+        help.setPadding(dp(6), dp(6), dp(6), 0);
+        layout.addView(help);
         setContentView(scroll);
-        play.requestFocus();
+        updateUi();
+        if (!play.requestFocus() && !prepare.requestFocus()) settings.requestFocus();
     }
+
+    private LinearLayout section(LinearLayout parent, String title, boolean weighted) {
+        LinearLayout panel = Pd2LauncherTheme.panel(this);
+        panel.addView(Pd2LauncherTheme.heading(this, title, 16));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(weighted ? 0 : -1, -2, weighted ? 1 : 0);
+        params.setMargins(dp(4), 0, dp(4), dp(12));
+        parent.addView(panel, params);
+        return panel;
+    }
+
     private LinearLayout row(LinearLayout layout) {
+        int screenWidth = getResources().getConfiguration().screenWidthDp;
+        boolean stack = screenWidth < 480 || screenWidth >= 600 && screenWidth < 800
+                || getResources().getConfiguration().fontScale > 1.15f;
+        return row(layout, stack);
+    }
+
+    private LinearLayout row(LinearLayout layout, boolean stack) {
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setOrientation(stack ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(3), 0, 0);
         layout.addView(row, new LinearLayout.LayoutParams(-1, -2));
         return row;
     }
     private Button button(LinearLayout row, String label, Runnable action) {
-        Button button = new Button(this); button.setText(label); button.setAllCaps(false);
-        button.setTextSize(15); button.setTextColor(Color.rgb(246, 224, 181));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(58, 29, 24)); background.setCornerRadius(dp(8));
-        background.setStroke(dp(1), Color.rgb(139, 92, 51));
-        button.setBackground(background);
-        button.setPadding(dp(12), dp(8), dp(12), dp(8));
-        button.setFocusable(true);
-        button.setOnFocusChangeListener((v, focused) -> {
-            background.setStroke(dp(focused ? 3 : 1), Color.rgb(focused ? 241 : 139, focused ? 202 : 92, focused ? 129 : 51));
-        });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(58), 1);
-        params.setMargins(dp(4), dp(5), dp(4), dp(5)); row.addView(button, params);
+        Button button = new Button(this);
+        button.setText(label);
+        Pd2LauncherTheme.styleButton(button, false);
+        boolean stack = row.getOrientation() == LinearLayout.VERTICAL;
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(stack ? -1 : 0, -2, stack ? 0 : 1);
+        params.setMargins(dp(3), dp(4), dp(3), dp(4));
+        row.addView(button, params);
         button.setOnClickListener(v -> action.run()); return button;
+    }
+    @Override public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        if (status != null) buildUi();
     }
     @Override protected void onResume() { super.onResume(); if (status != null) handler.post(refresh); }
     @Override protected void onPause() { handler.removeCallbacks(refresh); super.onPause(); }
@@ -184,14 +234,17 @@ public final class Pd2Activity extends AppCompatActivity {
         boolean session = XServerDisplayActivity.hasPd2Session();
         boolean locked = isOperationInProgress() || Pd2ContainerMaintenance.isDeletionInProgress()
                 || (!session && XServerDisplayActivity.isPd2RuntimeWorkInProgress());
-        play.setText(session ? "Resume client" : "Play");
+        String playLabel = session ? "Resume client" : "Play";
+        if (!playLabel.contentEquals(play.getText())) play.setText(playLabel);
         play.setEnabled(!locked && (session || (runtime && installation != null && installation.valid)));
         stop.setEnabled(session && !locked);
         folder.setEnabled(!locked && !session); zip.setEnabled(!locked && !session);
         settings.setEnabled(!locked && !session); prepare.setEnabled(!locked && !session && !runtime);
-        status.setText((session ? "Client running" : runtime ? "Runtime ready" : "Runtime not prepared") + "\n" +
+        performance.setEnabled(!locked && !session);
+        String message = (session ? "Client running" : runtime ? "Runtime ready" : "Runtime not prepared") + "\n" +
             (Pd2ContainerMaintenance.isDeletionInProgress() ? "Deleting an older container…"
-                    : runtimePreparing ? "Preparing bundled runtime files…" : containerPreparing ? "Preparing the PD2 Wine container…" : operation));
+                    : runtimePreparing ? "Preparing bundled runtime files…" : containerPreparing ? "Preparing the PD2 Wine container…" : operation);
+        if (!message.contentEquals(status.getText())) status.setText(message);
     }
     private void prepareRuntime() {
         synchronized (Pd2ContainerMaintenance.class) {
@@ -249,7 +302,7 @@ public final class Pd2Activity extends AppCompatActivity {
         String args = preferences.getString("pd2_arguments", "-3dfx -w");
         int selected = Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS.equals(args) && renderer.equals("turnip,zink")
                 ? 4 : (renderer.equals("turnip,virgl") ? 2 : 0) + (args.contains("-ddraw") ? 1 : 0);
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Launch settings").setSingleChoiceItems(choices, selected, (d, which) -> {
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("Launch settings").setSingleChoiceItems(choices, selected, (d, which) -> {
             preferences.edit().putString("pd2_renderer", which == 2 || which == 3 ? "turnip,virgl" : "turnip,zink")
                 .putString("pd2_arguments", which == 4 ? Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS
                         : which % 2 == 0 ? "-3dfx -w" : "-ddraw -w").apply();
@@ -261,7 +314,7 @@ public final class Pd2Activity extends AppCompatActivity {
     }
     private void showControllerSettings() {
         String[] choices = {"Native input path", "Controller notifications", "Save/Quit experiment", "Input trace"};
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Controller")
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("Controller")
             .setItems(choices, (d, which) -> {
                 if (which == 0) showNativeInputSettings();
                 else if (which == 1) showControllerNotificationsSettings();
@@ -270,20 +323,17 @@ public final class Pd2Activity extends AppCompatActivity {
             }).setNegativeButton("Close", null).show());
     }
     private void showNativeInputSettings() {
-        String[] choices = {"Standard Native (default)", "XInput compatibility (previous test)",
-                "XInput reader repair (experimental)"};
-        int selected = Pd2ControllerBackendPolicy.normalize(preferences.getInt(
-                Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD));
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this)
+        String[] choices = {"Standard Native", "XInput compatibility (previous test)",
+                "XInput reader repair (default)"};
+        int selected = Pd2ControllerBackendPreferences.get(preferences);
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
             .setCustomTitle(controllerSettingsHeader("Native input path",
-                    "Try XInput reader repair if Native input stops after Save/Quit. Stop client and Play to apply it. "
-                    + "It includes reader diagnostics; export logs after a short test. "
-                    + "Standard Native restores the original XInput module on the next clean Play."))
+                    "Reader repair is the default and includes diagnostics. Changes apply after Stop + Play. "
+                    + "Standard Native restores the original XInput module. Export logs after testing."))
             .setSingleChoiceItems(choices, selected, (d, which) -> {
-                SharedPreferences.Editor edit = preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE, which);
+                Pd2ControllerBackendPreferences.set(preferences, which);
                 if (which == Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY)
-                    edit.putBoolean(Pd2InputTraceRuntime.PREFERENCE, true);
-                edit.apply();
+                    preferences.edit().putBoolean(Pd2InputTraceRuntime.PREFERENCE, true).apply();
                 operation = which == Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR
                         ? "XInput reader repair selected. Stop, Play, test Save/Quit and export logs."
                         : which == Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY
@@ -295,7 +345,7 @@ public final class Pd2Activity extends AppCompatActivity {
     private void showControllerNotificationsSettings() {
         String[] modes = {"Controller notifications enabled (default)", "Controller notifications disabled"};
         int selected = Pd2ControllerRuntime.enabled(this) ? 0 : 1;
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Native controller")
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("Native controller")
             .setSingleChoiceItems(modes, selected, (d, which) -> {
                 preferences.edit().putBoolean(Pd2ControllerRuntime.ENABLED_PREFERENCE, which == 0).apply();
                 operation = "Controller setting saved. Restart the app before launching the game to apply it.";
@@ -304,11 +354,10 @@ public final class Pd2Activity extends AppCompatActivity {
     }
     private void showInputTraceSettings() {
         String[] choices = {"Off (default)", "Trace the next Play only"};
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this)
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
             .setCustomTitle(controllerSettingsHeader("Controller input trace",
-                    "Records selected Windows API calls and return codes, without controller values. "
-                    + "Use a short test, then export logs before Stop. Trace overhead lasts until Stop; "
-                    + "the existing runtime log size limit still applies. Existing Wine debug settings are restored after clean cleanup."))
+                    "Records Windows API calls and return codes for one clean Play. Test briefly and export before Stop. "
+                    + "Previous Wine settings return after cleanup."))
             .setSingleChoiceItems(choices, Pd2InputTraceRuntime.requested(this) ? 1 : 0, (d, which) -> {
                 preferences.edit().putBoolean(Pd2InputTraceRuntime.PREFERENCE, which == 1).apply();
                 operation = which == 1 ? "Input trace selected for the next clean Play. Export after a short test, before Stop."
@@ -318,26 +367,26 @@ public final class Pd2Activity extends AppCompatActivity {
     }
     /** AlertDialog cannot show its message panel and a choice list together. */
     private View controllerSettingsHeader(String title, String explanation) {
-        int padding = Math.round(20 * getResources().getDisplayMetrics().density);
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(padding, padding, padding, padding / 2);
-        TextView heading = new TextView(this);
-        heading.setText(title);
-        heading.setTextSize(20);
-        heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        heading.setTextColor(0xFFE2B966);
-        TextView summary = new TextView(this);
-        summary.setText(explanation);
-        summary.setTextSize(14);
-        summary.setPadding(0, padding / 2, 0, 0);
-        header.addView(heading);
-        header.addView(summary);
-        return header;
+        return Pd2LauncherTheme.dialogHeader(this, title, explanation);
+    }
+
+    private void showPerformanceSettings() {
+        String[] choices = {"60 Hz display request (default)", "Device refresh rate"};
+        int selected = preferences.getBoolean(Pd2DisplayPolicy.REQUEST_PREFERENCE, true) ? 0 : 1;
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
+            .setCustomTitle(controllerSettingsHeader("Performance & temperature",
+                    "60 Hz can reduce excess display work when Android supports the request. Applies next Play; "
+                    + "this is not a game FPS cap. For a heat or battery check, export support logs after playing."))
+            .setSingleChoiceItems(choices, selected, (d, which) -> {
+                preferences.edit().putBoolean(Pd2DisplayPolicy.REQUEST_PREFERENCE, which == 0).apply();
+                operation = which == 0 ? "60 Hz display request saved for the next Play."
+                        : "Device refresh rate selected for the next Play.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
     }
     private void showHidReadSettings() {
         String[] modes = {"Original Wine driver (default)", "HID read cancellation fix (experimental)"};
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Save/Quit experiment")
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("Save/Quit experiment")
             .setSingleChoiceItems(modes, Pd2HidReadRuntime.enabled(this) ? 1 : 0, (d, which) -> {
                 preferences.edit().putBoolean(Pd2HidReadRuntime.ENABLED_PREFERENCE, which == 1).apply();
                 operation = "Setting saved. Stop client, then Play to apply it. Export logs after the Save/Quit test.";
@@ -347,7 +396,7 @@ public final class Pd2Activity extends AppCompatActivity {
     private void showCpuSettings() {
         String[] modes = {"Stability (default)", "Interpreter (diagnostic; very slow)"};
         int selected = preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? 1 : 0;
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("CPU mode")
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("CPU mode")
             .setSingleChoiceItems(modes, selected, (d, which) -> {
                 preferences.edit().putBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, which == 1).apply();
                 operation = which == 1 ? "Interpreter selected for a short startup diagnostic. Return to Stability afterward."
@@ -440,11 +489,9 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("inputMode", preferences.getBoolean("pd2_mouse_keyboard", false) ? "mouse_keyboard" : "native")
                 .put("inputModeScope", "Saved gameplay preference; current session mode and transitions are in controller.json")
                 .put("controllerRuntime", Pd2ControllerRuntime.status(this))
-                .put("controllerBackendRequested", Pd2ControllerBackendPolicy.modeName(preferences.getInt(
-                        Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD)))
+                .put("controllerBackendRequested", Pd2ControllerBackendPolicy.modeName(Pd2ControllerBackendPreferences.get(preferences)))
                 .put("xinputReaderRuntime", Pd2XInputReaderRuntime.describe(this,
-                        preferences.getInt(Pd2ControllerBackendPolicy.PREFERENCE,
-                                Pd2ControllerBackendPolicy.STANDARD) == Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR))
+                        Pd2ControllerBackendPreferences.get(preferences) == Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR))
                 .put("hidReadRuntime", Pd2HidReadRuntime.status(this))
                 .put("inputTraceRuntime", Pd2InputTraceRuntime.status(this))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))

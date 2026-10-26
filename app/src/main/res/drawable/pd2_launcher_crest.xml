@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original geometric ornament; no game artwork or logos. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="52dp" android:height="64dp" android:viewportWidth="52" android:viewportHeight="64">
+    <path android:fillColor="#110F0E" android:strokeColor="#A88A58" android:strokeWidth="1"
+        android:pathData="M26,2 L47,13 L45,42 L26,62 L7,42 L5,13 Z" />
+    <path android:fillColor="#38201B" android:strokeColor="#645039" android:strokeWidth="1"
+        android:pathData="M26,10 L38,17 L37,38 L26,51 L15,38 L14,17 Z" />
+    <path android:fillColor="#CAA568" android:pathData="M26,12 L29,28 L36,32 L29,35 L26,53 L23,35 L16,32 L23,28 Z" />
+    <path android:fillColor="#F0D7A5" android:pathData="M26,23 L29,32 L26,40 L23,32 Z" />
+</vector>

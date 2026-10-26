@@ -80,3 +80,15 @@ of the original package path `com.winlator` with `com.pd2.thor` in tar member
 bytes and symlink targets, preserving ELF string offsets. Java/JNI namespace
 symbols remain unchanged. Archive/license headers bundled by upstream remain
 untouched. [BUILD.md](docs/BUILD.md) documents build and preview signing details.
+
+## Cinzel Decorative launcher headings
+
+`app/src/main/assets/fonts/CinzelDecorative-Regular.ttf` is Cinzel Decorative by
+Natanael Gama, redistributed unmodified under the SIL Open Font License 1.1.
+The complete license and reserved font name notice are included beside the font
+as `OFL-CinzelDecorative.txt`. Source: the official
+[Google Fonts repository](https://github.com/google/fonts/tree/main/ofl/cinzeldecorative).
+The bundled font is 60,408 bytes, SHA-256
+`5b862be329103ad287a10f0a53e27a40e8cc519999253f1a0223e2dc330b10b8`.
+The launcher ornament is original vector artwork; no Diablo artwork or logo was
+added for this visual refresh.

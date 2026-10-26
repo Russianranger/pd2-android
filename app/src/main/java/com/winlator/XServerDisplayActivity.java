@@ -74,6 +74,7 @@ import com.winlator.inputcontrols.ControlsProfile;
 import com.winlator.inputcontrols.ExternalController;
 import com.winlator.inputcontrols.InputControlsManager;
 import com.winlator.pd2.Pd2InputRouter;
+import com.winlator.pd2.Pd2DisplayPolicy;
 import com.winlator.pd2.Pd2ThumbButtons;
 import com.winlator.pd2.Pd2MenuPointer;
 import com.winlator.pd2.Pd2PointerCleanup;
@@ -125,7 +126,7 @@ import java.util.Iterator;
 import java.util.concurrent.Executors;
 
 public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
-    private XServerView xServerView;
+    private volatile XServerView xServerView;
     private InputControlsView inputControlsView;
     private TouchpadView touchpadView;
     private XEnvironment environment;
@@ -262,7 +263,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             winHandler.controllerDiagnostics.setNativeInputEnabled(false);
             winHandler.controllerDiagnostics.save();
             pd2MemoryDiagnostics = com.winlator.pd2.Pd2MemoryDiagnostics.start(this,
-                    getIntent().getStringExtra("pd2_launch_id"), winHandler.controllerDiagnostics::save);
+                    getIntent().getStringExtra("pd2_launch_id"), winHandler.controllerDiagnostics::save,
+                    () -> xServerView == null ? null : xServerView.frameRateSnapshot());
         }
         boolean useAndroidClipboardOnWine = preferences.getBoolean("use_android_clipboard_on_wine", false);
         clipboardManager = useAndroidClipboardOnWine ? (ClipboardManager)getSystemService(CLIPBOARD_SERVICE) : null;
@@ -868,7 +870,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     private void setupUI() {
         FrameLayout rootView = findViewById(R.id.FLXServerDisplay);
-        xServerView = new XServerView(this, xServer);
+        xServerView = new XServerView(this, xServer,
+                pd2Session ? Pd2DisplayPolicy.requestedFrameRate(preferences) : 0f);
         final GLRenderer renderer = xServerView.getRenderer();
         renderer.setCursorVisible(false);
         if (pd2Session) applyPd2CursorVisibility();

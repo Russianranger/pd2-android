@@ -48,6 +48,9 @@ public final class Pd2LaunchDiagnostics {
                 .put("controllerBackendRequestedAtLaunch", container.getExtra("pd2ControllerBackend", "standard"))
                 .put("controllerBackendScope", "Captured launch choice; applied module is recorded after cleanup; game acceptance is not acknowledged")
                 .put("renderer", container.getGraphicsDriver()).put("arguments", arguments)
+                .put("displayFrameRateRequestedHz", Pd2DisplayPolicy.requestedFrameRate(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
+                .put("displayFrameRateScope", "Android 11+ Surface request; device may choose another rate; not a game FPS limit")
                 .put("cpuPreset", container.getBox64Preset()).put("environment", container.getEnvVars())
                 .put("wineVersion", container.getWineVersion()).put("winePath", "/opt/wine")
                 .put("runtimeRevision", Pd2Runtime.RUNTIME_REVISION)

@@ -1,3 +1,11 @@
+# Current pass — 0.1.22
+
+The user confirms 0.1.21 finally resolves controller recovery after Save/Quit. Preserve its exact XInput DLL and the provisionally accepted 0.1.20 cursor fix. See [accepted capture](evidence/2026-10-26-xinput-reader-accepted.md). The repaired reader becomes the default, including one-time preference migration; explicit manual fallback choices after migration remain persistent.
+
+This pass reduces normal Wine logging to errors/warnings, retaining bounded reader telemetry and opt-in detailed one-launch tracing. It adds a PD2-only Android 11+ 60 Hz Surface request (user can choose device rate), battery/thermal diagnostics, and a static gothic launcher with OFL Cinzel Decorative headings. These are targeted overhead reductions, not measured FPS/temperature gains. Runtime pins, original HID driver, graphics, Stability, imports/saves and signer remain unchanged.
+
+Qualification and deliverable identity are recorded here after CI and APK verification. [0.1.22 release notes](RELEASE-0.1.22.md) and [device checks](TESTING.md) describe the pass. Prior sections below are historical and must not override the newly accepted physical controller result.
+
 # PD2 Android handoff
 
 ## 0.1.21 XInput reader follow-up

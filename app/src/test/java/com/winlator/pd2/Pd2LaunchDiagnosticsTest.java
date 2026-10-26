@@ -133,7 +133,7 @@ public final class Pd2LaunchDiagnosticsTest {
         assertTrue(current.getLong("xinputReaderPreparedAt") > 0);
     }
 
-    @Test public void interpreterOverridesDefaultAndRetainsExceptionDiagnostics() {
+    @Test public void interpreterOverridesDefaultAndRetainsErrorsAndWarnings() {
         EnvVars merged = Box64PresetManager.getEnvVars(RuntimeEnvironment.getApplication(), Pd2LaunchPolicy.cpuPreset());
         merged.put("BOX64_DYNAREC", "1");
         merged.putAll(Pd2LaunchPolicy.environment("-ddraw -w", true));
@@ -141,10 +141,7 @@ public final class Pd2LaunchDiagnosticsTest {
         assertEquals("0", merged.get("BOX64_DYNAREC_BIGBLOCK"));
         assertEquals("2", merged.get("BOX64_DYNAREC_STRONGMEM"));
         assertEquals("0", merged.get("BOX64_DYNAREC_WEAKBARRIER"));
-        assertTrue(merged.get("WINEDEBUG").contains("+seh"));
-        assertTrue(merged.get("WINEDEBUG").contains("+loaddll"));
-        assertTrue(merged.get("WINEDEBUG").contains("+xinput"));
-        assertTrue(merged.get("WINEDEBUG").contains("+rawinput"));
+        assertEquals("-all,err+all,warn+all", merged.get("WINEDEBUG"));
         assertEquals("1", merged.get("BOX64_SHOWSEGV"));
         assertEquals("1", new EnvVars(Pd2LaunchPolicy.environment("-ddraw -w", false)).get("BOX64_DYNAREC"));
     }

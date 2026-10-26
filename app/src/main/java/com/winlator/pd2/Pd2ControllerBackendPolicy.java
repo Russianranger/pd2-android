@@ -8,6 +8,7 @@ public final class Pd2ControllerBackendPolicy {
     public static final int STANDARD = 0;
     public static final int XINPUT_COMPATIBILITY = 1;
     public static final int XINPUT_READER_REPAIR = 2;
+    public static final int DEFAULT = XINPUT_READER_REPAIR;
 
     private Pd2ControllerBackendPolicy() {}
 
@@ -32,7 +33,7 @@ public final class Pd2ControllerBackendPolicy {
         return "xinput_compatibility".equals(capturedMode) ? "XInput compatibility" : "Standard Native";
     }
 
-    /** Force the verified builtin runtime path only for the installed experiment. */
+    /** Force the verified builtin runtime path only after installing the reader repair. */
     public static String readerOverrides(String existing, boolean applied) {
         if (!applied) return existing;
         String base = existing == null ? "" : existing;

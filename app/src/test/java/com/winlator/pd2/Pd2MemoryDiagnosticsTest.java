@@ -8,6 +8,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -37,6 +38,45 @@ public final class Pd2MemoryDiagnosticsTest {
     }
     private JSONObject sample(int index) {
         try { return new JSONObject().put("sequence", index); } catch (Exception error) { throw new AssertionError(error); }
+    }
+
+    @Test public void existingBoundedReportIncludesDisplayAndThermalSamplesWithoutAnotherWriter() throws Exception {
+        Application application = RuntimeEnvironment.getApplication();
+        launch(application.getFilesDir(), "display-session");
+        CountDownLatch first = new CountDownLatch(1);
+        AtomicInteger requests = new AtomicInteger();
+        Pd2MemoryDiagnostics monitor = Pd2MemoryDiagnostics.start(application, "display-session", first::countDown, () -> {
+            requests.incrementAndGet();
+            try { return new JSONObject().put("requestedHz", 60).put("state", "request-accepted"); }
+            catch (Exception error) { throw new AssertionError(error); }
+        });
+        try {
+            assertTrue(first.await(5, TimeUnit.SECONDS));
+            File file = Pd2MemoryDiagnostics.getFile(application);
+            JSONObject report = read(file);
+            JSONObject sample = report.getJSONArray("samples").getJSONObject(0);
+            assertEquals(60, sample.getJSONObject("displayRefresh").getInt("requestedHz"));
+            assertEquals("request-accepted", sample.getJSONObject("displayRefresh").getString("state"));
+            assertTrue(sample.getJSONObject("thermal").has("batteryTemperatureCelsius"));
+            assertTrue(sample.getJSONObject("thermal").has("androidThermalStatus"));
+            assertTrue(requests.get() > 0);
+            assertTrue(file.length() <= Pd2MemoryDiagnostics.MAX_REPORT_BYTES);
+        } finally { monitor.close(); assertTrue(monitor.awaitTermination(5000)); }
+    }
+
+    @Test public void displayCollectionFailureLeavesTheExistingMemoryAndThermalReportUsable() throws Exception {
+        Application application = RuntimeEnvironment.getApplication();
+        launch(application.getFilesDir(), "display-failure");
+        CountDownLatch first = new CountDownLatch(1);
+        Pd2MemoryDiagnostics monitor = Pd2MemoryDiagnostics.start(application, "display-failure", first::countDown,
+                () -> { throw new IllegalStateException("Surface is between recreations"); });
+        try {
+            assertTrue(first.await(5, TimeUnit.SECONDS));
+            JSONObject sample = read(Pd2MemoryDiagnostics.getFile(application)).getJSONArray("samples").getJSONObject(0);
+            assertFalse(sample.has("displayRefresh"));
+            assertTrue(sample.has("thermal"));
+            assertTrue(sample.has("appPid"));
+        } finally { monitor.close(); assertTrue(monitor.awaitTermination(5000)); }
     }
 
     @Test public void historyKeepsRecentSamplesOnDiskAndAdvancesControllerCheckpoints() throws Exception {

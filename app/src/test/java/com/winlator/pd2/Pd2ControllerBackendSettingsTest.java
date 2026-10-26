@@ -56,6 +56,7 @@ public final class Pd2ControllerBackendSettingsTest {
             SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
             preferences.edit()
                     .remove(Pd2ControllerBackendPolicy.PREFERENCE)
+                    .putBoolean(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE, true)
                     .putBoolean(Pd2InputTraceRuntime.PREFERENCE, false)
                     .putBoolean(Pd2ControllerRuntime.ENABLED_PREFERENCE, false)
                     .putBoolean(Pd2HidReadRuntime.ENABLED_PREFERENCE, true)
@@ -66,7 +67,7 @@ public final class Pd2ControllerBackendSettingsTest {
 
             AlertDialog nativePath = openNativeInputPath(activity);
             ListView choices = nativePath.getListView();
-            assertEquals(Pd2ControllerBackendPolicy.STANDARD, choices.getCheckedItemPosition());
+            assertEquals(Pd2ControllerBackendPolicy.DEFAULT, choices.getCheckedItemPosition());
             choices.performItemClick(null, Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY,
                     Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY);
             shadowOf(Looper.getMainLooper()).idle();
@@ -89,6 +90,7 @@ public final class Pd2ControllerBackendSettingsTest {
             SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
             preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE,
                     Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY)
+                    .putBoolean(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE, true)
                     .putBoolean(Pd2InputTraceRuntime.PREFERENCE, true).commit();
             Map<String, ?> before = new HashMap<>(preferences.getAll());
 
@@ -117,12 +119,13 @@ public final class Pd2ControllerBackendSettingsTest {
                 SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
                 preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE,
                         Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY)
+                        .putBoolean(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE, true)
                         .putBoolean(Pd2InputTraceRuntime.PREFERENCE, trace).commit();
                 Map<String, ?> before = new HashMap<>(preferences.getAll());
                 AlertDialog nativePath = openNativeInputPath(activity);
                 ListView list = nativePath.getListView();
                 assertEquals(3, list.getCount());
-                assertEquals("XInput reader repair (experimental)", list.getAdapter().getItem(2));
+                assertEquals("XInput reader repair (default)", list.getAdapter().getItem(2));
                 list.performItemClick(null, Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR,
                         Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR);
                 shadowOf(Looper.getMainLooper()).idle();
@@ -141,6 +144,7 @@ public final class Pd2ControllerBackendSettingsTest {
         Context context = RuntimeEnvironment.getApplication();
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         preferences.edit().clear().putString("pd2_arguments", Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS)
+                .putBoolean(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE, true)
                 .putInt(Pd2ControllerBackendPolicy.PREFERENCE,
                         Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR).commit();
         Map<String, ?> before = new HashMap<>(preferences.getAll());
@@ -178,6 +182,8 @@ public final class Pd2ControllerBackendSettingsTest {
         preferences.edit().clear().commit();
         String baseline = Pd2LaunchPolicy.environment("-3dfx -w", false);
         assertEquals(baseline, runtimeEnvironment(context));
+        assertEquals(Pd2ControllerBackendPolicy.DEFAULT, Pd2ControllerBackendPreferences.get(preferences));
+        assertTrue(preferences.getBoolean(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE, false));
 
         preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE,
                 Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY).commit();
@@ -204,6 +210,7 @@ public final class Pd2ControllerBackendSettingsTest {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         preferences.edit().clear().putInt(Pd2ControllerBackendPolicy.PREFERENCE,
                 Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY)
+                .putBoolean(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE, true)
                 .putString("pd2_renderer", "turnip,virgl")
                 .putString("pd2_arguments", "-ddraw -w")
                 .putBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, true).commit();
@@ -216,6 +223,27 @@ public final class Pd2ControllerBackendSettingsTest {
         assertEquals("ddraw=b;glide3x=n,b;mscoree,mshtml=d", variables.get("WINEDLLOVERRIDES"));
         assertEquals(Pd2LaunchPolicy.WINE_DEBUG, variables.get("WINEDEBUG"));
         assertEquals(before, preferences.getAll());
+    }
+
+    @Test public void aLegacyChoiceMigratesToReaderOnceAndTheManualStandardFallbackPersists() {
+        try (ActivityController<Pd2Activity> controller = Robolectric.buildActivity(Pd2Activity.class)) {
+            Pd2Activity activity = controller.setup().get();
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
+            preferences.edit().remove(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE)
+                    .putInt(Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD)
+                    .putBoolean(Pd2InputTraceRuntime.PREFERENCE, false).commit();
+            AlertDialog nativePath = openNativeInputPath(activity);
+            assertEquals(Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR,
+                    nativePath.getListView().getCheckedItemPosition());
+            assertTrue(preferences.getBoolean(Pd2ControllerBackendPreferences.MIGRATION_PREFERENCE, false));
+            assertFalse(Pd2InputTraceRuntime.requested(activity));
+            nativePath.getListView().performItemClick(null, Pd2ControllerBackendPolicy.STANDARD,
+                    Pd2ControllerBackendPolicy.STANDARD);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(Pd2ControllerBackendPolicy.STANDARD, Pd2ControllerBackendPreferences.get(preferences));
+            assertEquals(Pd2ControllerBackendPolicy.STANDARD,
+                    openNativeInputPath(activity).getListView().getCheckedItemPosition());
+        }
     }
 
     private static AlertDialog openNativeInputPath(Pd2Activity activity) {

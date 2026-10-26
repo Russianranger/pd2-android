@@ -15,10 +15,10 @@ validates the result before compiling.
 Use a Linux host with GNU binutils (`readelf`/`nm`) for the controller backend
 artifact checks. Rebuilding that backend also requires host x86-64 GCC and the
 exact packaged Wine 9 `ntdll.so`; this is separate from the Android NDK build.
-The optional XInput reader's integration qualification also needs x86-64 Linux
+The default repaired XInput reader's integration qualification also needs x86-64 Linux
 and working AF_UNIX sockets. It verifies a pinned PE32 probe against its source
 and toolchain metadata, then runs the exact packaged Wine 9 with fresh isolated
-prefixes. MinGW-w64 is needed only to rebuild the probe or experimental DLL.
+prefixes. MinGW-w64 is needed only to rebuild the probe or repaired DLL.
 CI creates the runtime's compiled-in Android temporary directory with private
 ownership; no Wine binary is modified to run this desktop test.
 
@@ -65,7 +65,9 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The current output is `app/build/distributions/PD2-Android-0.1.21-preview.apk` and a
+Launcher visual checks use Robolectric native graphics on Android 13 and write actual native View renders to `app/build/outputs/ui-previews/`; CI uploads them for visual inspection. These are layout checks, not screenshots from the physical Thor.
+
+The current output is `app/build/distributions/PD2-Android-0.1.22-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 

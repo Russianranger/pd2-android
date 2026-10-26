@@ -95,8 +95,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                     pd2InputTraceApplied = Pd2InputTraceRuntime.prepareAfterCleanup(environment.getContext(), result,
                             new File(launchEnvironment.get("WINEPREFIX"), "user.reg"), pd2LaunchId);
                     if (pd2InputTraceApplied) {
-                        String debug = launchEnvironment.get("WINEDEBUG");
-                        launchEnvironment.put("WINEDEBUG", (debug == null || debug.isEmpty() ? "-all" : debug) + ",+relay");
+                        launchEnvironment.put("WINEDEBUG", Pd2LaunchPolicy.inputTraceDebug(
+                                launchEnvironment.get("WINEDEBUG")));
                     }
                     recordInputTrace("beforeLaunch", null);
                     return true;
