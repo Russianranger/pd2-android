@@ -293,6 +293,46 @@ def startup_diagnostics(wine: Path, prefix: Path, environment: dict, attempt: Pa
     return results
 
 
+def debugger_diagnostics(wine: Path, environment: dict, attempt: Path) -> dict:
+    """Capture first/second startup stops without treating first-chance faults as fatal."""
+    debugger = shutil.which("gdb")
+    if not debugger:
+        return {"available": False}
+    diagnostics = attempt / "startup-gdb.log"
+    command = [debugger, "--nx", "--batch", "--quiet"]
+    expressions = [
+        "set pagination off", "set confirm off", "set print thread-events off",
+        "set disable-randomization off", "set auto-load off", "set follow-fork-mode parent",
+        "handle SIGPIPE nostop noprint pass", "handle SIGUSR1 nostop noprint pass",
+        "handle SIGUSR2 nostop noprint pass", "handle SIGSEGV stop print pass", "run",
+        "echo PD2_GDB_FIRST_STOP\\n", "info program",
+        "info registers rip rsp rbp rax rbx rcx rdx rsi rdi r8 r9 r10 r11 r12 r13 r14 r15 eflags cs ss ds es fs gs fs_base gs_base",
+        "x/20i $pc-24", "bt", "info sharedlibrary", "echo PD2_GDB_CONTINUE_ONCE\\n", "continue",
+        "echo PD2_GDB_SECOND_STOP\\n", "info program",
+        "info registers rip rsp rbp rax rbx rcx rdx rsi rdi r8 r9 r10 r11 r12 r13 r14 r15 eflags cs ss ds es fs gs fs_base gs_base",
+        "x/20i $pc-24", "bt", "info sharedlibrary",
+    ]
+    for expression in expressions:
+        command.extend(("-ex", expression))
+    command.extend(("--args", str(wine / "bin/wine"), "C:\\windows\\system32\\cmd.exe",
+                    "/c", "echo", "PD2_WINE64_GDB_READY"))
+    with diagnostics.open("w") as output:
+        process = subprocess.Popen(command, env=environment, cwd=attempt, stdin=subprocess.DEVNULL,
+                                   stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            code = process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=2)
+            code = "timeout"
+    return {"available": True, "returncode": code, "output": bounded_text(diagnostics, 22000),
+            "scope": "First and second debugger stops; a first-chance Wine fault is not proof of a fatal failure"}
+
+
 def seed_common_dlls(rootfs: Path, prefix: Path, common: dict) -> None:
     # Match ContainerManager.extractContainerPatternFile/copyCommonDlls: the
     # compressed prefix deliberately omits these copies to avoid duplication.
@@ -391,7 +431,8 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
                            "environment": {name: environment.get(name) for name in (
                                "WINEPREFIX", "WINELOADER", "WINESERVER", "WINEDLLPATH", "WINEDEBUG",
                                "WINEARCH", "DISPLAY", "LD_LIBRARY_PATH")},
-                           "console_preflights": startup_diagnostics(wine, prefix, environment, attempt)}
+                           "console_preflights": startup_diagnostics(wine, prefix, environment, attempt),
+                           "debugger": debugger_diagnostics(wine, environment, attempt)}
                 raise AssertionError("PE probe incomplete: " + json.dumps(failure, sort_keys=True))
             assert process.wait(timeout=5) == 0, "PE probe failed: " + "\n".join(output)
             reader.join(timeout=1)

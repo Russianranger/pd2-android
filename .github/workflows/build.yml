@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore:
+      - 'tests/test_xinput_reader_wine.py'
+      - '.github/workflows/xinput-qualification.yml'
   pull_request:
   workflow_dispatch:
 
