@@ -29,6 +29,12 @@ jobs:
           python-version: '3.12'
       - name: Install pinned archive decoder
         run: python3 -m pip install zstandard==0.25.0
+      - name: Install bounded startup debugger
+        timeout-minutes: 3
+        run: |
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends gdb
+          gdb --version
       - name: Verify XInput runtime sources and fixture
         run: |
           python3 scripts/build-xinput-reader-runtime.py --check

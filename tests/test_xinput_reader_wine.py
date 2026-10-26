@@ -305,12 +305,12 @@ def debugger_diagnostics(wine: Path, environment: dict, attempt: Path) -> dict:
         "set disable-randomization off", "set auto-load off", "set follow-fork-mode parent",
         "handle SIGPIPE nostop noprint pass", "handle SIGUSR1 nostop noprint pass",
         "handle SIGUSR2 nostop noprint pass", "handle SIGSEGV stop print pass", "run",
-        "echo PD2_GDB_FIRST_STOP\\n", "info program",
+        "echo PD2_GDB_FIRST_STOP\\n", "info program", "p $_siginfo",
         "info registers rip rsp rbp rax rbx rcx rdx rsi rdi r8 r9 r10 r11 r12 r13 r14 r15 eflags cs ss ds es fs gs fs_base gs_base",
-        "x/20i $pc-24", "bt", "info sharedlibrary", "echo PD2_GDB_CONTINUE_ONCE\\n", "continue",
-        "echo PD2_GDB_SECOND_STOP\\n", "info program",
+        "x/12i $pc", "x/32bx $pc-16", "bt", "info sharedlibrary", "info proc mappings",
+        "echo PD2_GDB_CONTINUE_ONCE\\n", "continue", "echo PD2_GDB_SECOND_STOP\\n", "info program", "p $_siginfo",
         "info registers rip rsp rbp rax rbx rcx rdx rsi rdi r8 r9 r10 r11 r12 r13 r14 r15 eflags cs ss ds es fs gs fs_base gs_base",
-        "x/20i $pc-24", "bt", "info sharedlibrary",
+        "x/12i $pc", "x/32bx $pc-16", "bt", "info sharedlibrary",
     ]
     for expression in expressions:
         command.extend(("-ex", expression))
