@@ -122,6 +122,9 @@ public final class GamepadHandlerInputTest {
     @SuppressWarnings("unchecked")
     private static ExternalController attach(WinHandler handler, int deviceId) throws Exception {
         ExternalController controller = new ExternalController();
+        // Real discovery initializes the descriptor before ArrayUtils compares slots.
+        controller.setId("fixture-" + deviceId);
+        controller.setName("Controller fixture " + deviceId);
         Field id = ExternalController.class.getDeclaredField("deviceId");
         id.setAccessible(true);
         id.setInt(controller, deviceId);
