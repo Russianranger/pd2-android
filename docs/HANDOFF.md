@@ -21,7 +21,7 @@ Delivered Native thumbs are balanced before removing their shortcut owner,
 preserving other controls and devices. Local checks pass 26 real-router scenarios,
 13 Menu-pointer scenarios/170 checks, 15 pure JUnit tests, existing host checks and
 24 runtime fixture tests. The accepted controller/HID source/artifact/ABI checks
-also pass. New Android UI/producer cases still require CI at this checkpoint.
+also pass. The new Android UI/producer cases pass in the qualified CI run below.
 
 The new opt-in **XInput compatibility (experimental)** consumer policy requests
 three SDL hints at fresh launch, retaining the live Wine HID device. It changes
@@ -37,8 +37,48 @@ graphics/GameNative/Stability, cleanup and signer are preserved. Follow the
 combined [test](TESTING.md), export before Stop, and keep the original HID driver
 and controller notifications enabled. Physical cursor and Save/Quit results are
 pending; do not claim the compatibility hints were consumed from environment
-presence or API call counts alone. Local host tests pass; full Android and APK
-qualification is pending CI at this source checkpoint.
+presence or API call counts alone. Automated qualification and offered APK
+identity follow; these do not establish physical recovery.
+
+### Qualified 0.1.20 source and offered APK
+
+Published tested source is
+[`5ebf06400ce8883d95df5825cc554d412d0992e7`](https://github.com/Russianranger/pd2-android/commit/5ebf06400ce8883d95df5825cc554d412d0992e7),
+tree `f9e131f1bbc43fd1b94b1412fb3f216b6515a44b`.
+[CI 40258057558](https://github.com/Russianranger/pd2-android/actions/runs/40258057558)
+passed for that exact source, job `121364096607`. Independently downloaded raw
+reports confirm **325 tests across 35 suites**, zero failures or ignored tests.
+The first run exposed two incomplete test-controller descriptors; initializing
+them as real discovery does corrects the fixtures without changing production.
+The old fixture reproduces both failures using the real ArrayUtils, and all four
+focused producer cases now pass in Android CI.
+
+Completed logs confirm all 206 runtime pins and relocation, 24 runtime fixtures,
+26 router scenarios, 13 Menu-pointer scenarios/170 checks, 10 Native-input
+scenarios, retained import/pointer/crash/log checks, 19 prepared real AF_UNIX
+binds, controller/HID source/artifact/ABI checks and ARM64 assembly/packaging.
+The Native settings UI tests exercise visible choices, selected policy, one-shot
+trace arming and fresh-environment restoration with the actual Android classes.
+
+The offered **CI-built** `PD2-Android-0.1.20-preview.apk` is **174,122,610 bytes**,
+SHA-256 **`3917c483520ac510ddc6bb48e5ee13e14620caccc0cf385ccbc1c9050776011f`**.
+Internal SHA256SUMS, ZIP CRCs, duplicate-entry rejection, four-byte alignment,
+`com.pd2.thor`, 0.1.20/code 21, min SDK 26/target 28, ARM64-only packaging and V2
+signing were independently verified. The accepted single certificate remains
+`a61297bef1be2652b53b763730275e1f0e0975222294602ed8ffa5f8147ddb1e`.
+All **74 runtime assets and 35 native libraries** match the verified offered
+0.1.19 CI APK byte-for-byte (baseline SHA-256
+`6a2596ea5a23c5a63d66d1bd19480b9d0a04233bad6c3537f76c7f753d9c758c`).
+The verified APK was saved successfully for direct delivery.
+
+Artifact `12622999546` is the separate **173,193,666-byte ZIP wrapper**, digest
+`b09b637e5700fb230e137a03df448e780d21664cebe4171d3e6c0f40c35117a2`.
+Test-report artifact `12623268710` is **57,546 bytes**, digest
+`bf5b68a1ac7afb7b4cf091db2b7dd299048f7d62c2fce17f60cb7a88c4ee1c50`.
+Both wrapper hashes match GitHub metadata and are distinct from the contained
+APK hash. No tagged release was published. Install over the existing app and
+reuse the runtime/import; cursor stopping and post-Save/Quit Native acceptance
+still require the combined physical test and export before Stop.
 
 ## 0.1.19 controller and rendering pass
 
