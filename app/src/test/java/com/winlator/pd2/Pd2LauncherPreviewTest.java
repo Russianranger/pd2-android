@@ -58,7 +58,8 @@ public final class Pd2LauncherPreviewTest {
 
             Button first = (Button) findText(content, "Prepare runtime");
             assertNotNull(first);
-            assertTrue(first.requestFocus());
+            assertTrue("Prepare runtime must be enabled before testing keyboard focus", first.isEnabled());
+            assertTrue(first.requestFocusFromTouch());
             boolean toolsReached = false;
             for (int i = 0; i < 48; i++) {
                 View focused = activity.getCurrentFocus();
