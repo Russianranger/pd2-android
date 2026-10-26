@@ -15,6 +15,9 @@ validates the result before compiling.
 Use a Linux host with GNU binutils (`readelf`/`nm`) for the controller backend
 artifact checks. Rebuilding that backend also requires host x86-64 GCC and the
 exact packaged Wine 9 `ntdll.so`; this is separate from the Android NDK build.
+The optional XInput reader's integration qualification also needs x86-64 Linux,
+working AF_UNIX sockets and MinGW-w64 (`gcc-mingw-w64-i686-win32` on Ubuntu).
+It runs the exact packaged Wine 9 and fresh isolated prefix templates.
 
 ```sh
 python3 -m pip install zstandard==0.25.0
@@ -26,6 +29,9 @@ python3 scripts/relocate-runtime.py --check
 python3 scripts/fetch-runtime.py --check-final
 python3 scripts/build-controller-runtime.py --check
 python3 -m unittest discover -s tests -p 'test_controller_runtime.py' -v
+python3 scripts/build-xinput-reader-runtime.py --check
+python3 -m unittest discover -s tests -p 'test_xinput_reader_runtime.py' -v
+python3 tests/test_xinput_reader_wine.py
 python3 -m unittest discover -s tests -p 'test_runtime_relocation.py' -v
 ./scripts/test-import.sh
 python3 tests/test_input_router.py
@@ -56,7 +62,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-The current output is `app/build/distributions/PD2-Android-0.1.20-preview.apk` and a
+The current output is `app/build/distributions/PD2-Android-0.1.21-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 

@@ -46,7 +46,7 @@ public final class Pd2LaunchDiagnostics {
         JSONObject report = new JSONObject().put("launchId", id).put("startedAt", System.currentTimeMillis())
                 .put("controllerRuntime", Pd2ControllerRuntime.status(context))
                 .put("controllerBackendRequestedAtLaunch", container.getExtra("pd2ControllerBackend", "standard"))
-                .put("controllerBackendScope", "Requested consumer hints; game backend selection is not acknowledged")
+                .put("controllerBackendScope", "Captured launch choice; applied module is recorded after cleanup; game acceptance is not acknowledged")
                 .put("renderer", container.getGraphicsDriver()).put("arguments", arguments)
                 .put("cpuPreset", container.getBox64Preset()).put("environment", container.getEnvVars())
                 .put("wineVersion", container.getWineVersion()).put("winePath", "/opt/wine")
@@ -113,6 +113,18 @@ public final class Pd2LaunchDiagnostics {
         } catch (IOException | JSONException ignored) { }
     }
 
+    /** A completed module installation is separate from proof that the game loaded/accepted it. */
+    public static synchronized void xinputReaderRuntime(Context context, String id, JSONObject status) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (id == null || !file.isFile() || file.length() > 128 * 1024) return;
+            JSONObject report = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            if (!id.equals(report.optString("launchId"))) return;
+            report.put("xinputReaderRuntime", status).put("xinputReaderPreparedAt", System.currentTimeMillis());
+            write(file, report);
+        } catch (IOException | JSONException ignored) { }
+    }
+
     /** Preserve trace setup/restoration status only for the captured launch. */
     public static synchronized void inputTraceRuntime(Context context, String id, String phase, JSONObject status) {
         try {
@@ -160,7 +172,8 @@ public final class Pd2LaunchDiagnostics {
                 try { entry.put("pe", peHeader(file)); }
                 catch (IOException e) { entry.put("headerError", e.getMessage()); }
             }
-            if (name.equals("game.exe") || name.equals("fog.dll") || name.equals("pd2_ext.dll")) {
+            if (name.equals("game.exe") || name.equals("fog.dll") || name.equals("pd2_ext.dll")
+                    || name.equals("projectdiablo.dll")) {
                 try { entry.put("sha256", coreFileSha256(file)); }
                 catch (IOException e) { entry.put("hashError", e.getMessage()); }
             }

@@ -1,4 +1,32 @@
-# 0.1.20 cursor and Save/Quit compatibility test
+# 0.1.21 XInput reader recovery test
+
+The user provisionally accepts the 0.1.20 cursor fix. Its Save/Quit experiment
+still fails. The new repair targets Wine's XInput receive lifecycle and stale
+state rather than another focus, identity, HID cancellation or SDL hint test.
+
+Install over the existing app and reuse its runtime, prefix, import and saves.
+Keep **Controller notifications enabled**, **Original Wine driver**, GameNative
+graphics arguments and Stability. Leave the separate **Input trace** Off for
+this test; the replacement reader includes bounded diagnostics of its own.
+
+1. **Stop client**, then select **Launch settings → Controller → Native input
+   path → XInput reader repair (experimental)** and **Play**.
+2. Enter the same character and check initial Native movement and one ordinary
+   button. If it fails, export support logs there instead of inferring a
+   Save/Quit result.
+3. **Save/Quit** once and re-enter. Test Native movement and one button for
+   20–30 seconds. **Export support logs before Stop**, whether it works or
+   fails. If successful, repeat Save/Quit/re-entry twice before exporting.
+4. Stop when finished. **Standard Native → Play** restores the verified
+   original XInput DLL after cleanup. No Prepare runtime or re-import is needed.
+
+The report separates requested mode, installed module, executed reader and
+returned-state freshness. Successful DLL installation or API calls alone do
+not qualify gameplay. Do not run old reconnect or fresh-identity experiments
+before the export. A manually armed relay trace remains a separate preference;
+selecting reader repair does not turn it on or clear it.
+
+# Historical 0.1.20 cursor and Save/Quit compatibility test
 
 Install over the existing app. Keep controller notifications enabled, the original
 Wine driver, accepted GameNative/graphics arguments and Stability. Reuse the

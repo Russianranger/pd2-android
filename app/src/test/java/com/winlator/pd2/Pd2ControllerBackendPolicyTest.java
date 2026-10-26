@@ -54,12 +54,34 @@ public final class Pd2ControllerBackendPolicyTest {
     }
 
     @Test public void unknownPreferencesUseTheStandardModeAndUnchangedBase() {
-        for (int value : new int[]{-1, 2, Integer.MIN_VALUE, Integer.MAX_VALUE}) {
+        for (int value : new int[]{-1, 3, Integer.MIN_VALUE, Integer.MAX_VALUE}) {
             assertEquals(Pd2ControllerBackendPolicy.STANDARD, Pd2ControllerBackendPolicy.normalize(value));
             assertEquals("standard", Pd2ControllerBackendPolicy.modeName(value));
             assertSame(BASE, Pd2ControllerBackendPolicy.environment(BASE, value));
         }
         assertEquals(Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY,
                 Pd2ControllerBackendPolicy.normalize(Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY));
+    }
+
+    @Test public void readerRepairUsesTheOriginalEnvironmentWithoutConsumerHints() {
+        assertSame(BASE, Pd2ControllerBackendPolicy.environment(BASE, Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR));
+        assertEquals(Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR,
+                Pd2ControllerBackendPolicy.normalize(Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR));
+        String captured = Pd2ControllerBackendPolicy.modeName(Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR);
+        assertTrue(Pd2ControllerBackendPolicy.repairsReader(captured));
+        assertEquals("XInput reader repair", Pd2ControllerBackendPolicy.displayName(captured));
+        assertFalse(Pd2ControllerBackendPolicy.repairsReader("xinput_compatibility"));
+        assertFalse(Pd2ControllerBackendPolicy.repairsReader(null));
+        assertEquals("Standard Native", Pd2ControllerBackendPolicy.displayName("unknown"));
+    }
+
+    @Test public void onlyInstalledReaderRepairForcesTheVerifiedBuiltinModuleAndKeepsGraphicsOverrides() {
+        String base = "ddraw,glide3x=n,b;mscoree,mshtml=d";
+        assertSame(base, Pd2ControllerBackendPolicy.readerOverrides(base, false));
+        assertNull(Pd2ControllerBackendPolicy.readerOverrides(null, false));
+        assertEquals(base + ";xinput1_4=b", Pd2ControllerBackendPolicy.readerOverrides(base, true));
+        assertEquals(base + ";xinput1_4=b", Pd2ControllerBackendPolicy.readerOverrides(base + ";", true));
+        assertEquals("xinput1_4=b", Pd2ControllerBackendPolicy.readerOverrides(null, true));
+        assertEquals("xinput1_4=b", Pd2ControllerBackendPolicy.readerOverrides("", true));
     }
 }

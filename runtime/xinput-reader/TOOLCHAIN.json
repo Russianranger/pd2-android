@@ -1,0 +1,26 @@
+{
+  "binutils-mingw-w64-i686_2.40-2+10.4_amd64.deb": {
+    "bytes": 2666616,
+    "sha256": "ead7a3a735fdaa097c09e334930c730e8d6b97a7a89bfb1b2032150cde998f2d"
+  },
+  "gcc-mingw-w64-base_12.2.0-14+deb12u1+25.2+b1_amd64.deb": {
+    "bytes": 186040,
+    "sha256": "811339affa3a6cf974bcfe2c2be3ce2d8883a43f45934ea7349f1c26b932ee38"
+  },
+  "gcc-mingw-w64-i686-win32-runtime_12.2.0-14+deb12u1+25.2+b1_amd64.deb": {
+    "bytes": 11501064,
+    "sha256": "a03efb859493f8ac016264c4154f2a4595694a51a6f20cd13091d544d3af69f2"
+  },
+  "gcc-mingw-w64-i686-win32_12.2.0-14+deb12u1+25.2+b1_amd64.deb": {
+    "bytes": 31432176,
+    "sha256": "0d1f4d225f323b98bb73c4804d4033b352b350304f656764c20a557bd309aa98"
+  },
+  "mingw-w64-common_10.0.0-3_all.deb": {
+    "bytes": 5168888,
+    "sha256": "1317a00bbbc3866a6d23ff177bc3f6c92ccbfc9489f8d5314bfac76cf60ffc19"
+  },
+  "mingw-w64-i686-dev_10.0.0-3_all.deb": {
+    "bytes": 2835400,
+    "sha256": "359eb8e9c28f25916a80f20eed80d8f46efa73b0db8db712a6c95301cd13c25b"
+  }
+}

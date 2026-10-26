@@ -65,6 +65,15 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_controller_runtime.py' -v
           python3 scripts/build-hid-read-runtime.py --check
           python3 -m unittest discover -s tests -p 'test_hid_read_runtime.py' -v
+      - name: Install XInput qualification compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686-win32
+      - name: Verify Wine 9 XInput reader recovery
+        run: |
+          python3 scripts/build-xinput-reader-runtime.py --check
+          python3 -m unittest discover -s tests -p 'test_xinput_reader_runtime.py' -v
+          python3 tests/test_xinput_reader_wine.py
       - name: Test Android 13 startup and build ARM64 preview
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - name: Upload Android startup test results

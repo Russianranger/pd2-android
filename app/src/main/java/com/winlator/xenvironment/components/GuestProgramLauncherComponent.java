@@ -24,6 +24,8 @@ import com.winlator.pd2.Pd2LaunchDiagnostics;
 import com.winlator.pd2.Pd2Activity;
 import com.winlator.pd2.Pd2HidReadRuntime;
 import com.winlator.pd2.Pd2InputTraceRuntime;
+import com.winlator.pd2.Pd2XInputReaderRuntime;
+import com.winlator.pd2.Pd2ControllerBackendPolicy;
 import com.winlator.pd2.Pd2LaunchPolicy;
 
 import java.io.File;
@@ -40,12 +42,14 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private String pd2LaunchFailure;
     private boolean pd2InputTraceApplied;
     private boolean pd2InputTraceRestoreAttempted;
+    private boolean pd2XInputReaderRequested;
     private EnvVars envVars;
     private String box64Preset = Box64Preset.CONSERVATIVE;
     private Callback<Integer> terminationCallback;
     private final Object lock = new Object();
 
     public void setPd2LaunchId(String id) { pd2LaunchId = id; }
+    public void setPd2XInputReaderRequested(boolean requested) { pd2XInputReaderRequested = requested; }
     public String getPd2LaunchFailure() { return pd2LaunchFailure; }
 
     private void recordLaunchFailure(String message) {
@@ -77,6 +81,17 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                     try { hidReadStatus.put("appliedForLaunch", hidReadApplied); }
                     catch (org.json.JSONException ignored) { }
                     Pd2LaunchDiagnostics.hidReadRuntime(environment.getContext(), pd2LaunchId, hidReadStatus);
+                    boolean readerApplied;
+                    try {
+                        readerApplied = Pd2XInputReaderRuntime.prepareAfterCleanup(
+                                environment.getContext(), result, pd2XInputReaderRequested);
+                    } catch (java.io.IOException | RuntimeException error) {
+                        recordXInputReader(false, error.getMessage());
+                        throw error;
+                    }
+                    launchEnvironment.put("WINEDLLOVERRIDES", Pd2ControllerBackendPolicy.readerOverrides(
+                            launchEnvironment.get("WINEDLLOVERRIDES"), readerApplied));
+                    recordXInputReader(readerApplied, null);
                     pd2InputTraceApplied = Pd2InputTraceRuntime.prepareAfterCleanup(environment.getContext(), result,
                             new File(launchEnvironment.get("WINEPREFIX"), "user.reg"), pd2LaunchId);
                     if (pd2InputTraceApplied) {
@@ -175,6 +190,17 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             if (error != null) status.put("error", error.substring(0, Math.min(512, error.length())));
         } catch (org.json.JSONException ignored) { }
         Pd2LaunchDiagnostics.inputTraceRuntime(environment.getContext(), pd2LaunchId, phase, status);
+    }
+
+    private void recordXInputReader(boolean applied, String error) {
+        org.json.JSONObject status = Pd2XInputReaderRuntime.describe(environment.getContext(), pd2XInputReaderRequested);
+        try {
+            status.put("appliedForLaunch", applied)
+                    .put("loadOverride", applied ? "xinput1_4=b" : "unchanged")
+                    .put("loadScope", "Installation is verified; runtime reader telemetry establishes module execution");
+            if (error != null) status.put("error", error.substring(0, Math.min(512, error.length())));
+        } catch (org.json.JSONException ignored) { }
+        Pd2LaunchDiagnostics.xinputReaderRuntime(environment.getContext(), pd2LaunchId, status);
     }
 
     private void killRootProcess() {

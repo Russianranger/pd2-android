@@ -119,6 +119,20 @@ public final class Pd2LaunchDiagnosticsTest {
                 .getJSONObject("afterStop").getBoolean("journalPending"));
     }
 
+    @Test public void xinputReaderModuleStatusBelongsOnlyToItsCapturedLaunch() throws Exception {
+        Application application = RuntimeEnvironment.getApplication();
+        File file = new File(application.getFilesDir(), "pd2/logs/launch.json");
+        assertTrue(file.getParentFile().mkdirs() || file.getParentFile().isDirectory());
+        Files.write(file.toPath(), new JSONObject().put("launchId", "current").toString().getBytes(StandardCharsets.UTF_8));
+        JSONObject status = new JSONObject().put("installed", true).put("appliedForLaunch", true);
+        Pd2LaunchDiagnostics.xinputReaderRuntime(application, "old", status);
+        assertFalse(new JSONObject(read(file)).has("xinputReaderRuntime"));
+        Pd2LaunchDiagnostics.xinputReaderRuntime(application, "current", status);
+        JSONObject current = new JSONObject(read(file));
+        assertTrue(current.getJSONObject("xinputReaderRuntime").getBoolean("appliedForLaunch"));
+        assertTrue(current.getLong("xinputReaderPreparedAt") > 0);
+    }
+
     @Test public void interpreterOverridesDefaultAndRetainsExceptionDiagnostics() {
         EnvVars merged = Box64PresetManager.getEnvVars(RuntimeEnvironment.getApplication(), Pd2LaunchPolicy.cpuPreset());
         merged.put("BOX64_DYNAREC", "1");

@@ -80,6 +80,7 @@ import com.winlator.pd2.Pd2PointerCleanup;
 import com.winlator.pd2.Pd2NativeFocusRecovery;
 import com.winlator.pd2.Pd2ControllerDialogs;
 import com.winlator.pd2.Pd2ControllerRuntime;
+import com.winlator.pd2.Pd2ControllerBackendPolicy;
 import com.winlator.pd2.Pd2HidReadRuntime;
 import com.winlator.pd2.Pd2Activity;
 import com.winlator.pd2.Pd2LaunchDiagnostics;
@@ -797,7 +798,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
 
         guestProgramLauncherComponent.setEnvVars(envVars);
-        if (pd2Session) guestProgramLauncherComponent.setPd2LaunchId(getIntent().getStringExtra("pd2_launch_id"));
+        if (pd2Session) {
+            guestProgramLauncherComponent.setPd2LaunchId(getIntent().getStringExtra("pd2_launch_id"));
+            guestProgramLauncherComponent.setPd2XInputReaderRequested(
+                    container != null && Pd2ControllerBackendPolicy.repairsReader(
+                            container.getExtra("pd2ControllerBackend", "standard")));
+        }
         guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
             if (pd2Session && !pd2StopRequested) {
                 pd2LaunchFailure = guestProgramLauncherComponent.getPd2LaunchFailure();
@@ -1189,8 +1195,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         JSONObject report = winHandler.controllerDiagnostics.snapshot();
         StringBuilder message = new StringBuilder("Layout: ")
                 .append(pd2InputModeLabel())
-                .append("\nInput path at launch: ").append(container != null && "xinput_compatibility".equals(
-                        container.getExtra("pd2ControllerBackend", "standard")) ? "XInput compatibility" : "Standard Native")
+                .append("\nInput path at launch: ").append(Pd2ControllerBackendPolicy.displayName(
+                        container != null ? container.getExtra("pd2ControllerBackend", "standard") : "standard"))
                 .append("\nController notifications: ").append(Pd2ControllerRuntime.enabled(this) ? "Enabled" : "Disabled")
                 .append("\nHID read experiment: ").append(Pd2HidReadRuntime.enabled(this) ? "Selected for next clean Play" : "Off")
                 .append("\n\nDetected controllers:");

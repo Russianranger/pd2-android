@@ -1,5 +1,52 @@
 # PD2 Android handoff
 
+## 0.1.21 XInput reader follow-up
+
+Continued from main `7d247c06a1edae14f4204b80f26a46910163fd66` with standing
+implementation/main-push authorization. The user provisionally accepts the
+0.1.20 cursor fix and rejects Save/Quit recovery. Keep the accepted pointer
+work. New local support ZIP `pd2-support-20261026-145905.zip` is 389,259 bytes,
+SHA-256 `cae13460553a220ea1244aca2781e234c97eafb48c7db1507d0779fc9f7254f0`.
+[Evidence](evidence/2026-10-26-savequit-xinput-reader.md) attributes the one new
+launch, compatibility settings, applied/restored trace and failed identity
+experiment. The retained late native retest returns successful XInput/Raw Input
+calls into ProjectDiablo.dll; state freshness is unobserved. Its 5.6 MiB runtime
+log is exported as a 2 MiB head/tail excerpt, so the exact Save/Quit interval
+cannot be reconstructed. Do not claim the SDL hints were consumed, all sends
+succeeded, or the reader is proven dead.
+
+The donor Wine 9 XInput reader has a concrete source defect: a receive error can
+exit its thread while leaving successful cached state behind, and INIT_ONCE
+prevents restarting. **0.1.21/code 22** adds an opt-in **XInput reader repair**
+mode targeting that lifecycle. Only the verified i386 runtime `xinput1_4.dll`
+is replaced after successful exact-prefix cleanup; its original is verified and
+backed up. Standard Native restores it on the next clean Play. Capture the
+choice once; no mid-game module changes. Unknown images/backups stay intact.
+The experiment uses the original managed environment rather than the failed
+SDL hints and forces the verified builtin XInput path only after installation.
+Installation status is separate from executed reader telemetry and game input
+acceptance. ProjectDiablo.dll now has a bounded read-only inventory hash.
+
+The 64-byte protocol, digital triggers/Y-axis mapping, HID producer/exposure,
+Wine 9.2 Custom, Box64/rootfs, game/import/prefix/saves, graphics/GameNative and
+Stability, accepted cleanup, pointer behavior and signer are retained. Selecting
+reader repair does not arm or clear a separately requested relay trace. New
+bounded reader telemetry exports aggregate receive/API freshness categories,
+not raw controller values. The combined [test](TESTING.md) requires initial
+Native and Save/Quit/re-entry acceptance separately, then export before Stop;
+avoid another focus/reconnect/identity trial before exporting.
+
+Local existing host regressions, seven pure policy tests, the new artifact/source
+checks and four runtime tests pass, including 14 production-source lifecycle
+scenarios with ASan/UBSan. The i386 DLL is 53,760 bytes, SHA-256
+`5a05fabaaf028749c306b76103451f72215ce69c0605e3876f9beb981f417ce0`.
+Its named/ordinal exports, imports, builtin marker and PE checksum are checked.
+Fourteen installer cases and an actual donor/replacement/rollback round trip
+also pass locally. Android CI, exact-Wine integration and offered APK
+qualification are pending at this source checkpoint. Exact-Wine testing must reproduce the donor
+cached-success failure and exercise the new PE32 DLL under the packaged Wine 9,
+not substitute a newer system Wine. Physical recovery remains unqualified.
+
 ## 0.1.20 Save/Quit and cursor follow-up
 
 Continued from main `7e4ff2f26ba48bcb5759f22ed7f6417a55484a99` with the user's

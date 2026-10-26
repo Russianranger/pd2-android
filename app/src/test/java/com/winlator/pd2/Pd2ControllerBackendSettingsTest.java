@@ -110,6 +110,47 @@ public final class Pd2ControllerBackendSettingsTest {
         }
     }
 
+    @Test public void readerRepairIsVisibleAndKeepsOtherSettingsAndManualTraceChoice() {
+        for (boolean trace : new boolean[]{false, true}) {
+            try (ActivityController<Pd2Activity> controller = Robolectric.buildActivity(Pd2Activity.class)) {
+                Pd2Activity activity = controller.setup().get();
+                SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
+                preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE,
+                        Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY)
+                        .putBoolean(Pd2InputTraceRuntime.PREFERENCE, trace).commit();
+                Map<String, ?> before = new HashMap<>(preferences.getAll());
+                AlertDialog nativePath = openNativeInputPath(activity);
+                ListView list = nativePath.getListView();
+                assertEquals(3, list.getCount());
+                assertEquals("XInput reader repair (experimental)", list.getAdapter().getItem(2));
+                list.performItemClick(null, Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR,
+                        Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR);
+                shadowOf(Looper.getMainLooper()).idle();
+                assertEquals(Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR,
+                        preferences.getInt(Pd2ControllerBackendPolicy.PREFERENCE, -1));
+                assertEquals(trace, Pd2InputTraceRuntime.requested(activity));
+                Map<String, ?> after = new HashMap<>(preferences.getAll());
+                before.remove(Pd2ControllerBackendPolicy.PREFERENCE);
+                after.remove(Pd2ControllerBackendPolicy.PREFERENCE);
+                assertEquals(before, after);
+            }
+        }
+    }
+
+    @Test public void readerRepairFreshEnvironmentDropsTheOldHintsAndPreservesRuntimeFlags() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        preferences.edit().clear().putString("pd2_arguments", Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS)
+                .putInt(Pd2ControllerBackendPolicy.PREFERENCE,
+                        Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR).commit();
+        Map<String, ?> before = new HashMap<>(preferences.getAll());
+        assertEquals(Pd2LaunchPolicy.environment(Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS, false), runtimeEnvironment(context));
+        assertEquals(before, preferences.getAll());
+        preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE,
+                Pd2ControllerBackendPolicy.STANDARD).commit();
+        assertEquals(Pd2LaunchPolicy.environment(Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS, false), runtimeEnvironment(context));
+    }
+
     @Test public void manualTraceDialogShowsItsChoicesAndCanArmTheNextPlay() {
         try (ActivityController<Pd2Activity> controller = Robolectric.buildActivity(Pd2Activity.class)) {
             Pd2Activity activity = controller.setup().get();

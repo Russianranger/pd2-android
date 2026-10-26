@@ -1,0 +1,25 @@
+{
+  "repository": "brunodev85/wine-9.2-custom",
+  "commit": "a4ef2bf8963fe4bfab390eebf73336364ce209bc",
+  "license": "LGPL-2.1-or-later",
+  "files": {
+    "main.c": {
+      "path": "dlls/xinput1_3/main.c",
+      "blob": "01b229084ef65a4fd1bae832982626a0ecdb6183",
+      "bytes": 22553,
+      "sha256": "b9def9ba88a9663aca2659c76d0693aed8c77f3c540129b0baf86c77f6d1601e"
+    },
+    "xinput1_4.spec": {
+      "path": "dlls/xinput1_4/xinput1_4.spec",
+      "blob": "22c511237ddbaf9099a9371c77cb466db5aa3e76",
+      "bytes": 434,
+      "sha256": "ef26c5e55b36ffd4b2978b30b9ad21d4abd9ef71620134afc2b9bddfcea97e59"
+    }
+  },
+  "base_artifact": {
+    "path": "opt/wine/lib/wine/i386-windows/xinput1_4.dll",
+    "bytes": 49152,
+    "sha256": "c8f692e7fe22fb922886026d97bf39549c8eac12629fee3e06f49078b34a60fa"
+  },
+  "scope": "Exact donor API/codec with separate focused lifecycle header; MinGW public-header compatibility and builtin PE marker"
+}

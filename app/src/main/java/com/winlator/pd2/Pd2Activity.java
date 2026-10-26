@@ -270,22 +270,25 @@ public final class Pd2Activity extends AppCompatActivity {
             }).setNegativeButton("Close", null).show());
     }
     private void showNativeInputSettings() {
-        String[] choices = {"Standard Native (default)", "XInput compatibility (experimental)"};
+        String[] choices = {"Standard Native (default)", "XInput compatibility (previous test)",
+                "XInput reader repair (experimental)"};
         int selected = Pd2ControllerBackendPolicy.normalize(preferences.getInt(
                 Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD));
         Pd2ControllerDialogs.enable(new AlertDialog.Builder(this)
             .setCustomTitle(controllerSettingsHeader("Native input path",
-                    "Try XInput compatibility if Native input stops after Save/Quit. Stop client and Play to apply it. "
-                    + "Selecting compatibility also records one launch of input diagnostics; test briefly and export before Stop. "
-                    + "Return to Standard Native to restore the usual input path."))
+                    "Try XInput reader repair if Native input stops after Save/Quit. Stop client and Play to apply it. "
+                    + "It includes reader diagnostics; export logs after a short test. "
+                    + "Standard Native restores the original XInput module on the next clean Play."))
             .setSingleChoiceItems(choices, selected, (d, which) -> {
                 SharedPreferences.Editor edit = preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE, which);
                 if (which == Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY)
                     edit.putBoolean(Pd2InputTraceRuntime.PREFERENCE, true);
                 edit.apply();
-                operation = which == Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY
-                        ? "XInput compatibility selected. Stop, Play, test Save/Quit briefly and export before Stop."
-                        : "Standard Native selected for the next Play.";
+                operation = which == Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR
+                        ? "XInput reader repair selected. Stop, Play, test Save/Quit and export logs."
+                        : which == Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY
+                        ? "Previous XInput compatibility test selected for the next Play."
+                        : "Standard Native selected for the next clean Play.";
                 d.dismiss(); updateUi();
             }).setNegativeButton("Close", null).show());
     }
@@ -439,6 +442,9 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("controllerRuntime", Pd2ControllerRuntime.status(this))
                 .put("controllerBackendRequested", Pd2ControllerBackendPolicy.modeName(preferences.getInt(
                         Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD)))
+                .put("xinputReaderRuntime", Pd2XInputReaderRuntime.describe(this,
+                        preferences.getInt(Pd2ControllerBackendPolicy.PREFERENCE,
+                                Pd2ControllerBackendPolicy.STANDARD) == Pd2ControllerBackendPolicy.XINPUT_READER_REPAIR))
                 .put("hidReadRuntime", Pd2HidReadRuntime.status(this))
                 .put("inputTraceRuntime", Pd2InputTraceRuntime.status(this))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))
