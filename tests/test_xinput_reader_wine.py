@@ -31,6 +31,9 @@ import zstandard
 
 ROOT = Path(__file__).resolve().parents[1]
 DONOR_SHA = "c8f692e7fe22fb922886026d97bf39549c8eac12629fee3e06f49078b34a60fa"
+ROOTFS_SHA = "ea4cc44e353ec48a4669019a6248850c0030020ea3753e5da6e62a32fdedcae4"
+NTDLL_SHA = "06fc058c06b6540c43e3be3f33f961cb97fe3e86e4f6479483e8328d942a25a1"
+PRELOADER_SHA = "c4d10ef124283c9ab6b5133b071a65928d23e633a63a8d34e7c0690f75a8cc17"
 DLL_PATH = "opt/wine/lib/wine/i386-windows/xinput1_4.dll"
 PROBE_SOURCE = "runtime/xinput-reader/test_wine.c"
 PROBE_FIXTURE = "tests/fixtures/xinput-reader-probe.exe"
@@ -88,6 +91,8 @@ def asset_bytes(name: str, apk: Path | None) -> bytes:
     entry = manifest["files"]["app/src/main/assets/" + name]
     assert 0 < len(data) <= 100 * 1024 * 1024, (name, len(data))
     assert digest(data) == entry["installed_sha256"], (name, digest(data))
+    if name == "rootfs.tzst":
+        assert digest(data) == ROOTFS_SHA, "host preloader workaround requires the reviewed 39-bit Wine9 image"
     return data
 
 
@@ -114,6 +119,32 @@ def extract_archive(data: bytes, destination: Path, wine_only: bool = False) -> 
         devices = destination / ".wine/dosdevices"
         (devices / "c:").symlink_to("../drive_c")
         (devices / "z:").symlink_to("/")
+
+
+def disable_native_host_preloaders(rootfs: Path) -> list[dict]:
+    # Pinned Wine9 loader.c: preloader_exec() falls back to execv(wine) when the
+    # optional preloader is absent, including exec_wineloader() child launches.
+    # Its virtual.c uses 39-bit tables, but the native preloader reserves 47-bit
+    # ranges. Disable only these optional files in this private extracted copy;
+    # the source APK and every Wine DLL remain untouched.
+    wine = rootfs / "opt/wine"
+    assert digest((wine / "lib/wine/x86_64-unix/ntdll.so").read_bytes()) == NTDLL_SHA
+    assert (wine / "bin/wine-preloader").is_file(), "known packaged native preloader missing"
+    changed = []
+    for name in ("wine-preloader", "wine64-preloader"):
+        source = wine / "bin" / name
+        if not source.exists():
+            continue
+        assert not source.is_symlink(), "unexpected preloader symlink"
+        data = source.read_bytes()
+        assert digest(data) == PRELOADER_SHA, "unreviewed native preloader image"
+        disabled = source.with_name(name + ".disabled-for-host-test")
+        assert not disabled.exists()
+        source.rename(disabled)
+        assert not source.exists() and disabled.read_bytes() == data
+        changed.append({"file": "opt/wine/bin/" + name, "bytes": len(data), "sha256": digest(data)})
+    print("Host-only direct-loader setup; native preloader bytes retained: " + json.dumps(changed), flush=True)
+    return changed
 
 
 class Peer:
@@ -366,9 +397,13 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
         "WINEDLLOVERRIDES": "xinput1_4=b;winemenubuilder.exe=d",
         "WINEDEBUG": "-all,err+all,warn+all,+loaddll",
         "DISPLAY": "",
+        # Winlator's virtual.c caps vprot bookkeeping at 39 bits. The native
+        # upstream preloader reserves 47-bit ranges and corrupts that table on
+        # x86-64 CI. Keep Wine's own patched 39-bit fallback reservations instead.
+        "WINELOADERNOEXEC": "1",
     })
     # Prevent a developer's shell overrides from selecting another runtime.
-    for name in ("WINELOADERNOEXEC", "WINEPRELOADRESERVE", "LD_PRELOAD", "BOX64_PATH"):
+    for name in ("WINEPRELOADRESERVE", "LD_PRELOAD", "BOX64_PATH"):
         environment.pop(name, None)
     environment.pop("LD_LIBRARY_PATH", None)
     command = [str(wine / "bin/wine"), "C:\\pd2-xinput-probe.exe"]
@@ -430,7 +465,7 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
                            "states_sent": peer.states, "prefix_processes": prefix_processes(prefix),
                            "environment": {name: environment.get(name) for name in (
                                "WINEPREFIX", "WINELOADER", "WINESERVER", "WINEDLLPATH", "WINEDEBUG",
-                               "WINEARCH", "DISPLAY", "LD_LIBRARY_PATH")},
+                               "WINEARCH", "WINELOADERNOEXEC", "DISPLAY", "LD_LIBRARY_PATH")},
                            "console_preflights": startup_diagnostics(wine, prefix, environment, attempt),
                            "debugger": debugger_diagnostics(wine, environment, attempt)}
                 raise AssertionError("PE probe incomplete: " + json.dumps(failure, sort_keys=True))
@@ -488,6 +523,7 @@ def main() -> None:
         runtime = work / "runtime"
         runtime.mkdir()
         extract_archive(rootfs_bytes, runtime, wine_only=True)
+        disabled_preloaders = disable_native_host_preloaders(runtime)
         target = runtime / DLL_PATH
         assert digest(target.read_bytes()) == DONOR_SHA, "runtime donor module hash mismatch"
         version = subprocess.check_output([str(runtime / "opt/wine/bin/wine"), "--version"], text=True).strip()
@@ -497,7 +533,8 @@ def main() -> None:
         assert replacement[64:80] == b"Wine builtin DLL", "replacement builtin marker missing"
         target.write_bytes(replacement)
         repaired = run_probe(work, runtime, template, common, executable, donor=False)
-        print(json.dumps({"runtime": version, "donor_failure_reproduced": donor,
+        print(json.dumps({"runtime": version, "host_native_preloaders_disabled": disabled_preloaders,
+                          "donor_failure_reproduced": donor,
                           "repair_passed": repaired}, sort_keys=True), flush=True)
 
 
