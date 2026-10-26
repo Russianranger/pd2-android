@@ -2,13 +2,6 @@ name: XInput host qualification
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/xinput-qualification.yml
-      - tests/test_xinput_reader_wine.py
-      - tests/fixtures/xinput-reader-probe.exe
-      - tests/fixtures/xinput-reader-probe.json
 
 permissions:
   contents: read

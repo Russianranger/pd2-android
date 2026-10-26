@@ -2,6 +2,9 @@
 
 ## 0.1.21 XInput reader follow-up
 
+**Qualified preview:** the complete Android/Wine build and independently checked
+APK are recorded below. Physical Save/Quit recovery remains the next gate.
+
 Continued from main `7d247c06a1edae14f4204b80f26a46910163fd66` with standing
 implementation/main-push authorization. The user provisionally accepts the
 0.1.20 cursor fix and rejects Save/Quit recovery. Keep the accepted pointer
@@ -48,8 +51,8 @@ artifact `12687004189` confirms **346 tests across 36 suites**, zero failures or
 ignored tests (59,364-byte wrapper SHA-256
 `208ae89f2d218f13e022c746bce0d88212e29d4324d9c840ce0840ec36375212`).
 The full CI run `40397879910` did not pass because desktop Wine startup blocked
-the separate integration gate. Exact-Wine and offered APK qualification remain
-pending here; physical recovery is unqualified.
+the separate integration gate. The completed module and offered-APK
+qualification are recorded below; physical recovery is unqualified.
 
 The desktop qualification requires Android-build parity, not newer Wine. GDB
 and independent source/disassembly reviews identified the custom 39-bit vprot
@@ -64,7 +67,7 @@ strict. A pinned, reproducibly rebuilt probe fixture avoids repeated compiler
 downloads. Full packaging still requires donor cached-success reproduction and
 successful new DLL loading/API/recovery checks under the packaged Wine 9.
 
-### Passed isolated Wine API gate; final APK build pending
+### Passed isolated Wine API gate
 
 [Wine API CI 40405688231](https://github.com/Russianranger/pd2-android/actions/runs/40405688231)
 passes on source `85aee4987c425dd4adeb79ae38f5ae85625b248d`, job `121862715609`.
@@ -83,8 +86,54 @@ order. Pinned loader/process and socket sources confirm the main probe continues
 and loopback AFD sockets are created directly by wineserver. The actual i386
 loader/API/UDP tests remain mandatory. This does not qualify full Android service
 startup, PD2's private input handling or physical Save/Quit recovery; the app's
-startup configuration is unchanged. The final complete Android build and
-independent offered-APK verification follow this checkpoint.
+startup configuration is unchanged. The complete build and independent offered
+APK verification follow.
+
+### Qualified 0.1.21 source and offered APK
+
+Tested source
+[`bc31d7717006b602e909436d365ab61d9f76fa26`](https://github.com/Russianranger/pd2-android/commit/bc31d7717006b602e909436d365ab61d9f76fa26),
+tree `2aafec56fa5e9ba41ef12844e467a7f0d8b44748`, passes
+[complete CI 40406179315](https://github.com/Russianranger/pd2-android/actions/runs/40406179315),
+job `121864403874`. Independently downloaded raw reports confirm **346 tests
+across 36 suites**, zero failures or ignored tests. Completed logs also confirm
+all 206 runtime pins/relocation, 24 runtime fixtures, retained host regressions,
+19 prepared real AF_UNIX binds, original controller/HID source/artifact/ABI
+checks, the four new XInput tests/14 actual-source ASan/UBSan scenarios, ARM64
+assembly and the actual packaged-Wine API gate. That gate reproduces the donor
+failure and passes all repaired phases with **1,270 dynamic assertions** in
+this final run. Its service/HID isolation scope is stated above; it does not
+qualify PD2 input acceptance on Android.
+
+The offered **CI-built** `PD2-Android-0.1.21-preview.apk` is **174,158,102 bytes**,
+SHA-256 **`73b4feda276deedebd47fbb05e812f3828b496106f43372a4842bb8302a740a2`**.
+Internal SHA256SUMS, ZIP CRCs, duplicate-entry rejection, four-byte alignment,
+`com.pd2.thor`, 0.1.21/code 22, min SDK 26/target 28, ARM64-only native packaging
+and V2 signing are independently verified. The single accepted certificate is
+`a61297bef1be2652b53b763730275e1f0e0975222294602ed8ffa5f8147ddb1e`.
+All **74 prior runtime assets and all 35 native libraries** match the verified
+offered 0.1.20 APK byte-for-byte (baseline SHA-256
+`3917c483520ac510ddc6bb48e5ee13e14620caccc0cf385ccbc1c9050776011f`).
+Only the **two reader DLL/manifest assets** are added (76 total); both match
+committed sources, and the DLL retains exact SHA-256
+`5a05fabaaf028749c306b76103451f72215ce69c0605e3876f9beb981f417ce0`.
+The verified APK was saved successfully for direct delivery.
+
+Artifact `12691062275` is the separate **173,227,823-byte ZIP wrapper**, digest
+`5d1024676a9ce0ca855a20c7c41d73127297a4af36bb55b9ee8ee44c3d5e46cd`.
+Test-report artifact `12691920373` is **59,324 bytes**, digest
+`fc244326d59c80f66629bd9f0c2817f55cd81c19307f32fb549fe82a137adf39`.
+Both wrapper hashes match GitHub metadata; neither is the APK hash. The final
+checkpoint changes documentation and makes the baseline-download diagnostic
+workflow manual-only; app/DLL/fixture code and the offered APK remain tied to
+the tested source above. The normal APK workflow retains its Wine gate against
+freshly prepared pinned assets. No tag/release was published.
+
+Install over the current app, Stop, select **XInput reader repair**, Play and
+follow the short combined test/export. Keep the accepted cursor work and
+original HID/notifications/graphics settings. Save/Quit recovery still needs
+the Thor result; do not claim success or physical reader death from host fault
+reproduction or API freshness alone.
 
 ## 0.1.20 Save/Quit and cursor follow-up
 
