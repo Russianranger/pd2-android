@@ -4,7 +4,9 @@ import android.content.DialogInterface;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.os.Looper;
-import android.view.KeyEvent;
+import android.os.SystemClock;
+import android.view.InputDevice;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -55,6 +57,8 @@ public final class Pd2LauncherPreviewTest {
             layout(content, 1280, 720);
             assertActionsFit(content);
             save(content, "pd2-launcher-landscape.png");
+            previewDialog(activity, "showNativeInputSettings", "pd2-native-input-landscape.png", 1184, 672);
+            previewDialog(activity, "showPerformanceSettings", "pd2-performance-landscape.png", 1184, 672);
 
             Button first = (Button) findText(content, "Prepare runtime");
             assertNotNull(first);
@@ -67,15 +71,14 @@ public final class Pd2LauncherPreviewTest {
                     toolsReached = true;
                     break;
                 }
-                activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN));
-                activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_DOWN));
+                // The launcher owns stick focus navigation. Direct Activity key
+                // dispatch skips ViewRootImpl's final unhandled-D-pad focus stage.
+                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(240));
+                navigateStickDown(activity);
                 shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20));
             }
-            assertTrue("D-pad navigation must reach the support/tools actions below the first viewport", toolsReached);
             save(content, "pd2-launcher-landscape-tools.png");
-
-            previewDialog(activity, "showNativeInputSettings", "pd2-native-input-landscape.png", 1184, 672);
-            previewDialog(activity, "showPerformanceSettings", "pd2-performance-landscape.png", 1184, 672);
+            assertTrue("Controller stick navigation must reach the support/tools actions below the first viewport", toolsReached);
         }
     }
 
@@ -164,6 +167,20 @@ public final class Pd2LauncherPreviewTest {
         view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, width, height);
+    }
+
+    private static void navigateStickDown(Pd2Activity activity) {
+        MotionEvent.PointerProperties pointer = new MotionEvent.PointerProperties();
+        pointer.id = 0;
+        pointer.toolType = MotionEvent.TOOL_TYPE_UNKNOWN;
+        MotionEvent.PointerCoords coordinates = new MotionEvent.PointerCoords();
+        coordinates.setAxisValue(MotionEvent.AXIS_Y, 1.0f);
+        long now = SystemClock.uptimeMillis();
+        MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_MOVE, 1,
+                new MotionEvent.PointerProperties[]{pointer}, new MotionEvent.PointerCoords[]{coordinates},
+                0, 0, 1.0f, 1.0f, 0, 0, InputDevice.SOURCE_JOYSTICK, 0);
+        try { assertTrue("The launcher must handle its controller stick navigation", activity.onGenericMotionEvent(event)); }
+        finally { event.recycle(); }
     }
 
     private static void save(View view, String name) throws Exception {
