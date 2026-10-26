@@ -212,9 +212,85 @@ class Peer:
 
 
 def read_lines(pipe, lines: queue.Queue) -> None:
-    for line in iter(pipe.readline, ""):
-        lines.put(line.rstrip("\r\n"))
-    lines.put(None)
+    try:
+        for line in iter(pipe.readline, ""):
+            lines.put(line.rstrip("\r\n"))
+    finally:
+        lines.put(None)
+
+
+def bounded_text(path: Path, limit: int = 12000) -> str:
+    if not path.exists():
+        return ""
+    size = path.stat().st_size
+    with path.open("rb") as source:
+        if size <= limit:
+            data = source.read(limit)
+        else:
+            data = source.read(limit // 2)
+            source.seek(-limit // 2, os.SEEK_END)
+            data += b"\n[diagnostic middle omitted]\n" + source.read(limit // 2)
+    return data.decode("utf-8", errors="replace")
+
+
+def signal_name(code) -> str | None:
+    if not isinstance(code, int) or code >= 0:
+        return None
+    try:
+        return signal.Signals(-code).name
+    except ValueError:
+        return "signal " + str(-code)
+
+
+def prefix_processes(prefix: Path) -> list[dict]:
+    """Describe only this test prefix's processes, without exporting environments."""
+    result = []
+    marker = ("WINEPREFIX=" + str(prefix)).encode()
+    for directory in Path("/proc").iterdir():
+        if not directory.name.isdigit():
+            continue
+        try:
+            if marker not in (directory / "environ").read_bytes().split(b"\0"):
+                continue
+            status = (directory / "status").read_text()
+            item = {}
+            for line in status.splitlines():
+                key, _, value = line.partition(":")
+                if key in {"Name", "Pid", "PPid", "Threads", "State"}:
+                    item[key] = value.strip()
+            result.append(item)
+        except (OSError, ValueError):
+            continue
+    return result[:32]
+
+
+def startup_diagnostics(wine: Path, prefix: Path, environment: dict, attempt: Path) -> list[dict]:
+    """Failure-only PE64/PE32 console markers; this never turns a failure into a pass."""
+    diagnostic_env = environment.copy()
+    diagnostic_env["WINEDEBUG"] = "-all,err+all,warn+all,+loaddll,+module,+process,+seh"
+    results = []
+    for bits, folder in ((64, "system32"), (32, "syswow64")):
+        marker = "PD2_WINE" + str(bits) + "_READY"
+        command = [str(wine / "bin/wine"), "C:\\windows\\" + folder + "\\cmd.exe", "/c", "echo", marker]
+        stdout_path, stderr_path = attempt / f"startup-{bits}.out", attempt / f"startup-{bits}.err"
+        with stdout_path.open("w") as output, stderr_path.open("w") as errors:
+            process = subprocess.Popen(command, env=diagnostic_env, cwd=attempt, stdin=subprocess.DEVNULL,
+                                       stdout=output, stderr=errors, start_new_session=True)
+            try:
+                code = process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGTERM)
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait(timeout=2)
+                code = "timeout"
+        results.append({"bits": bits, "command": command, "returncode": code,
+                        "unix_returncode_hex": hex(code & 0xffffffff) if isinstance(code, int) else None,
+                        "signal": signal_name(code),
+                        "stdout": bounded_text(stdout_path, 2000), "stderr": bounded_text(stderr_path)})
+    return results
 
 
 def seed_common_dlls(rootfs: Path, prefix: Path, common: dict) -> None:
@@ -248,12 +324,13 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
         "WINESERVER": str(wine / "bin/wineserver"),
         "WINEDLLPATH": str(wine / "lib/wine"),
         "WINEDLLOVERRIDES": "xinput1_4=b;winemenubuilder.exe=d",
-        "WINEDEBUG": "-all,warn+all,+loaddll",
+        "WINEDEBUG": "-all,err+all,warn+all,+loaddll",
         "DISPLAY": "",
     })
     # Prevent a developer's shell overrides from selecting another runtime.
     for name in ("WINELOADERNOEXEC", "WINEPRELOADRESERVE", "LD_PRELOAD", "BOX64_PATH"):
         environment.pop(name, None)
+    environment.pop("LD_LIBRARY_PATH", None)
     command = [str(wine / "bin/wine"), "C:\\pd2-xinput-probe.exe"]
     if donor:
         command.append("donor")
@@ -277,7 +354,7 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
                 try:
                     line = lines.get(timeout=0.2)
                 except queue.Empty:
-                    if process.poll() is not None:
+                    if process.poll() is not None and not reader.is_alive():
                         break
                     continue
                 if line is None:
@@ -303,7 +380,19 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
                 elif line.startswith("PROBE PASS ") or line.startswith("PROBE DONOR_STALE_REPRODUCED "):
                     completed = True
                     break
-            assert completed, "PE probe incomplete: " + "\n".join(output) + "\n" + stderr_path.read_text()[-10000:]
+            if not completed:
+                code = process.poll()
+                failure = {"command": command, "returncode": code,
+                           "unix_returncode_hex": hex(code & 0xffffffff) if isinstance(code, int) else None,
+                           "signal": signal_name(code),
+                           "stdout_reader_alive": reader.is_alive(), "stdout": output,
+                           "stderr": bounded_text(stderr_path), "discoveries": peer.discoveries,
+                           "states_sent": peer.states, "prefix_processes": prefix_processes(prefix),
+                           "environment": {name: environment.get(name) for name in (
+                               "WINEPREFIX", "WINELOADER", "WINESERVER", "WINEDLLPATH", "WINEDEBUG",
+                               "WINEARCH", "DISPLAY", "LD_LIBRARY_PATH")},
+                           "console_preflights": startup_diagnostics(wine, prefix, environment, attempt)}
+                raise AssertionError("PE probe incomplete: " + json.dumps(failure, sort_keys=True))
             assert process.wait(timeout=5) == 0, "PE probe failed: " + "\n".join(output)
             reader.join(timeout=1)
         wine_log = stderr_path.read_text()

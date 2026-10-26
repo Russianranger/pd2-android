@@ -1,0 +1,71 @@
+name: XInput host qualification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/xinput-qualification.yml
+      - tests/test_xinput_reader_wine.py
+      - tests/fixtures/xinput-reader-probe.exe
+      - tests/fixtures/xinput-reader-probe.json
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: xinput-host-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned archive decoder
+        run: python3 -m pip install zstandard==0.25.0
+      - name: Verify XInput runtime sources and fixture
+        run: |
+          python3 scripts/build-xinput-reader-runtime.py --check
+          python3 tests/test_xinput_reader_wine.py --check-fixture
+      # The qualified 0.1.20 donor artifact expires 2026-11-25. This temporary
+      # diagnostic workflow must be retired or repinned after qualification.
+      - name: Download and verify the qualified Wine 9 baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method GET repos/Russianranger/pd2-android/actions/artifacts/12622999546/zip > "$RUNNER_TEMP/pd2-wine-baseline.zip"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import shutil
+          import zipfile
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          wrapper = root / 'pd2-wine-baseline.zip'
+          expected_wrapper = 'b09b637e5700fb230e137a03df448e780d21664cebe4171d3e6c0f40c35117a2'
+          expected_apk = '3917c483520ac510ddc6bb48e5ee13e14620caccc0cf385ccbc1c9050776011f'
+          name = 'PD2-Android-0.1.20-preview.apk'
+          with wrapper.open('rb') as source:
+              assert hashlib.file_digest(source, 'sha256').hexdigest() == expected_wrapper
+          with zipfile.ZipFile(wrapper) as archive:
+              assert set(archive.namelist()) == {name, 'SHA256SUMS'}
+              assert len(archive.namelist()) == 2
+              checksum = archive.read('SHA256SUMS').decode().strip().split()
+              assert checksum == [expected_apk, name], checksum
+              with archive.open(name) as source, (root / 'pd2-wine-baseline.apk').open('wb') as output:
+                  shutil.copyfileobj(source, output, length=1024 * 1024)
+          with (root / 'pd2-wine-baseline.apk').open('rb') as source:
+              assert hashlib.file_digest(source, 'sha256').hexdigest() == expected_apk
+          print('Verified qualified 0.1.20 APK and its artifact wrapper.')
+          PY
+      - name: Prepare packaged Wine host socket directory
+        run: sudo install -d -m 700 -o "$(id -u)" -g "$(id -g)" /data/data/com.pd2.thor/files/rootfs/tmp
+      - name: Verify exact Wine 9 XInput reader recovery
+        run: python3 tests/test_xinput_reader_wine.py --apk "$RUNNER_TEMP/pd2-wine-baseline.apk"
