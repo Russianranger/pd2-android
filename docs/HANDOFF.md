@@ -42,10 +42,49 @@ scenarios with ASan/UBSan. The i386 DLL is 53,760 bytes, SHA-256
 `5a05fabaaf028749c306b76103451f72215ce69c0605e3876f9beb981f417ce0`.
 Its named/ordinal exports, imports, builtin marker and PE checksum are checked.
 Fourteen installer cases and an actual donor/replacement/rollback round trip
-also pass locally. Android CI, exact-Wine integration and offered APK
-qualification are pending at this source checkpoint. Exact-Wine testing must reproduce the donor
-cached-success failure and exercise the new PE32 DLL under the packaged Wine 9,
-not substitute a newer system Wine. Physical recovery remains unqualified.
+also pass locally. Android tests and ARM64 assembly pass at source
+`e3a9c9cfa414507d4f5acbac52a4385744336579`; independently downloaded report
+artifact `12687004189` confirms **346 tests across 36 suites**, zero failures or
+ignored tests (59,364-byte wrapper SHA-256
+`208ae89f2d218f13e022c746bce0d88212e29d4324d9c840ce0840ec36375212`).
+The full CI run `40397879910` did not pass because desktop Wine startup blocked
+the separate integration gate. Exact-Wine and offered APK qualification remain
+pending here; physical recovery is unqualified.
+
+The desktop qualification requires Android-build parity, not newer Wine. GDB
+and independent source/disassembly reviews identified the custom 39-bit vprot
+table receiving a native preloader's 47-bit reservation. The host harness uses
+`WINELOADERNOEXEC=1` and retains the hash-verified preloader under a disabled name
+only in its private extracted test copy, selecting Wine's documented direct
+fallback for initial and child processes. Original APK/DLL/ntdll bytes are
+unchanged. The private prefix receives the app's existing-only ESSENTIAL service
+Start policy and may use an already installed virtual display. Startup has a
+separate bounded allowance; the PE probe's recovery/stale-state deadlines remain
+strict. A pinned, reproducibly rebuilt probe fixture avoids repeated compiler
+downloads. Full packaging still requires donor cached-success reproduction and
+successful new DLL loading/API/recovery checks under the packaged Wine 9.
+
+### Passed isolated Wine API gate; final APK build pending
+
+[Wine API CI 40405688231](https://github.com/Russianranger/pd2-android/actions/runs/40405688231)
+passes on source `85aee4987c425dd4adeb79ae38f5ae85625b248d`, job `121862715609`.
+The exact Wine 9 donor loads and reproduces a frozen successful state after a
+real oversized UDP receive failure while new controls continue arriving. The
+replacement then passes actual PE32 loading, named/ordinal API and Xbox mapping
+checks, changed-state recovery, sustained holds with independent discovery,
+six-second stale expiry/resumption, and active FreeLibrary/reload pinning.
+The successful run has 1,268 dynamic assertions, nine repaired discoveries and
+336 sent state frames; these scheduling-dependent counts are not fixed gates.
+Builtin load lines and the replacement's own telemetry establish execution.
+
+This is isolated module qualification: private host-test prefixes disable
+Wineboot/service/HID bootstrap using the supported empty `wineboot.exe=` load
+order. Pinned loader/process and socket sources confirm the main probe continues
+and loopback AFD sockets are created directly by wineserver. The actual i386
+loader/API/UDP tests remain mandatory. This does not qualify full Android service
+startup, PD2's private input handling or physical Save/Quit recovery; the app's
+startup configuration is unchanged. The final complete Android build and
+independent offered-APK verification follow this checkpoint.
 
 ## 0.1.20 Save/Quit and cursor follow-up
 
