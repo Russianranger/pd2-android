@@ -1,5 +1,45 @@
 # PD2 Android handoff
 
+## 0.1.20 Save/Quit and cursor follow-up
+
+Continued from main `7e4ff2f26ba48bcb5759f22ed7f6417a55484a99` with the user's
+standing implementation/main-push authorization. The 0.1.19 physical result still
+rejects Native after Save/Quit and adds occasional cursor continuation after
+stick release. [New evidence](evidence/2026-10-25-savequit-cursor.md) identifies the
+current attempts and source defects; archive timestamps must not be mistaken
+for launch times. Both current attempts retain live input/backend delivery and
+clean teardown. Another paired reconnect failed; no competing pad, dead reader,
+user-index migration, transport failure or low-memory cause is established.
+
+**0.1.20/code 21** retires owned pointer tasks and queued ordinary Menu moves on
+neutral/cancel/lifecycle/device events, rejects stale callbacks/events and
+balances cleanup through reentrant route changes. It keeps sustained holds
+without an event-rate timeout. InputManager removal/change notifications and
+per-device thumb retirement close the device-lifetime path. Initial Menu feedback,
+centering, clicks, balancing releases and the gold reticle remain.
+Delivered Native thumbs are balanced before removing their shortcut owner,
+preserving other controls and devices. Local checks pass 26 real-router scenarios,
+13 Menu-pointer scenarios/170 checks, 15 pure JUnit tests, existing host checks and
+24 runtime fixture tests. The accepted controller/HID source/artifact/ABI checks
+also pass. New Android UI/producer cases still require CI at this checkpoint.
+
+The new opt-in **XInput compatibility (experimental)** consumer policy requests
+three SDL hints at fresh launch, retaining the live Wine HID device. It changes
+no game or runtime DLL and is distinct from prior HID-removal/reconnect tests.
+PD2's exact private linkage and consumption of the hints are unproven. Standard
+Native remains the default and restores the original fresh environment. Selecting
+compatibility also arms the existing one-launch API return trace. Both trace
+and Native choice lists now attach visibly; the previous message-plus-list
+layout could hide the trace choices. No raw controller values are added.
+
+Wine 9.2/Box64/rootfs/controller/HID/XInput binaries, bindings, imports/prefix/saves,
+graphics/GameNative/Stability, cleanup and signer are preserved. Follow the
+combined [test](TESTING.md), export before Stop, and keep the original HID driver
+and controller notifications enabled. Physical cursor and Save/Quit results are
+pending; do not claim the compatibility hints were consumed from environment
+presence or API call counts alone. Local host tests pass; full Android and APK
+qualification is pending CI at this source checkpoint.
+
 ## 0.1.19 controller and rendering pass
 
 Continued from live main `a0107242f2817af45981022d13dbc2e682dbd1aa` under explicit

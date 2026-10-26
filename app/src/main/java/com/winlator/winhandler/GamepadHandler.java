@@ -408,6 +408,18 @@ public class GamepadHandler {
         if (hidSubscribed) sendHidState(neutral);
     }
 
+    /** Balance already delivered Native thumbs before a device's shortcut ownership is retired. */
+    public void releaseThumbButtons(int deviceId) {
+        ExternalController controller = getConnectedControllerById(deviceId);
+        if (controller == null) return;
+        GamepadState state = controller.getGamepadState();
+        int thumbMask = (1 << ExternalController.IDX_BUTTON_L3) | (1 << ExternalController.IDX_BUTTON_R3);
+        short released = (short)(state.buttons & ~thumbMask);
+        if (released == state.buttons) return;
+        state.buttons = released;
+        sendGamepadState(controller);
+    }
+
     public static class GamepadModel {
         public final String name;
         public final short vendorId;

@@ -260,6 +260,36 @@ public final class Pd2Activity extends AppCompatActivity {
           .setPositiveButton("Controller", (d, w) -> showControllerSettings()).setNegativeButton("Close", null).show());
     }
     private void showControllerSettings() {
+        String[] choices = {"Native input path", "Controller notifications", "Save/Quit experiment", "Input trace"};
+        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Controller")
+            .setItems(choices, (d, which) -> {
+                if (which == 0) showNativeInputSettings();
+                else if (which == 1) showControllerNotificationsSettings();
+                else if (which == 2) showHidReadSettings();
+                else showInputTraceSettings();
+            }).setNegativeButton("Close", null).show());
+    }
+    private void showNativeInputSettings() {
+        String[] choices = {"Standard Native (default)", "XInput compatibility (experimental)"};
+        int selected = Pd2ControllerBackendPolicy.normalize(preferences.getInt(
+                Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD));
+        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this)
+            .setCustomTitle(controllerSettingsHeader("Native input path",
+                    "Try XInput compatibility if Native input stops after Save/Quit. Stop client and Play to apply it. "
+                    + "Selecting compatibility also records one launch of input diagnostics; test briefly and export before Stop. "
+                    + "Return to Standard Native to restore the usual input path."))
+            .setSingleChoiceItems(choices, selected, (d, which) -> {
+                SharedPreferences.Editor edit = preferences.edit().putInt(Pd2ControllerBackendPolicy.PREFERENCE, which);
+                if (which == Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY)
+                    edit.putBoolean(Pd2InputTraceRuntime.PREFERENCE, true);
+                edit.apply();
+                operation = which == Pd2ControllerBackendPolicy.XINPUT_COMPATIBILITY
+                        ? "XInput compatibility selected. Stop, Play, test Save/Quit briefly and export before Stop."
+                        : "Standard Native selected for the next Play.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
+    }
+    private void showControllerNotificationsSettings() {
         String[] modes = {"Controller notifications enabled (default)", "Controller notifications disabled"};
         int selected = Pd2ControllerRuntime.enabled(this) ? 0 : 1;
         Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Native controller")
@@ -267,22 +297,40 @@ public final class Pd2Activity extends AppCompatActivity {
                 preferences.edit().putBoolean(Pd2ControllerRuntime.ENABLED_PREFERENCE, which == 0).apply();
                 operation = "Controller setting saved. Restart the app before launching the game to apply it.";
                 d.dismiss(); updateUi();
-            }).setNeutralButton("Save/Quit experiment", (d, w) -> showHidReadSettings())
-              .setPositiveButton("Input trace", (d, w) -> showInputTraceSettings())
-              .setNegativeButton("Close", null).show());
+            }).setNegativeButton("Close", null).show());
     }
     private void showInputTraceSettings() {
         String[] choices = {"Off (default)", "Trace the next Play only"};
-        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this).setTitle("Controller input trace")
-            .setMessage("Records selected Windows API calls and return codes, without controller values. "
+        Pd2ControllerDialogs.enable(new AlertDialog.Builder(this)
+            .setCustomTitle(controllerSettingsHeader("Controller input trace",
+                    "Records selected Windows API calls and return codes, without controller values. "
                     + "Use a short test, then export logs before Stop. Trace overhead lasts until Stop; "
-                    + "the existing runtime log size limit still applies. Existing Wine debug settings are restored after clean cleanup.")
+                    + "the existing runtime log size limit still applies. Existing Wine debug settings are restored after clean cleanup."))
             .setSingleChoiceItems(choices, Pd2InputTraceRuntime.requested(this) ? 1 : 0, (d, which) -> {
                 preferences.edit().putBoolean(Pd2InputTraceRuntime.PREFERENCE, which == 1).apply();
                 operation = which == 1 ? "Input trace selected for the next clean Play. Export after a short test, before Stop."
                         : "Input trace off. Stop client to finish any running trace.";
                 d.dismiss(); updateUi();
             }).setNegativeButton("Close", null).show());
+    }
+    /** AlertDialog cannot show its message panel and a choice list together. */
+    private View controllerSettingsHeader(String title, String explanation) {
+        int padding = Math.round(20 * getResources().getDisplayMetrics().density);
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(padding, padding, padding, padding / 2);
+        TextView heading = new TextView(this);
+        heading.setText(title);
+        heading.setTextSize(20);
+        heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        heading.setTextColor(0xFFE2B966);
+        TextView summary = new TextView(this);
+        summary.setText(explanation);
+        summary.setTextSize(14);
+        summary.setPadding(0, padding / 2, 0, 0);
+        header.addView(heading);
+        header.addView(summary);
+        return header;
     }
     private void showHidReadSettings() {
         String[] modes = {"Original Wine driver (default)", "HID read cancellation fix (experimental)"};
@@ -389,6 +437,8 @@ public final class Pd2Activity extends AppCompatActivity {
                 .put("inputMode", preferences.getBoolean("pd2_mouse_keyboard", false) ? "mouse_keyboard" : "native")
                 .put("inputModeScope", "Saved gameplay preference; current session mode and transitions are in controller.json")
                 .put("controllerRuntime", Pd2ControllerRuntime.status(this))
+                .put("controllerBackendRequested", Pd2ControllerBackendPolicy.modeName(preferences.getInt(
+                        Pd2ControllerBackendPolicy.PREFERENCE, Pd2ControllerBackendPolicy.STANDARD)))
                 .put("hidReadRuntime", Pd2HidReadRuntime.status(this))
                 .put("inputTraceRuntime", Pd2InputTraceRuntime.status(this))
                 .put("arguments", preferences.getString("pd2_arguments", "-3dfx -w"))

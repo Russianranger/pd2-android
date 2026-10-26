@@ -26,6 +26,7 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
     private final EnumSet<XKeycode> keys = EnumSet.noneOf(XKeycode.class);
     private volatile boolean active;
     private volatile long generation;
+    private volatile long motionGeneration;
     private boolean movePending;
     private boolean initializing;
     private boolean recenterPending;
@@ -41,6 +42,7 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
     public synchronized void activate() {
         if (active) return;
         generation++;
+        motionGeneration++;
         active = true;
         movePending = false;
         hasFeedback = false;
@@ -53,7 +55,7 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
                         () -> active && generation == epoch);
             }
             // A zero move asks the Windows helper for GetCursorPos before using any cached X position.
-            sendMove(0, 0);
+            sendMove(0, 0, true);
         }
     }
 
@@ -75,6 +77,7 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
     public synchronized void deactivate() {
         active = false;
         generation++;
+        motionGeneration++;
         movePending = false;
         hasFeedback = false;
         initializing = recenterPending = false;
@@ -93,9 +96,17 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
             try (XLock ignored = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.INPUT_DEVICE)) {
                 Bounds bounds = selectBounds();
                 sendMove(bounds.left + (bounds.right - bounds.left) / 2 - x,
-                        bounds.top + (bounds.bottom - bounds.top) / 2 - y);
+                        bounds.top + (bounds.bottom - bounds.top) / 2 - y, true);
             }
         } else initializing = false;
+    }
+
+    /** Retire queued stick deltas without cancelling cursor synchronization or held controls. */
+    @Override public synchronized void stopMotion() {
+        motionGeneration++;
+        // An expired ordinary move will not receive feedback. Let the next stroke
+        // start immediately, while initial query/recenter still waits for its reply.
+        if (!initializing) movePending = false;
     }
 
     @Override public synchronized void move(int dx, int dy) {
@@ -104,7 +115,7 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
         if (initializing) {
             // A lost initial reply must not turn stale desktop coordinates into a relative warp.
             recenterPending = true;
-            sendMove(0, 0);
+            sendMove(0, 0, true);
             return;
         }
         try (XLock ignored = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.INPUT_DEVICE)) {
@@ -113,14 +124,16 @@ public final class Pd2MenuPointer implements Pd2InputRouter.MenuInput {
             int y = hasFeedback ? feedbackY : xServer.pointer.getY();
             int targetX = clamp((long)x + dx, bounds.left, bounds.right - 1);
             int targetY = clamp((long)y + dy, bounds.top, bounds.bottom - 1);
-            if (targetX != x || targetY != y) sendMove(targetX - x, targetY - y);
+            if (targetX != x || targetY != y) sendMove(targetX - x, targetY - y, false);
         }
     }
 
-    private void sendMove(int dx, int dy) {
+    private void sendMove(int dx, int dy, boolean synchronization) {
         if (!active || !winHandler.isInputReady()) return;
         final long epoch = generation;
-        BooleanSupplier allowed = () -> active && generation == epoch;
+        final long motionEpoch = motionGeneration;
+        BooleanSupplier allowed = () -> active && generation == epoch
+                && (synchronization || motionGeneration == motionEpoch);
         winHandler.mouseEvent(MouseEventFlags.MOVE, clamp(dx, Short.MIN_VALUE, Short.MAX_VALUE),
                 clamp(dy, Short.MIN_VALUE, Short.MAX_VALUE), 0, allowed);
         winHandler.controllerDiagnostics.recordPointerOutput("move");

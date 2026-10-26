@@ -13,21 +13,30 @@ STUBS = {
     "android/os/Looper.java": """package android.os;
 public class Looper { public static Looper getMainLooper() { return new Looper(); } }
 """,
+    "android/os/SystemClock.java": """package android.os;
+public class SystemClock { public static long now=1000; public static long uptimeMillis() { return now; } }
+""",
     "android/os/Handler.java": """package android.os;
 import java.util.ArrayList;
 public class Handler {
  public static final ArrayList<Runnable> queue = new ArrayList<>();
  public Handler(Looper l) {}
- public void post(Runnable r) { queue.add(r); }
- public void postDelayed(Runnable r, long delay) { queue.add(r); }
+ public static boolean rejectNext;
+ public boolean post(Runnable r) { if (rejectNext) { rejectNext=false; return false; } queue.add(r); return true; }
+ public boolean postDelayed(Runnable r, long delay) { return post(r); }
  public void removeCallbacks(Runnable r) { queue.removeIf(item -> item == r); }
- public static void tick() { if (!queue.isEmpty()) queue.remove(0).run(); }
+ public static void tick() { SystemClock.now+=16; if (!queue.isEmpty()) queue.remove(0).run(); }
 }
 """,
     "android/view/InputDevice.java": """package android.view;
 import java.util.HashSet;
 public class InputDevice {
+ public static final int SOURCE_JOYSTICK=0x1000010;
+ public static final java.util.HashMap<Integer,InputDevice> devices = new java.util.HashMap<>();
  public final HashSet<Integer> axes = new HashSet<>();
+ public String descriptor="fixture";
+ public String getDescriptor() { return descriptor; }
+ public static InputDevice getDevice(int id) { return devices.get(id); }
  public boolean gamepad = true;
  public InputDevice() { axes.add(MotionEvent.AXIS_LTRIGGER); axes.add(MotionEvent.AXIS_RTRIGGER); axes.add(MotionEvent.AXIS_BRAKE); axes.add(MotionEvent.AXIS_GAS); }
  public static class MotionRange {}
@@ -42,8 +51,10 @@ public class KeyEvent {
  KEYCODE_BUTTON_THUMBL=106, KEYCODE_BUTTON_THUMBR=107, KEYCODE_BUTTON_START=108, KEYCODE_BUTTON_SELECT=109,
  KEYCODE_DPAD_UP=19, KEYCODE_DPAD_DOWN=20, KEYCODE_DPAD_LEFT=21, KEYCODE_DPAD_RIGHT=22;
  private final int deviceId, code; public int action, flags, repeats;
+ public long eventTime=++android.os.SystemClock.now;
  public boolean gamepad = true;
  public KeyEvent(int id, int code, int action) { deviceId=id; this.code=code; this.action=action; }
+ public long getEventTime() { return eventTime; }
  public int getRepeatCount() { return repeats; }
  public int getFlags() { return flags; }
  public int getAction() { return action; }
@@ -57,13 +68,25 @@ import java.util.HashMap;
 public class MotionEvent {
  public static final int AXIS_X=0, AXIS_Y=1, AXIS_Z=11, AXIS_RZ=14, AXIS_RX=12, AXIS_RY=13,
  AXIS_HAT_X=15, AXIS_HAT_Y=16, AXIS_LTRIGGER=17, AXIS_RTRIGGER=18, AXIS_BRAKE=23, AXIS_GAS=22;
- public final HashMap<Integer, Float> values = new HashMap<>();
+ public static final int ACTION_MOVE=2,ACTION_CANCEL=3,ACTION_HOVER_MOVE=7;
+ public final HashMap<Integer, Float> values = new HashMap<>(), past = new HashMap<>();
  public boolean joystick = true;
  public InputDevice device = new InputDevice();
+ public int deviceId=1, source=InputDevice.SOURCE_JOYSTICK, action=ACTION_MOVE;
+ public long eventTime=++android.os.SystemClock.now;
+ public MotionEvent() { InputDevice.devices.put(deviceId,device); }
+ public MotionEvent id(int id) { deviceId=id; InputDevice.devices.put(id,device); return this; }
+ public MotionEvent source(int value) { source=value; return this; }
+ public MotionEvent action(int value) { action=value; return this; }
+ public MotionEvent at(long value) { eventTime=value; return this; }
+ public MotionEvent history(int id,float value) { past.put(id,value); return this; }
  public MotionEvent axis(int id, float value) { values.put(id,value); device.axes.add(id); return this; }
  public float getAxisValue(int id) { return values.getOrDefault(id,0f); }
- public int getDeviceId() { return 1; }
- public int getSource() { return 0; }
+ public int getDeviceId() { return deviceId; }
+ public int getSource() { return joystick?source:8194; }
+ public int getAction() { return action; }
+ public int getActionMasked() { return action & 255; }
+ public long getEventTime() { return eventTime; }
  public InputDevice getDevice() { return device; }
 }
 """,
@@ -383,7 +406,264 @@ public class RouterTest {
   check(!router.motion(detached),"detached controller motion accepted");
   router.releaseAll();
  }
+ static void sustainedStickNeedsNoRepeatAndLatestNeutralStopsIt() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink); router.setMenuControls(true);
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,0.7f));
+  for(int i=0;i<400;i++) Handler.tick();
+  check(sink.pointerMoves==400 && Handler.queue.size()==1,"valid sustained hold stopped without Android repeat motion");
+  Runnable retired=Handler.queue.get(0);
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,0).history(MotionEvent.AXIS_Z,1));
+  int moves=sink.pointerMoves;
+  check(Handler.queue.isEmpty(),"latest neutral sample left cursor callback scheduled");
+  retired.run(); Handler.tick();
+  check(sink.pointerMoves==moves && Handler.queue.isEmpty(),"historical/non-neutral or retired sample revived neutral cursor");
+  router.releaseAll();
+ }
+ static void cancelAndDisconnectRetireOnlyTheirOwnMotion() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink);
+  router.keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_X,true));
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_X,1).axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  Runnable retired=Handler.queue.get(0);
+  check(router.acceptsMotion(new MotionEvent().action(MotionEvent.ACTION_CANCEL)),"joystick cancel cannot reach router");
+  router.motion(new MotionEvent().action(MotionEvent.ACTION_CANCEL));
+  check(Handler.queue.isEmpty() && !sink.keys.contains(XKeycode.KEY_D) && sink.keys.contains(XKeycode.KEY_SHIFT_L),"cancel failed to release only its analog stream");
+  int moves=sink.pointerMoves; retired.run();
+  check(sink.pointerMoves==moves && Handler.queue.isEmpty(),"cancelled timer restarted");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  InputDevice.devices.remove(1); moves=sink.pointerMoves; Handler.tick();
+  check(sink.pointerMoves==moves && Handler.queue.isEmpty(),"removed device kept moving cursor");
+  check(sink.keys.contains(XKeycode.KEY_SHIFT_L),"removed device released another pad's held key");
+  router.releaseAll();
+ }
+ static void unrelatedStreamsCannotStealOrCancelCursorOwner() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink); router.setMenuControls(true);
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  router.motion(new MotionEvent().id(2).axis(MotionEvent.AXIS_Z,-1));
+  router.motion(new MotionEvent().id(2).action(MotionEvent.ACTION_CANCEL)); Handler.tick();
+  check(sink.lastDeltaX>0 && Handler.queue.size()==1,"unrelated controller replaced or cancelled active cursor");
+  router.motion(new MotionEvent().source(InputDevice.SOURCE_JOYSTICK|0x400).axis(MotionEvent.AXIS_Z,-1)); Handler.tick();
+  check(sink.lastDeltaX>0,"different source on composite controller replaced cursor vector");
+  int moves=sink.pointerMoves;
+  check(!router.motion(new MotionEvent().action(MotionEvent.ACTION_HOVER_MOVE)),"unrelated action was treated as joystick movement");
+  Handler.tick(); check(sink.pointerMoves==moves+1 && sink.lastDeltaX>0,"unsupported action changed valid held cursor");
+  router.motion(new MotionEvent()); check(Handler.queue.isEmpty(),"owner's neutral did not stop cursor");
+  router.motion(new MotionEvent().id(2).axis(MotionEvent.AXIS_Z,-1)); Handler.tick();
+  check(sink.lastDeltaX<0,"second controller could not acquire cursor after owner centered");
+  router.releaseAll();
+ }
+ static void oldCallbacksAndDelayedEventsCannotDriveReplacementRoute() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink); router.setMenuControls(true);
+  long start=android.os.SystemClock.uptimeMillis();
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1).at(start+10)); Handler.tick();
+  Runnable old=Handler.queue.get(0);
+  router.motion(new MotionEvent().at(start+30));
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1).at(start+20));
+  check(Handler.queue.isEmpty(),"out-of-order non-neutral sample revived centered cursor");
+  router.releaseAll();
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1).at(start-1));
+  check(Handler.queue.isEmpty(),"event predating lifecycle release revived cursor");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,-1));
+  int queued=Handler.queue.size(), moves=sink.pointerMoves;
+  old.run();
+  check(Handler.queue.size()==queued && sink.pointerMoves==moves,"retired callback drove replacement vector or duplicated its timer");
+  Handler.tick(); check(sink.lastDeltaX<0,"replacement route lost its new cursor input");
+  router.releaseAll();
+ }
+ static void injectionReentrancyCannotRequeueRetiredMotion() {
+  XServer sink=new XServer(); final Pd2InputRouter[] route=new Pd2InputRouter[1];
+  class Backend implements Pd2InputRouter.MenuInput {
+   int moves;
+   public void move(int x,int y) { moves++; route[0].releaseAll(); }
+   public void button(Pointer.Button b,boolean down) {}
+   public void key(XKeycode k,boolean down) {}
+  }
+  Backend backend=new Backend(); route[0]=new Pd2InputRouter(sink,backend); route[0].setMenuControls(true);
+  route[0].motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  check(backend.moves==1 && Handler.queue.isEmpty(),"reentrant route closure requeued retired cursor");
+  route[0].releaseAll();
+ }
+ static void explicitDeviceRemovalBalancesItsOwnersAndRejectsQueuedInput() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink); router.setMenuControls(true);
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  router.keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_A,true));
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  long beforeRemoval=android.os.SystemClock.uptimeMillis()-1;
+  router.releaseDevice(1);
+  check(Handler.queue.isEmpty() && sink.buttons.contains(Pointer.Button.BUTTON_LEFT),"device removal stopped other controller's shared click or left motion active");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1).at(beforeRemoval));
+  check(Handler.queue.isEmpty(),"queued pre-removal event resurrected removed cursor owner");
+  router.motion(new MotionEvent().id(2).axis(MotionEvent.AXIS_Z,-1)); Handler.tick();
+  check(sink.lastDeltaX<0,"other controller could not use cursor after removal");
+  router.releaseAll();
+ }
+ static void sameMillisecondCleanupFencesRetireMotionAndPresses() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink); router.setMenuControls(true);
+  long routeRelease=android.os.SystemClock.uptimeMillis();
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1).at(routeRelease));
+  KeyEvent oldDown=event(1,KeyEvent.KEYCODE_BUTTON_A,true); oldDown.eventTime=routeRelease; router.keyEvent(oldDown);
+  check(Handler.queue.isEmpty() && sink.buttons.isEmpty(),"same-millisecond pre-route motion or key-down crossed cleanup fence");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  router.releaseDevice(1); long deviceRelease=android.os.SystemClock.uptimeMillis();
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1).at(deviceRelease));
+  oldDown=event(1,KeyEvent.KEYCODE_BUTTON_A,true); oldDown.eventTime=deviceRelease; router.keyEvent(oldDown);
+  check(Handler.queue.isEmpty() && sink.buttons.isEmpty(),"same-millisecond removed-device input crossed cleanup fence");
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  KeyEvent oldUp=event(1,KeyEvent.KEYCODE_BUTTON_A,false); oldUp.eventTime=deviceRelease;
+  router.keyEvent(oldUp);
+  check(sink.buttons.contains(Pointer.Button.BUTTON_LEFT),"retired key-up cancelled a fresh same-ID press");
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,false));
+  check(sink.buttons.isEmpty(),"fresh key-up could not balance its press");
+  router.releaseAll();
+ }
+ static void reentrantHatTransitionCannotInjectIntoNewRoute() {
+  XServer sink=new XServer(); final Pd2InputRouter[] route=new Pd2InputRouter[1];
+  class Backend implements Pd2InputRouter.MenuInput {
+   public void move(int x,int y) {}
+   public void button(Pointer.Button b,boolean down) {}
+   public void key(XKeycode k,boolean down) {
+    if (k==XKeycode.KEY_RIGHT && down) route[0].setMenuControls(false);
+   }
+  }
+  route[0]=new Pd2InputRouter(sink,new Backend()); route[0].setMenuControls(true);
+  route[0].motion(new MotionEvent().axis(MotionEvent.AXIS_HAT_X,1).axis(MotionEvent.AXIS_HAT_Y,1));
+  check(sink.events.isEmpty() && sink.keys.isEmpty(),"retired menu motion leaked its remaining hat axis into new fallback route");
+  route[0].releaseAll();
+ }
+ static void neutralRetiresBackendQueueOnceAndNewMotionGetsFreshOwner() {
+  XServer sink=new XServer(); final Pd2InputRouter[] route=new Pd2InputRouter[1];
+  class Backend implements Pd2InputRouter.MenuInput {
+   final java.util.ArrayList<Runnable> pending=new java.util.ArrayList<>(); int generation,moves,stops;
+   public void move(int x,int y) { final int token=generation; pending.add(() -> { if (token==generation) moves++; }); }
+   public void stopMotion() { generation++; stops++; }
+   public void button(Pointer.Button b,boolean down) {}
+   public void key(XKeycode k,boolean down) {}
+  }
+  Backend backend=new Backend(); route[0]=new Pd2InputRouter(sink,backend); route[0].setMenuControls(true);
+  route[0].motion(new MotionEvent()); check(backend.stops==0,"idle event retired backend initialization");
+  route[0].motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  Runnable queuedOld=backend.pending.get(0);
+  route[0].motion(new MotionEvent());
+  check(backend.stops==1 && Handler.queue.isEmpty(),"neutral did not retire active backend motion exactly once");
+  route[0].motion(new MotionEvent()); check(backend.stops==1,"repeated idle neutral disturbed backend state");
+  route[0].motion(new MotionEvent().axis(MotionEvent.AXIS_Z,-1)); Handler.tick();
+  queuedOld.run(); check(backend.moves==0,"queued old backend delta drove new stroke");
+  backend.pending.get(1).run(); check(backend.moves==1,"new stroke backend delta was lost");
+  route[0].releaseAll(); check(backend.stops==2,"route release did not retire the new stroke");
+ }
+ static void schedulingRefusalDoesNotLatchMotionOwner() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink); router.setMenuControls(true);
+  Handler.rejectNext=true; router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1));
+  check(Handler.queue.isEmpty(),"refused initial task was queued");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,-1)); Handler.tick();
+  check(sink.lastDeltaX<0 && Handler.queue.size()==1,"initial scheduling refusal latched cursor owner");
+  Handler.rejectNext=true; Handler.tick();
+  check(Handler.queue.isEmpty(),"refused repeated task stayed queued");
+  router.motion(new MotionEvent().axis(MotionEvent.AXIS_Z,1)); Handler.tick();
+  check(sink.lastDeltaX>0 && Handler.queue.size()==1,"repeat scheduling refusal prevented a new stroke");
+  router.releaseAll();
+ }
+ static void retiredKeyUpCannotCancelSameIdReplacementPress() {
+  XServer sink=new XServer(); Pd2InputRouter router=new Pd2InputRouter(sink); router.setMenuControls(true);
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  router.releaseDevice(1); long removedAt=android.os.SystemClock.uptimeMillis();
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  KeyEvent staleUp=event(1,KeyEvent.KEYCODE_BUTTON_A,false); staleUp.eventTime=removedAt;
+  router.keyEvent(staleUp);
+  check(sink.buttons.contains(Pointer.Button.BUTTON_LEFT),"old device key-up cancelled replacement device press");
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,false));
+  check(sink.buttons.isEmpty(),"replacement device key-up failed");
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_START,true));
+  router.releaseAll(); long releasedAt=android.os.SystemClock.uptimeMillis();
+  router.keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_START,true));
+  staleUp=event(1,KeyEvent.KEYCODE_BUTTON_START,false); staleUp.eventTime=releasedAt;
+  router.keyEvent(staleUp);
+  check(sink.keys.contains(XKeycode.KEY_ENTER),"old route key-up cancelled replacement route press");
+  router.releaseAll(); check(sink.keys.isEmpty(),"replacement held key was lost from cleanup ownership");
+ }
+ static void cleanupSnapshotsSurviveReentryAndPreserveFreshRouteControls() {
+  XServer sink=new XServer(); final Pd2InputRouter[] route=new Pd2InputRouter[1];
+  class Backend implements Pd2InputRouter.MenuInput {
+   final java.util.ArrayList<String> events=new java.util.ArrayList<>(); boolean fresh;
+   public void move(int x,int y) {}
+   public void button(Pointer.Button b,boolean down) { events.add((down?"+":"-")+b); }
+   public void key(XKeycode k,boolean down) {
+    events.add((down?"+":"-")+k);
+    if (!down && !fresh) {
+     fresh=true;
+     route[0].releaseAll();
+     route[0].setMenuControls(false);
+     route[0].keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_X,true));
+     route[0].keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_A,true));
+    }
+   }
+  }
+  Backend backend=new Backend(); route[0]=new Pd2InputRouter(sink,backend); route[0].setMenuControls(true);
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,true));
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_START,true));
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_THUMBL,true));
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  route[0].releaseAll();
+  for(String control:new String[]{"KEY_ESC","KEY_ENTER","KEY_TAB","BUTTON_LEFT"})
+   check(java.util.Collections.frequency(backend.events,"-"+control)==1,"snapshot cleanup did not balance old owner exactly once: "+control);
+  check(sink.keys.contains(XKeycode.KEY_SHIFT_L) && sink.buttons.contains(Pointer.Button.BUTTON_LEFT),"old cleanup cleared newly acquired fallback controls");
+  route[0].releaseAll();
+  check(sink.keys.isEmpty() && sink.buttons.isEmpty(),"new controls lost their ownership during old cleanup");
+ }
+ static void cleanupCannotReleaseFreshControlsOnTheSameBackend() {
+  XServer sink=new XServer(); final Pd2InputRouter[] route=new Pd2InputRouter[1];
+  class Backend implements Pd2InputRouter.MenuInput {
+   final java.util.HashSet<XKeycode> keys=new java.util.HashSet<>(); boolean fresh;
+   public void move(int x,int y) {}
+   public void button(Pointer.Button b,boolean down) {}
+   public void key(XKeycode k,boolean down) {
+    if (down) keys.add(k); else keys.remove(k);
+    if (!down && !fresh) {
+     fresh=true; route[0].releaseAll();
+     route[0].keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_B,true));
+     route[0].keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_START,true));
+     route[0].keyEvent(event(2,KeyEvent.KEYCODE_BUTTON_THUMBL,true));
+    }
+   }
+  }
+  Backend backend=new Backend(); route[0]=new Pd2InputRouter(sink,backend); route[0].setMenuControls(true);
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,true));
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_START,true));
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_THUMBL,true));
+  route[0].releaseAll();
+  check(backend.keys.size()==3,"old cleanup released freshly acquired keys on the same backend");
+  route[0].releaseAll(); check(backend.keys.isEmpty(),"fresh same-backend ownership did not balance later cleanup");
+ }
+ static void repeatedCleanupCallbackCannotRecursivelyReleaseOldState() {
+  XServer sink=new XServer(); final Pd2InputRouter[] route=new Pd2InputRouter[1];
+  class Backend implements Pd2InputRouter.MenuInput {
+   int releases;
+   public void move(int x,int y) {}
+   public void button(Pointer.Button b,boolean down) { if (!down) { releases++; route[0].releaseAll(); } }
+   public void key(XKeycode k,boolean down) { if (!down) { releases++; route[0].releaseAll(); } }
+  }
+  Backend backend=new Backend(); route[0]=new Pd2InputRouter(sink,backend); route[0].setMenuControls(true);
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_B,true));
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_START,true));
+  route[0].keyEvent(event(1,KeyEvent.KEYCODE_BUTTON_A,true));
+  route[0].releaseAll();
+  check(backend.releases==3,"reentrant cleanup released old state more than once");
+  route[0].releaseAll(); check(backend.releases==3,"retired controls survived cleanup callbacks");
+ }
  public static void main(String[] args) {
+  repeatedCleanupCallbackCannotRecursivelyReleaseOldState();
+  retiredKeyUpCannotCancelSameIdReplacementPress();
+  cleanupSnapshotsSurviveReentryAndPreserveFreshRouteControls();
+  cleanupCannotReleaseFreshControlsOnTheSameBackend();
+  sameMillisecondCleanupFencesRetireMotionAndPresses();
+  reentrantHatTransitionCannotInjectIntoNewRoute();
+  neutralRetiresBackendQueueOnceAndNewMotionGetsFreshOwner();
+  schedulingRefusalDoesNotLatchMotionOwner();
+  explicitDeviceRemovalBalancesItsOwnersAndRejectsQueuedInput();
+  sustainedStickNeedsNoRepeatAndLatestNeutralStopsIt();
+  cancelAndDisconnectRetireOnlyTheirOwnMotion();
+  unrelatedStreamsCannotStealOrCancelCursorOwner();
+  oldCallbacksAndDelayedEventsCannotDriveReplacementRoute();
+  injectionReentrancyCannotRequeueRetiredMotion();
   fallbackCompatibility();
   triggerNoiseUsesHysteresisWithoutLosingSourceOwnership();
   syntheticKeysNeverPressOrReleaseAndNullMotionIsRejected();
@@ -396,7 +676,7 @@ public class RouterTest {
   configurationAndRejectedEventsNeverInject();
   injectedMenuBackendKeepsFallbackSeparateAndBalancesOwner();
   sharedSourcesReleaseEachOwnedButtonAndKeyOnlyOnce();
-  System.out.println("PASS: 12 router scenarios: trigger hysteresis/ownership, synthetic/detached inputs, fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary, injected backend ownership, shared-source balanced cleanup");
+  System.out.println("PASS: 26 router scenarios: repeated cleanup callbacks, stale replacement releases, cleanup reentry snapshots, fresh same-backend ownership, same-ms cleanup fences, full-event reentrancy, backend motion retirement, scheduling refusal, explicit per-device removal, sustained/neutral cursor, cancel/disconnect, stream ownership, retired/delayed callbacks, reentrant cleanup, trigger hysteresis/ownership, synthetic/detached inputs, fallback regression, menu sticks, click/back/confirm, arrows, ignored gameplay controls, mode releases, unchanged mode, owner/rejected-event boundary, injected backend ownership, shared-source balanced cleanup");
  }
 }
 """,

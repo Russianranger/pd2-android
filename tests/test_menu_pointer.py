@@ -22,6 +22,7 @@ import com.winlator.xserver.*;
 public final class Pd2InputRouter {
  public interface MenuInput {
   void move(int dx,int dy);
+  default void stopMotion() {}
   void button(Pointer.Button button,boolean down);
   void key(XKeycode key,boolean down);
  }
@@ -365,6 +366,35 @@ public final class MenuPointerTest {
   f.win.clear();f.pointer.activate();f.pointer.deactivate();f.pointer.activate();f.win.drain();
   check(f.win.delivered.size()==1,"An older activation's queued recenter survived reactivation");
  }
+ static void neutralMotionRetiresOnlyQueuedOrdinaryDeltas() {
+  Fixture f=new Fixture(1280,720);f.game(2,0,0,800,600);
+  f.pointer.activate();f.pointer.stopMotion();
+  move(f.last(),0,0,"Neutral stick cancelled activation's cursor-position query");
+  f.feedback(100,200);f.pointer.stopMotion();
+  move(f.last(),300,100,"Neutral stick cancelled initial recenter synchronization");
+  f.feedback(400,300);f.win.clear();
+
+  f.pointer.move(10,20);f.pointer.stopMotion();f.win.drain();
+  check(f.win.delivered.isEmpty(),"Queued ordinary delta moved after stick neutralized");
+  f.win.clear();f.pointer.move(-7,4);
+  move(f.last(),-7,4,"Fresh movement waited for feedback from a discarded delta");
+  f.feedback(393,304);f.win.clear();
+
+  f.pointer.move(8,3);f.pointer.button(Pointer.Button.BUTTON_LEFT,true);
+  f.pointer.key(XKeycode.KEY_ENTER,true);f.pointer.stopMotion();f.win.drain();
+  check(f.win.delivered.size()==2,"Motion stop cancelled a queued button/key press or retained motion");
+  check(f.win.delivered.get(0).mouse && f.win.delivered.get(0).flags==2,"Queued button press did not survive motion stop");
+  check(!f.win.delivered.get(1).mouse && f.win.delivered.get(1).flags==0,"Queued key press did not survive motion stop");
+  f.win.clear();f.pointer.button(Pointer.Button.BUTTON_LEFT,false);f.pointer.key(XKeycode.KEY_ENTER,false);
+  f.pointer.stopMotion();f.win.drain();
+  check(f.win.delivered.size()==2,"Motion stop cancelled balancing button/key releases");
+
+  f.win.clear();f.pointer.move(2,1);f.pointer.button(Pointer.Button.BUTTON_LEFT,true);
+  f.pointer.key(XKeycode.KEY_ENTER,true);f.pointer.stopMotion();f.pointer.deactivate();f.win.drain();
+  check(f.win.delivered.size()==2,"Deactivation retained an ordinary move or pressed action after motion stop");
+  for(WinHandler.Event event:f.win.delivered)
+   check((event.mouse && event.flags==4)||(!event.mouse && event.flags==2),"Only balancing releases may survive route deactivation");
+ }
  static void notReadyProducesNoRequestsAndContextContainsNoPrivateTitles() {
   Fixture f=new Fixture(1280,720);Window game=f.game(2,20,30,800,600);
   f.x.windowManager.focused=game;
@@ -421,8 +451,9 @@ public final class MenuPointerTest {
   wrongFocusUsesTopmostGameAndEligibleFocusWins();screenFallbackDoesNotTreatRootOrExplorerAsGame();
   vkMappingLeftClickAndIgnoredControls();deactivateBalancesHeldInputAndRejectsFurtherOutput();
   queuedActionsAreGuardedAcrossModeChangeAndReactivation();notReadyProducesNoRequestsAndContextContainsNoPrivateTitles();
+  neutralMotionRetiresOnlyQueuedOrdinaryDeltas();
   nativeRecoveryOnlyRestoresTheCurrentGameWindowAndExpiresQueuedFocus();
-  System.out.println("PASS: 12 menu pointer/native focus scenarios; "+checks+" checks");
+  System.out.println("PASS: 13 menu pointer/native focus scenarios; "+checks+" checks");
  }
 }
 """,

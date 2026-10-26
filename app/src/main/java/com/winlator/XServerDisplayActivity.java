@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -173,6 +174,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private static final java.util.concurrent.atomic.AtomicInteger pd2EnvironmentWorkers = new java.util.concurrent.atomic.AtomicInteger();
     private final Pd2ThumbButtons pd2ThumbButtons = new Pd2ThumbButtons();
     private Pd2InputRouter pd2InputRouter;
+    private InputManager pd2InputManager;
+    private final InputManager.InputDeviceListener pd2InputDeviceListener = new InputManager.InputDeviceListener() {
+        @Override public void onInputDeviceAdded(int deviceId) { }
+        @Override public void onInputDeviceChanged(int deviceId) { retirePd2DeviceInput(deviceId); }
+        @Override public void onInputDeviceRemoved(int deviceId) { retirePd2DeviceInput(deviceId); }
+    };
     private Pd2MenuPointer pd2MenuPointer;
     private Pd2NativeFocusRecovery pd2NativeFocusRecovery;
     private boolean pd2MenuPointerActive;
@@ -493,6 +500,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     @Override
     protected synchronized void onDestroy() {
+        if (pd2InputManager != null) {
+            pd2InputManager.unregisterInputDeviceListener(pd2InputDeviceListener);
+            pd2InputManager = null;
+        }
         if (runtimeLaunchRejected) { super.onDestroy(); return; }
         if (pd2MemoryDiagnostics != null) { pd2MemoryDiagnostics.close(); pd2MemoryDiagnostics = null; }
         boolean ownsSession = pd2ActiveSession.get() == this;
@@ -911,6 +922,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             pd2InputRouter = new Pd2InputRouter(xServer, pd2MenuPointer);
             pd2InputRouter.setCursorSpeed(preferences.getFloat("pd2_cursor_speed", 1.0f));
             pd2InputRouter.setDeadzone(preferences.getFloat("pd2_deadzone", 0.18f));
+            pd2InputManager = (InputManager)getSystemService(Context.INPUT_SERVICE);
+            if (pd2InputManager != null)
+                pd2InputManager.registerInputDeviceListener(pd2InputDeviceListener, new Handler(Looper.getMainLooper()));
             pd2Gear = new Button(this);
             pd2Gear.setText("⚙");
             pd2Gear.setTextSize(22);
@@ -927,6 +941,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             pd2Gear.setOnClickListener(view -> showPd2QuickMenu());
             updatePd2InputMode();
         }
+    }
+
+    private void retirePd2DeviceInput(int deviceId) {
+        // Balance any Native thumb edge before the resolver forgets its owner;
+        // a later physical UP from a changed device is otherwise consumed as NONE.
+        winHandler.gamepadHandler.releaseThumbButtons(deviceId);
+        pd2ThumbButtons.releaseDevice(deviceId);
+        if (pd2InputRouter != null) pd2InputRouter.releaseDevice(deviceId);
     }
 
     private void releasePd2Input() {
@@ -1167,6 +1189,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         JSONObject report = winHandler.controllerDiagnostics.snapshot();
         StringBuilder message = new StringBuilder("Layout: ")
                 .append(pd2InputModeLabel())
+                .append("\nInput path at launch: ").append(container != null && "xinput_compatibility".equals(
+                        container.getExtra("pd2ControllerBackend", "standard")) ? "XInput compatibility" : "Standard Native")
                 .append("\nController notifications: ").append(Pd2ControllerRuntime.enabled(this) ? "Enabled" : "Disabled")
                 .append("\nHID read experiment: ").append(Pd2HidReadRuntime.enabled(this) ? "Selected for next clean Play" : "Off")
                 .append("\n\nDetected controllers:");
@@ -1390,7 +1414,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     public boolean dispatchGenericMotionEvent(MotionEvent event) {
         if (pd2Session && pd2InputRouter != null) {
             if (pd2MenuOpen || !pd2HasWindowFocus || pd2Paused || drawerLayout.isDrawerOpen(GravityCompat.START)) return super.dispatchGenericMotionEvent(event);
-            if (pd2PointerControls() && ExternalController.isJoystickDevice(event)) {
+            if (pd2PointerControls() && pd2InputRouter.acceptsMotion(event)) {
                 winHandler.controllerDiagnostics.recordMotion(false);
                 if (pd2InputRouter.motion(event)) {
                     winHandler.controllerDiagnostics.recordMotion(true);

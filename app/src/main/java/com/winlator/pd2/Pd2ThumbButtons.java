@@ -23,6 +23,11 @@ public final class Pd2ThumbButtons {
         routeKnown = false;
     }
 
+    /** A removed controller must not contribute a deferred tap or half of a later chord. */
+    public void releaseDevice(int deviceId) {
+        pads.remove(deviceId);
+    }
+
     public Action event(int deviceId, boolean left, boolean down, boolean repeat,
                         boolean pointerControls, boolean inputAvailable) {
         if (!inputAvailable) { clear(); return Action.NONE; }

@@ -45,6 +45,8 @@ public final class Pd2LaunchDiagnostics {
         String id = UUID.randomUUID().toString();
         JSONObject report = new JSONObject().put("launchId", id).put("startedAt", System.currentTimeMillis())
                 .put("controllerRuntime", Pd2ControllerRuntime.status(context))
+                .put("controllerBackendRequestedAtLaunch", container.getExtra("pd2ControllerBackend", "standard"))
+                .put("controllerBackendScope", "Requested consumer hints; game backend selection is not acknowledged")
                 .put("renderer", container.getGraphicsDriver()).put("arguments", arguments)
                 .put("cpuPreset", container.getBox64Preset()).put("environment", container.getEnvVars())
                 .put("wineVersion", container.getWineVersion()).put("winePath", "/opt/wine")

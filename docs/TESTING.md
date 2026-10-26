@@ -1,4 +1,35 @@
-# 0.1.19 combined controller and pointer test
+# 0.1.20 cursor and Save/Quit compatibility test
+
+Install over the existing app. Keep controller notifications enabled, the original
+Wine driver, accepted GameNative/graphics arguments and Stability. Reuse the
+runtime, prefix, imports and saves.
+
+1. Fully **Stop client**. Open **Launch settings → Controller → Native input
+   path**, select **XInput compatibility (experimental)**, then **Play**. This
+   selection arms one launch of API-return tracing. The choice list is visible;
+   no separate hidden trace option is required.
+2. Enter the same character and check initial Native movement/button input.
+   In **Menu cursor**, briefly move and center each stick several times. The
+   pointer should stop when centered, keep moving while deliberately held, and
+   leave no motion after a quick-menu/mode change. The gold pointer remains
+   visible with white cursors hidden.
+3. **Save/Quit** once, re-enter the character with Menu cursor if needed, return
+   to **Native**, and test movement and one button for 20–30 seconds. **Export
+   support logs before Stop**, whether it works or fails. Report initial Native,
+   cursor stopping and post-Save/Quit Native separately. If initial entry fails,
+   export there instead of inferring a gameplay result.
+4. Stop when finished. The trace's existing cleanup restores prior Wine debug
+   filters; it is consumed once. XInput compatibility remains selected for later
+   launches. Return to **Native input path → Standard Native** to restore the
+   usual environment; an unconsumed manual trace can be turned Off under
+   **Controller → Input trace**.
+
+This is a distinct consumer-compatibility attempt, not a promised Save/Quit fix.
+The game may ignore the hints. The new report records requested policy separately
+from game acceptance. Avoid old focus/reconnect/fresh-identity trials before the
+export. Do not use the traced launch for FPS or temperature comparisons.
+
+# Historical 0.1.19 combined controller and pointer test
 
 Install **0.1.19 over the existing app** and reuse the runtime, import and saves.
 Keep **Controller notifications enabled**, **Original Wine driver**, accepted

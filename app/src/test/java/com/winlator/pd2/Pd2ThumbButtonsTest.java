@@ -118,4 +118,20 @@ public final class Pd2ThumbButtonsTest {
         assertEquals(Pd2ThumbButtons.Action.OPEN_MENU, target.event(1, false, true, false, false, true, 40));
         assertEquals(1, target.menus); assertTrue(target.nativeHeld.isEmpty());
     }
+
+    @Test public void removedDeviceCannotLeaveADeferredTapOrHalfChordForItsReplacement() {
+        Target target = new Target();
+        target.event(1, true, true, false, true, true, 10);
+        target.thumbs.releaseDevice(1);
+        assertEquals(Pd2ThumbButtons.Action.NONE, target.event(1, true, false, false, true, true, 20));
+        assertEquals(0, target.taps);
+        target.event(1, true, true, false, false, true, 30);
+        target.thumbs.releaseDevice(1);
+        assertEquals(Pd2ThumbButtons.Action.NATIVE_DOWN, target.event(1, false, true, false, false, true, 40));
+        assertEquals(0, target.menus);
+        target.event(2, true, true, false, true, true, 50);
+        target.thumbs.releaseDevice(1);
+        assertEquals(Pd2ThumbButtons.Action.POINTER_TAP, target.event(2, true, false, false, true, true, 60));
+        assertEquals(1, target.taps);
+    }
 }
