@@ -1,6 +1,7 @@
 package com.winlator.widget;
 
 import android.app.Application;
+import android.graphics.SurfaceTexture;
 import android.view.Surface;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -74,8 +75,12 @@ public final class SurfaceFrameRateRequestTest {
     }
 
     private static final class RecordingSurface extends Surface {
+        private final SurfaceTexture texture;
         int twoArgumentCalls, threeArgumentCalls, compatibility, strategy;
         float rate;
+        RecordingSurface() { this(new SurfaceTexture(0)); }
+        private RecordingSurface(SurfaceTexture texture) { super(texture); this.texture = texture; }
+        void close() { release(); texture.release(); }
         @Override public boolean isValid() { return true; }
         @Override public void setFrameRate(float rate, int compatibility) {
             twoArgumentCalls++; this.rate = rate; this.compatibility = compatibility;
@@ -87,20 +92,24 @@ public final class SurfaceFrameRateRequestTest {
 
     @Test @Config(sdk = 30) public void android11UsesTheSupportedTwoArgumentSurfaceApi() {
         RecordingSurface surface = new RecordingSurface();
-        new SurfaceFrameRateRequest(60).surfaceAvailable(surface);
-        assertEquals(1, surface.twoArgumentCalls);
-        assertEquals(0, surface.threeArgumentCalls);
-        assertEquals(60f, surface.rate, 0f);
-        assertEquals(Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, surface.compatibility);
+        try {
+            new SurfaceFrameRateRequest(60).surfaceAvailable(surface);
+            assertEquals(1, surface.twoArgumentCalls);
+            assertEquals(0, surface.threeArgumentCalls);
+            assertEquals(60f, surface.rate, 0f);
+            assertEquals(Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, surface.compatibility);
+        } finally { surface.close(); }
     }
 
     @Test public void android12AndLaterExplicitlyAvoidNonSeamlessModeSwitches() {
         RecordingSurface surface = new RecordingSurface();
-        new SurfaceFrameRateRequest(60).surfaceAvailable(surface);
-        assertEquals(0, surface.twoArgumentCalls);
-        assertEquals(1, surface.threeArgumentCalls);
-        assertEquals(60f, surface.rate, 0f);
-        assertEquals(Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, surface.compatibility);
-        assertEquals(Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS, surface.strategy);
+        try {
+            new SurfaceFrameRateRequest(60).surfaceAvailable(surface);
+            assertEquals(0, surface.twoArgumentCalls);
+            assertEquals(1, surface.threeArgumentCalls);
+            assertEquals(60f, surface.rate, 0f);
+            assertEquals(Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, surface.compatibility);
+            assertEquals(Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS, surface.strategy);
+        } finally { surface.close(); }
     }
 }
