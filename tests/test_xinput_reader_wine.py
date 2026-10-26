@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Run the donor and repaired PE32 XInput libraries in the exact packaged Wine9.
 
-Requires x86-64 Linux, working AF_UNIX sockets, Python zstandard and MinGW-w64.
+Requires x86-64 Linux, working AF_UNIX sockets and Python zstandard. The small
+PE32 probe is source/toolchain/hash pinned; --cc optionally rebuilds it exactly.
 The existing runtime-fetch/final-hash checks must have prepared the APK assets.
 No system Wine, game files, controller devices or existing Wine prefix are used.
 """
@@ -31,6 +32,13 @@ import zstandard
 ROOT = Path(__file__).resolve().parents[1]
 DONOR_SHA = "c8f692e7fe22fb922886026d97bf39549c8eac12629fee3e06f49078b34a60fa"
 DLL_PATH = "opt/wine/lib/wine/i386-windows/xinput1_4.dll"
+PROBE_SOURCE = "runtime/xinput-reader/test_wine.c"
+PROBE_FIXTURE = "tests/fixtures/xinput-reader-probe.exe"
+TOOLCHAIN = "runtime/xinput-reader/TOOLCHAIN.json"
+PROBE_FLAGS = ("-std=c11", "-Wall", "-Wextra", "-Werror", "-Os", "-s", "-Wl,--no-insert-timestamp")
+# The exact donor hardcodes this in server/request.c and ntdll/unix/server.c;
+# TMPDIR cannot redirect it. CI creates only this empty, runner-owned parent.
+ANDROID_SERVER_TMP = Path("/data/data/com.pd2.thor/files/rootfs/tmp")
 PATTERNS = (
     # Buttons and Y axes retain the donor's digital-trigger and inversion ABI.
     ((1 << 0) | (1 << 4) | (1 << 10), 0, 12000, -9000, -14000, 7000),
@@ -40,6 +48,34 @@ PATTERNS = (
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def verify_probe_fixture(compiler: str | None) -> Path:
+    metadata = json.loads((ROOT / "tests/fixtures/xinput-reader-probe.json").read_text())
+    assert metadata["format"] == 1 and metadata["file"] == PROBE_FIXTURE
+    assert metadata["source"]["path"] == PROBE_SOURCE
+    assert metadata["toolchain"]["path"] == TOOLCHAIN
+    assert metadata["source"]["sha256"] == digest((ROOT / PROBE_SOURCE).read_bytes()), "probe C source changed"
+    assert metadata["toolchain"]["sha256"] == digest((ROOT / TOOLCHAIN).read_bytes()), "probe toolchain provenance changed"
+    assert metadata["rebuild_command"] == ["i686-w64-mingw32-gcc-win32", *PROBE_FLAGS,
+                                           PROBE_SOURCE, "-o", PROBE_FIXTURE]
+    fixture = ROOT / PROBE_FIXTURE
+    data = fixture.read_bytes()
+    assert len(data) == metadata["bytes"] and digest(data) == metadata["sha256"], "probe PE fixture changed"
+    assert data[:2] == b"MZ"
+    pe = struct.unpack_from("<I", data, 0x3c)[0]
+    assert data[pe:pe+4] == b"PE\0\0" and struct.unpack_from("<H", data, pe+4)[0] == 0x14c
+    assert struct.unpack_from("<I", data, pe+8)[0] == 0, "probe timestamp must be reproducible"
+    assert struct.unpack_from("<H", data, pe+24)[0] == 0x10b, "probe must be PE32"
+    if compiler:
+        version = subprocess.check_output([compiler, "--version"], text=True).splitlines()[0]
+        assert version == metadata["toolchain"]["compiler"], (version, metadata["toolchain"]["compiler"])
+        with tempfile.TemporaryDirectory(prefix="pd2-xinput-probe-rebuild-") as temporary:
+            output = Path(temporary) / fixture.name
+            subprocess.run([compiler, *PROBE_FLAGS, PROBE_SOURCE, "-o", str(output)], cwd=ROOT, check=True)
+            assert output.read_bytes() == data, "rebuilt PE fixture is not byte-identical"
+    print("Verified source/toolchain-pinned PE32 probe: " + metadata["sha256"], flush=True)
+    return fixture
 
 
 def asset_bytes(name: str, apk: Path | None) -> bytes:
@@ -271,7 +307,9 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
             assert process.wait(timeout=5) == 0, "PE probe failed: " + "\n".join(output)
             reader.join(timeout=1)
         wine_log = stderr_path.read_text()
-        assert "xinput1_4.dll" in wine_log and "builtin" in wine_log, "missing actual builtin module-load proof"
+        assert any("loaddll:" in line.lower() and "xinput1_4.dll" in line.lower()
+                   and "builtin" in line.lower() for line in wine_log.splitlines()), (
+                       "missing same-line xinput1_4 builtin module-load proof")
         if not donor:
             assert "PD2_XINPUT_READER" in wine_log and "wine9-xinput-reader-1" in wine_log, "new DLL telemetry absent"
         print("\n".join(output), flush=True)
@@ -298,13 +336,20 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apk", type=Path, help="Use an already verified APK's matching runtime assets")
-    parser.add_argument("--cc", default=os.environ.get("MINGW_CC", "i686-w64-mingw32-gcc"))
+    parser.add_argument("--cc", help="Optionally rebuild the pinned probe with its exact recorded MinGW toolchain")
+    parser.add_argument("--check-fixture", action="store_true", help="Verify the source/toolchain/PE fixture only")
     parser.add_argument("--dll", type=Path, default=ROOT / "app/src/main/assets/pd2/xinput-reader/xinput1_4.dll")
     args = parser.parse_args()
+    executable = verify_probe_fixture(args.cc)
+    if args.check_fixture:
+        return
     assert os.uname().machine == "x86_64", "exact packaged Wine9 qualification requires x86-64 Linux"
     # A failure here is an environment failure, never a skipped/passed Wine test.
     test_socket = socket.socket(socket.AF_UNIX)
     test_socket.close()
+    assert ANDROID_SERVER_TMP.is_dir() and os.access(ANDROID_SERVER_TMP, os.W_OK), (
+        "Exact Wine9 hardcodes its server-socket parent; create an empty runner-owned directory first: "
+        + str(ANDROID_SERVER_TMP))
     rootfs_bytes = asset_bytes("rootfs.tzst", args.apk)
     template = asset_bytes("container_pattern.tzst", args.apk)
     common = json.loads(asset_bytes("common_dlls.json", args.apk))
@@ -315,9 +360,6 @@ def main() -> None:
         extract_archive(rootfs_bytes, runtime, wine_only=True)
         target = runtime / DLL_PATH
         assert digest(target.read_bytes()) == DONOR_SHA, "runtime donor module hash mismatch"
-        executable = work / "pd2-xinput-probe.exe"
-        subprocess.run([args.cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os",
-                        str(ROOT / "runtime/xinput-reader/test_wine.c"), "-o", str(executable)], check=True)
         version = subprocess.check_output([str(runtime / "opt/wine/bin/wine"), "--version"], text=True).strip()
         assert version == "wine-9.2", version
         donor = run_probe(work, runtime, template, common, executable, donor=True)

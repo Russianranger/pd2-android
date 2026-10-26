@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "file": "tests/fixtures/xinput-reader-probe.exe",
+  "bytes": 47616,
+  "sha256": "f24887626e19a45f772ae78da01752e578c46d59f45a9f1f5aa9d6ca6d695708",
+  "source": {
+    "path": "runtime/xinput-reader/test_wine.c",
+    "sha256": "3331a5dfdebb38d5fc4821f5e4c527611ce73be8cb2089f80a3c68b10afef25e"
+  },
+  "toolchain": {
+    "path": "runtime/xinput-reader/TOOLCHAIN.json",
+    "sha256": "d33cf322ca7626ef0867b0b957ccf1244797a6a3b93754e3ab4642f0f6f1ee13",
+    "compiler": "i686-w64-mingw32-gcc-win32 (GCC) 12-win32"
+  },
+  "rebuild_command": [
+    "i686-w64-mingw32-gcc-win32",
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-Os",
+    "-s",
+    "-Wl,--no-insert-timestamp",
+    "runtime/xinput-reader/test_wine.c",
+    "-o",
+    "tests/fixtures/xinput-reader-probe.exe"
+  ],
+  "reproducible_builds_compared": 2,
+  "scope": "Synthetic XInput ABI/transport qualification fixture only; not an APK asset or game binary"
+}

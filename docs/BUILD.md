@@ -15,9 +15,12 @@ validates the result before compiling.
 Use a Linux host with GNU binutils (`readelf`/`nm`) for the controller backend
 artifact checks. Rebuilding that backend also requires host x86-64 GCC and the
 exact packaged Wine 9 `ntdll.so`; this is separate from the Android NDK build.
-The optional XInput reader's integration qualification also needs x86-64 Linux,
-working AF_UNIX sockets and MinGW-w64 (`gcc-mingw-w64-i686-win32` on Ubuntu).
-It runs the exact packaged Wine 9 and fresh isolated prefix templates.
+The optional XInput reader's integration qualification also needs x86-64 Linux
+and working AF_UNIX sockets. It verifies a pinned PE32 probe against its source
+and toolchain metadata, then runs the exact packaged Wine 9 with fresh isolated
+prefixes. MinGW-w64 is needed only to rebuild the probe or experimental DLL.
+CI creates the runtime's compiled-in Android temporary directory with private
+ownership; no Wine binary is modified to run this desktop test.
 
 ```sh
 python3 -m pip install zstandard==0.25.0
