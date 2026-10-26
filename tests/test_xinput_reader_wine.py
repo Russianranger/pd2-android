@@ -467,7 +467,10 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
         "WINELOADER": str(wine / "bin/wine"),
         "WINESERVER": str(wine / "bin/wineserver"),
         "WINEDLLPATH": str(wine / "lib/wine"),
-        "WINEDLLOVERRIDES": "xinput1_4=b;winemenubuilder.exe=d",
+        # Isolate the XInput PE/ABI/UDP test from Android service/HID startup.
+        # The pinned env.c:1651-55 continues when wineboot cannot start;
+        # wineserver creates the Afd socket device without winedevice services.
+        "WINEDLLOVERRIDES": "xinput1_4=b;winemenubuilder.exe=d;wineboot.exe=",
         "WINEDEBUG": "-all,err+all,warn+all,+loaddll",
         "DISPLAY": os.environ.get("DISPLAY", "") if os.environ.get("PD2_WINE_TEST_XVFB") == "1" else "",
         # Winlator's virtual.c caps vprot bookkeeping at 39 bits. The native
@@ -479,6 +482,8 @@ def run_probe(work: Path, rootfs: Path, template: bytes, common: dict, executabl
     for name in ("WINEPRELOADRESERVE", "LD_PRELOAD", "BOX64_PATH"):
         environment.pop(name, None)
     environment.pop("LD_LIBRARY_PATH", None)
+    print("Host module qualification: Wineboot/services/HID bootstrap disabled in this private prefix; "
+          "actual i386 XInput loader, API and loopback fault-recovery checks remain required.", flush=True)
     command = [str(wine / "bin/wine"), "C:\\pd2-xinput-probe.exe"]
     if donor:
         command.append("donor")
