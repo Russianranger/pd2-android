@@ -4,7 +4,13 @@ The user confirms 0.1.21 finally resolves controller recovery after Save/Quit. P
 
 This pass reduces normal Wine logging to errors/warnings, retaining bounded reader telemetry and opt-in detailed one-launch tracing. It adds a PD2-only Android 11+ 60 Hz Surface request (user can choose device rate), battery/thermal diagnostics, and a static gothic launcher with OFL Cinzel Decorative headings. These are targeted overhead reductions, not measured FPS/temperature gains. Runtime pins, original HID driver, graphics, Stability, imports/saves and signer remain unchanged.
 
-Qualification and deliverable identity are recorded here after CI and APK verification. [0.1.22 release notes](RELEASE-0.1.22.md) and [device checks](TESTING.md) describe the pass. Prior sections below are historical and must not override the newly accepted physical controller result.
+Qualification is complete at source **`dc157a90ac49748dd48d269ee1f7fc9494400624`**, tree `6e0b161eb02ae3c94bc28ffe0c31f7ea5c142af1`. [CI 40425451054](https://github.com/Russianranger/pd2-android/actions/runs/40425451054), job `121929928853`, passed all **372 tests across 42 suites**, with zero failures/ignored tests, ARM64 assembly, all retained host/runtime checks, and the packaged Wine API gate. The real Wine probe reproduces the donor failure; the repaired reader passes recovery, held-state heartbeats, stale expiry and resume (1,269 dynamic checks, nine discoveries, 336 state frames). All 14 production-source lifecycle scenarios pass.
+
+The offered APK is **0.1.22/code 23**, `PD2-Android-0.1.22-preview.apk`, **174,199,564 bytes**, SHA-256 **`5ffce0621c6b0f318cefb87497683c24ecd3545e95e59baf289b4c571e305cee`**. Its ZIP CRCs, duplicate exclusion and stored-entry alignment pass; manifest/package/SDKs and the single V2 preview certificate are verified. The certificate remains `a61297bef1be2652b53b763730275e1f0e0975222294602ed8ffa5f8147ddb1e`. All **76 prior assets and 35 ARM64 libraries match the offered 0.1.21 APK byte-for-byte**. Only the licensed font and its complete OFL are added. The accepted XInput DLL remains `5a05fabaaf028749c306b76103451f72215ce69c0605e3876f9beb981f417ce0`.
+
+CI artifacts: APK wrapper `12699552841`, 173,269,693 bytes, SHA-256 `aaeddc75761b0129da252ea6b8bd57be06b69516d1ed189dcb279f935d3c1644`; HTML reports `12699986166`, 67,271 bytes, SHA-256 `ca9a76fc08e0af1edc6333d0da664deacd764ee962fb4c9314bb0de64e0aa340`; seven native launcher previews `12699662256`, 523,508 bytes, SHA-256 `366c32712aa82f89b3679ba55ad79db84a04def81e918a7a806c170e96fa62bd`. Previews were inspected for readable landscape/large-font layouts, complete dialogs and visible controller focus reaching the tools below the fold. The scoped Robolectric shadow restores real Window/Decor focus lookup; no production navigation change was needed. Both native preview tests also pass in the local isolated Android test environment. These are framework checks, not physical Thor FPS/temperature measurements. No release tag was published.
+
+ [0.1.22 release notes](RELEASE-0.1.22.md) and [device checks](TESTING.md) describe the pass. Prior sections below are historical and must not override the newly accepted physical controller result.
 
 # PD2 Android handoff
 
@@ -710,34 +716,33 @@ The completed local 0.1.7 checks are:
 
 Published 0.1.7 CI run 37169294205 passed. The user rejected its physical menu test; re-entry remains unqualified.
 
-Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash, earlier Wine 10/Fog failure mechanism, and current Native failure after Save/Exit/character re-entry remain unconfirmed.
+Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash and mechanisms of the earlier Wine 10/Fog and Native re-entry failures remain unconfirmed. The user accepts the repaired XInput reader for Save/Quit recovery on 0.1.21.
 
-The current physical step tests 0.1.18 Menu visibility and selected Windows API returns after the restored-baseline failure. Historical accepted results remain recorded; they do not override the latest failed input report. Runtime preparation, import and accepted binding checks are not repeated:
+The current physical baseline is the accepted 0.1.21 reader repair. The 0.1.22 pass promotes it to the default and targets diagnostic/display overhead plus launcher appearance. Preserve existing setup/import and binding acceptance.
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
-| Launcher startup | Accepted on 0.1.1 | User opened the launcher and completed setup/import |
-| Runtime preparation | Accepted on 0.1.1 | User report and `runtimePrepared: true` in support ZIP |
-| Installation import | Accepted on 0.1.1 | User report, import-completed log, and structural validation details |
-| Client launch | Title startup accepted on 0.1.4 | User report; Wine 9.2/current prefix confirmed and Fog 10019 returns |
-| Rendering/audio | Pending | PD2 must reach a playable scene with correct textures, UI, and audio |
-| Native controller | Historically accepted; initial input rejected on restored 0.1.17 baseline | 0.1.18 records API returns during a short in-character test; success does not prove fresh state |
-| Menu cursor | Historically accepted; rejected in latest 0.1.17 report | 0.1.18 adds gold reticle; physical visibility, movement and click acceptance remain separate gates |
-| Native after Save/Quit/re-entry | Failed on 0.1.16; two acknowledged fresh-identity attempts also fail | First resolve latest initial-input failure; keep the HID read experiment separate and Off for the 0.1.18 trace |
-| Native after full same-app Stop/Play | Accepted on 0.1.16; latest 0.1.17 initial-input failure remains | Preserve verified session cleanup; latest Stop also passes, without proving working Native |
-| Native combinations / shoulder tabs | Accepted by user on 0.1.11 | Preserve LT/thumb and shoulder behavior; no repeated qualification requested |
-| White cursor toggle | Hiding implemented; latest Menu context hides every cursor | Gold Menu reticle should restore pointer feedback while white overlays remain hidden |
-| Input switching | Pending | Gear/chord and repeated mode switches leave no held input |
-| Lifecycle | Pending | Return to launcher and Resume preserve the same session; background/foreground verified |
-| Offline saves | Pending | Save, exit, stop, relaunch, and reopen the same character |
+| Launcher startup, runtime preparation and import | Accepted | User setup/import and retained runtime/import evidence |
+| Client launch | Accepted on Wine 9.2 | Title startup and current in-character controller test |
+| Rendering/audio | Gameplay reached; full rendering/audio qualification pending | Crowded combat, texture/UI correctness and audio need sustained testing |
+| Native controller | Accepted on 0.1.21 repaired reader | User report, executed module and fresh returned-state changes |
+| Native after Save/Quit/re-entry | Accepted on 0.1.21 repaired reader | User reports it finally works; exact transition times are not marked in logs |
+| Cursor stopping | Provisionally accepted on 0.1.20 and retained | User says the sporadic cursor motion appears fixed |
+| Menu visibility/clicks | Historical acceptance retained; latest capture is Native only | Do not infer a new Menu click test from XInput telemetry |
+| Native after full same-app Stop/Play | Historical 0.1.16 acceptance; current fresh input works | Preserve verified cleanup; repeat only if a regression is reported |
+| Native combinations / shoulder tabs | Accepted on 0.1.11 and preserved | No binding changes in this pass |
+| Gothic launcher | Native framework preview checks; Thor confirmation pending | Check touch, controller focus, settings and readability |
+| Sustained FPS / temperature / power | Unmeasured | Same scene, brightness, charging/fan settings and duration; leave API trace Off |
+| Input switching / lifecycle | Broader repeated switching/background checks pending | Gear/chord, Resume and no held input after transitions |
+| Offline save persistence | Broader stop/relaunch check pending | Save, stop, relaunch and reopen the same character |
 | Online play | Pending | User authenticates and enters a normal PD2 online game |
 
-The current qualification step uses the original HID driver and opt-in next-Play trace: check gold Menu visibility, movement and clicks, enter gameplay if possible, test Native briefly, and export before Stop. The older full same-app Stop/Play result is accepted, but the latest failed initial Native report means it cannot be promised as a current input workaround. Preserve cleanup and accepted LT/thumb/shoulder behavior; broader rendering/audio, lifecycle and online gates retain their earlier boundaries.
+The next device check reuses the accepted controller/graphics configuration. Check one initial Native and Save/Quit regression, the new launcher, then a sustained comparable play session. Export support logs before Stop for battery/thermal and display-request observations. The 60 Hz request is not measured refresh or a guest FPS cap. Keep old identity/reconnect/HID experiments off; enable detailed input tracing only for a short failure investigation.
 
-## Next work after the first device test
+## Remaining device qualification
 
 Investigate failures from the exported support bundle and the user's exact renderer/launch/input settings. Preserve accepted tests and the current architecture; fix the failing layer before adding unrelated features.
 
 Once the app matches the existing working setup, capture baseline startup time, frame stability, crowded-combat behavior, input latency, temperature, and power use. Compare configurations one at a time before claiming optimization gains.
 
-PD2 updates, loot-filter management, broader device presets, production signing, and performance tuning are follow-up work. Do not replace the official PD2 DLLs or add these managers as part of first-milestone qualification.
+PD2 updates, loot-filter management, broader device presets, production signing and further measured performance tuning remain follow-up work. Preserve the official PD2 DLLs and accepted controller path.

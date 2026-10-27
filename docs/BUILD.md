@@ -65,7 +65,7 @@ the original donor hash, not an already composed rootfs. The APK still undergoes
 pin verification. `--check` verifies existing dependencies without downloads;
 `--check-final` verifies the exact post-relocation hashes used by the APK.
 
-Launcher visual checks use Robolectric native graphics on Android 13 and write actual native View renders to `app/build/outputs/ui-previews/`; CI uploads them for visual inspection. These are layout checks, not screenshots from the physical Thor.
+Launcher visual checks use Robolectric native graphics on Android 13 and write actual native View renders to `app/build/outputs/ui-previews/`; CI uploads them for visual inspection. These are layout checks, not screenshots from the physical Thor. The preview fixture models a focused window and restores Android's Window/Decor focus lookup in its scoped test shadow: Robolectric 4.14.1's default `ShadowActivity.getCurrentFocus()` returns a separate manually seeded field. The real launcher stick handler and framework focus search execute unchanged; the below-fold tools assertion checks the actual focused hierarchy, not a fabricated focus result.
 
 The current output is `app/build/distributions/PD2-Android-0.1.22-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing

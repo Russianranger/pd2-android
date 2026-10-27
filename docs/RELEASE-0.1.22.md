@@ -18,4 +18,6 @@ Wine 9.2 Custom, Box64 0.4.4, rootfs 24, Wine HID backend, original HID driver, 
 
 ## Validation
 
-Android 13 tests, actual launcher PNG previews, retained host regressions and the packaged Wine API/recovery check are required before offering the APK. See [Testing](TESTING.md) for device regression and sustained-play checks and [accepted controller evidence](evidence/2026-10-26-xinput-reader-accepted.md) for the physical result.
+[CI 40425451054](https://github.com/Russianranger/pd2-android/actions/runs/40425451054) passes **372 tests across 42 suites**, zero failures/ignored tests, ARM64 assembly, retained host/runtime checks and the actual packaged Wine API/recovery gate. All seven native launcher previews were inspected, including larger text and controller focus reaching the tools below the fold. The APK retains all 76 prior assets and 35 ARM64 libraries byte-for-byte; the added assets are the font and its OFL. Its package/version/SDKs and unchanged V2 preview signer are independently verified.
+
+APK: **174,199,564 bytes**. SHA-256: `5ffce0621c6b0f318cefb87497683c24ecd3545e95e59baf289b4c571e305cee`. Built from `dc157a90ac49748dd48d269ee1f7fc9494400624`. See [Testing](TESTING.md) for device regression and sustained-play checks and [accepted controller evidence](evidence/2026-10-26-xinput-reader-accepted.md) for the physical result.
