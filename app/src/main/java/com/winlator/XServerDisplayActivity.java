@@ -363,6 +363,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         inputControlsManager = new InputControlsManager(this);
         xServer = new XServer(this, screenInfo);
+        if (pd2Session) {
+            ((com.winlator.xserver.extensions.PresentExtension) xServer.getExtensionByName("Present"))
+                    .configureFramePacing(com.winlator.pd2.Pd2FramePacingPolicy.requestedFps(preferences));
+        }
         xServer.setWinHandler(winHandler);
         final boolean[] flags = {false, shortcut != null || getIntent().hasExtra("exec_path")};
         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {

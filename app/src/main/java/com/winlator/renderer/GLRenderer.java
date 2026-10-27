@@ -39,6 +39,9 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
@@ -57,6 +60,21 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private static final int MENU_POINTER_COLOR = 0xE2B966;
     private static final int MENU_POINTER_OUTLINE = 0x291C0D;
     private final ArrayList<RenderableWindow> renderableWindows = new ArrayList<>();
+    private final CompositorPolicy.Stats compositorStats = new CompositorPolicy.Stats();
+    private final CompositorPolicy.Pass<RenderableWindow> windowPass = new CompositorPolicy.Pass<RenderableWindow>() {
+        @Override public void blending(boolean enabled) {
+            if (enabled) GLES20.glEnable(GLES20.GL_BLEND);
+            else GLES20.glDisable(GLES20.GL_BLEND);
+        }
+
+        @Override public void draw(RenderableWindow window) {
+            renderWindowDrawable(window.content, window.rootX, window.rootY, window.transparent,
+                    window.fullscreenTransformation);
+        }
+    };
+    private final Object performanceLock = new Object();
+    private long compositorPasses, occlusionPasses, consideredWindows, drawnWindows, occludedWindows;
+    private long offscreenWindows, opaqueWindows, transparentWindows, blendChanges, hiddenCursorPasses;
     private boolean forceWindowsFullscreen;
     private boolean fullscreen = false;
     private boolean toggleFullscreen = false;
@@ -158,8 +176,23 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
 
         XForm.makeTransform(tmpXForm2, -pointerX, -pointerY, magnifierZoom, magnifierZoom, 0);
 
-        renderWindows();
-        if (cursorVisible) renderCursor();
+        boolean allowOcclusion = magnifierZoom == 1.0f && !screenOffsetYRelativeToCursor;
+        renderWindows(allowOcclusion);
+        boolean cursorPass = CompositorPolicy.needsCursorPass(cursorVisible, cursorOverlayVisible, menuPointerCursorVisible);
+        boolean hiddenCursor = cursorVisible && !cursorPass;
+        if (cursorPass) renderCursor();
+        synchronized (performanceLock) {
+            compositorPasses++;
+            if (compositorStats.occluded > 0) occlusionPasses++;
+            consideredWindows += compositorStats.considered;
+            drawnWindows += compositorStats.drawn;
+            occludedWindows += compositorStats.occluded;
+            offscreenWindows += compositorStats.offscreen;
+            opaqueWindows += compositorStats.opaque;
+            transparentWindows += compositorStats.transparent;
+            blendChanges += compositorStats.blendChanges;
+            if (hiddenCursor) hiddenCursorPasses++;
+        }
     }
 
     @Override
@@ -255,20 +288,33 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         }
     }
 
-    private void renderWindows() {
+    private void renderWindows(boolean allowOcclusion) {
         windowMaterial.use();
         windowMaterial.setUniformVec2(windowMaterial.uniforms.viewSize, xServer.screenInfo.width, xServer.screenInfo.height);
         quadVertices.bind(windowMaterial.programId);
 
         try (XLock lock = xServer.lock(XServer.Lockable.DRAWABLE_MANAGER)) {
-            for (RenderableWindow window : renderableWindows) {
-                if (!window.content.isOffscreenStorage()) {
-                    renderWindowDrawable(window.content, window.rootX, window.rootY, window.transparent, window.fullscreenTransformation);
-                }
-            }
+            CompositorPolicy.render(renderableWindows, xServer.screenInfo.width, xServer.screenInfo.height,
+                    allowOcclusion, windowPass, compositorStats);
         }
 
         quadVertices.disable();
+    }
+
+    /** Fixed aggregate counters for the Android compositor, not Windows game FPS. */
+    public JSONObject performanceSnapshot() {
+        JSONObject report = new JSONObject();
+        synchronized (performanceLock) {
+            try {
+                report.put("scope", "Android compositor passes and window draws; not Windows game FPS")
+                        .put("passes", compositorPasses).put("occlusionPasses", occlusionPasses)
+                        .put("windowsConsidered", consideredWindows).put("windowsDrawn", drawnWindows)
+                        .put("windowsSkippedOpaqueCoverage", occludedWindows).put("offscreenWindowsSkipped", offscreenWindows)
+                        .put("opaqueWindowsDrawn", opaqueWindows).put("transparentWindowsDrawn", transparentWindows)
+                        .put("blendStateChanges", blendChanges).put("hiddenCursorPassesSkipped", hiddenCursorPasses);
+            } catch (JSONException ignored) { }
+        }
+        return report;
     }
 
     private void renderCursor() {

@@ -1,0 +1,24 @@
+# Graphics work reduction after 0.1.22
+
+## Observed baseline
+
+The user accepts the gothic UI and 60 Hz setting, but reports little improvement in performance/temperature. Local attachment `pd2-support-20261026-193648.zip` has SHA-256 `32cb9e1df2362ae9f332368a662ff0e91dec0f1abe280fcfb96b1ddaa257c00e`. Its current launch is `40d09532-fb9c-4d49-9584-2858fad4891f`, app 0.1.22, Android 13, AYN Thor. The capture retains historical attempts too; they are not additional current-version measurements.
+
+The current session uses Turnip/Zink, `-3dfx -dxnocompatmodefix`, Stability and the accepted XInput reader repair. The expected installed reader hash is `5a05fabaaf028749c306b76103451f72215ce69c0605e3876f9beb981f417ce0`. The 60 Hz Surface call reports `request-accepted`; that means Android accepted the request, not that a game frame cap exists or actual refresh was measured. Twenty memory samples cover about 96 seconds. Battery temperature is 33°C initially and 32°C at the end; Android thermal status remains zero. This is not a controlled sustained-load comparison and does not measure GPU temperature. No frame-time or CPU-utilization series exists in this capture.
+
+## Source findings and selected changes
+
+Baseline is `a0606a42964d971a4b3f7d9b50b7ba178f95c93c`. The launcher selects `vblank_mode=0`; its Android compositor also uses swap interval zero. `PresentExtension` previously copied and released frames immediately when `targetMSC` was zero. A Surface refresh vote alone does not constrain this producer. The new per-window pacer sleeps before X resource/content locks, revalidates resources after the wait, and avoids catch-up bursts. Its enabled synchronous CPU-copy path releases idle after the copy instead of retaining the older second delay. GPU copies only flush their command queue, which does not prove completion; positive-target GPU copies therefore retain their legacy delayed idle release. The producer waits only any remaining frame interval, not an unconditional extra interval, but that legacy release can reduce achieved cadence. Separate CPU/GPU/legacy-idle counters expose branch coverage. Unlimited/non-PD2 requests retain the old path. This is deliberately scoped to X Present; a zero request count in a later capture means it did not affect that rendering path.
+
+`SyncExtension.awaitFence` previously yielded up to 500 times and then slept 100 microseconds repeatedly until a fence became triggered. The new predicate/monitor wait wakes on trigger or destruction and permits a bounded lifecycle recheck. XServer shutdown cancels waiters before native connector shutdown/join. A generation change prevents a cancelled request from joining a restarted session. This changes waiting mechanics, not the meaning of an untriggered fence. The original capture cannot establish whether this path was used; new counters make that explicit.
+
+`GLRenderer` previously drew every renderable window, even behind an opaque window covering the viewport, and kept blending enabled even though `WindowMaterial` forces opaque output alpha to one. The new per-pass selection preserves the complete scene, skips only proven hidden lower quads, bypasses culling while zoom/panning is active, and preserves all higher layers. Opaque draws disable unnecessary blending; the pass restores it before cursor/effect work. When both overlay cursor and menu reticle are hidden, their setup is skipped. Counters describe compositor passes/draws, not Windows game FPS. GPU copies made before composition are not represented as saved work.
+
+## Boundaries and sources
+
+- [X Sync protocol](https://xorg.freedesktop.org/archive/current/doc/xextproto/sync.html) specifies blocking a client's request processing until a fence condition is met. The implementation retains predicate checks and wakeup semantics rather than introducing an early-success timeout.
+- [Android frame-rate API](https://developer.android.com/media/optimize/performance/frame-rate) describes the Surface request; it is separate from producer pacing.
+- [N1v0k D2Android release repository](https://github.com/N1v0k/D2Android-Releases) documents selectable frame limits for battery/temperature. That motivates reducing actual frame production; it is not implementation code copied into this launcher, and its private game patches/offsets are not used.
+- Existing repository `WindowMaterial` fragment shader, `PresentExtension`, `SyncExtension`, `XServerComponent` and `GLRenderer` are the direct implementation evidence. Runtime pins and official/imported game DLLs remain unchanged.
+
+Tests must cover pacing timing/catch-up/disabled behavior, no resource locks held while waiting, fence trigger races/destruction/cancellation/restart/interrupt, and compositor output/order/blend restoration. Physical gains require the comparable route described in [Testing](../TESTING.md); no percentage improvement is inferred from these source changes.

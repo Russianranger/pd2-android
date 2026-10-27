@@ -80,6 +80,7 @@ public final class Pd2LauncherPreviewTest {
             save(content, "pd2-launcher-landscape.png");
             previewDialog(activity, "showNativeInputSettings", "pd2-native-input-landscape.png", 1184, 672);
             previewDialog(activity, "showPerformanceSettings", "pd2-performance-landscape.png", 1184, 672);
+            previewDialog(activity, "showDisplayRefreshSettings", "pd2-display-refresh-landscape.png", 1184, 672);
 
             Button first = (Button) findText(content, "Prepare runtime");
             assertNotNull(first);
@@ -122,6 +123,7 @@ public final class Pd2LauncherPreviewTest {
             save(content, "pd2-launcher-portrait-large-font.png");
             previewDialog(activity, "showNativeInputSettings", "pd2-native-input-portrait-large-font.png", 656, 1184);
             previewDialog(activity, "showInputTraceSettings", "pd2-trace-portrait-large-font.png", 656, 1184);
+            previewDialog(activity, "showPerformanceSettings", "pd2-performance-portrait-large-font.png", 656, 1184);
         } finally {
             RuntimeEnvironment.setFontScale(previousFontScale);
         }

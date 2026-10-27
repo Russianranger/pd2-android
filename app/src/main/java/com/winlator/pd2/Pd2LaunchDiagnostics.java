@@ -51,6 +51,9 @@ public final class Pd2LaunchDiagnostics {
                 .put("displayFrameRateRequestedHz", Pd2DisplayPolicy.requestedFrameRate(
                         PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("displayFrameRateScope", "Android 11+ Surface request; device may choose another rate; not a game FPS limit")
+                .put("presentFramePacingFps", Pd2FramePacingPolicy.requestedFps(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
+                .put("presentFramePacingScope", "Per-window X Present submission pacing; not measured game/display FPS. Other presentation paths are not capped.")
                 .put("cpuPreset", container.getBox64Preset()).put("environment", container.getEnvVars())
                 .put("wineVersion", container.getWineVersion()).put("winePath", "/opt/wine")
                 .put("runtimeRevision", Pd2Runtime.RUNTIME_REVISION)

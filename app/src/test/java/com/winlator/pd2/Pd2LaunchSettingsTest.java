@@ -1,6 +1,8 @@
 package com.winlator.pd2;
 
 import android.content.SharedPreferences;
+import android.content.DialogInterface;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -18,6 +20,7 @@ import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowDialog;
 import static org.junit.Assert.*;
+import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 33)
@@ -45,6 +48,39 @@ public final class Pd2LaunchSettingsTest {
             dialog.getListView().performItemClick(null, 3, 3);
             assertEquals("turnip,virgl", preferences.getString("pd2_renderer", ""));
             assertEquals("-ddraw -w", preferences.getString("pd2_arguments", ""));
+        }
+    }
+
+    @Test public void framePacingAndDisplayChoicesPersistIndependentlyWithoutChangingController() throws Exception {
+        try (ActivityController<Pd2Activity> controller = Robolectric.buildActivity(Pd2Activity.class)) {
+            Pd2Activity activity = controller.setup().get();
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
+            preferences.edit().putBoolean(Pd2DisplayPolicy.REQUEST_PREFERENCE, false).commit();
+            int backend = Pd2ControllerBackendPreferences.get(preferences);
+            java.lang.reflect.Method open = Pd2Activity.class.getDeclaredMethod("showPerformanceSettings");
+            open.setAccessible(true);
+            open.invoke(activity);
+            AlertDialog dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            assertEquals(0, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 1, 1);
+            assertEquals(30, Pd2FramePacingPolicy.requestedFps(preferences));
+            assertEquals(0f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
+            open.invoke(activity);
+            dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            assertEquals(1, dialog.getListView().getCheckedItemPosition());
+            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).performClick();
+            shadowOf(Looper.getMainLooper()).idle();
+            dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            assertEquals(1, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 0, 0);
+            assertEquals(60f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
+            assertEquals(30, Pd2FramePacingPolicy.requestedFps(preferences));
+            open.invoke(activity);
+            dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            dialog.getListView().performItemClick(null, 2, 2);
+            assertEquals(0, Pd2FramePacingPolicy.requestedFps(preferences));
+            assertEquals(60f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
+            assertEquals(backend, Pd2ControllerBackendPreferences.get(preferences));
         }
     }
 

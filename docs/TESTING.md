@@ -1,4 +1,16 @@
-# 0.1.22 defaults, power and launcher check
+# 0.1.23 graphics optimization check
+
+The user accepts the gothic launcher and 60 Hz request but reports little performance/temperature improvement from 0.1.22. The controller reader and cursor fixes remain accepted. These changes reduce work in specific graphics paths; a build/test pass does not establish Thor FPS or cooling gains.
+
+1. Install over the current app. Reuse the runtime/import and saves. Stop and Play with the accepted Turnip/Zink, GameNative arguments, Stability and default reader repair.
+2. Check title/character screens, game textures, menus/overlays, one Save/Quit/re-entry and centered-stick cursor stopping. Check zoom or Menu cursor if used. Stop/Play again to check clean graphics shutdown.
+3. Leave **Performance & temperature → 60 fps frame pacing (default)** selected. The separate **Display refresh** remains 60 Hz. Export while the game is running after a few minutes; support `memory.json` samples contain `displayRefresh.presentation`, `synchronization` and `compositor`. Nonzero counters establish whether the affected paths were exercised; zero Present requests means that backend was not capped.
+4. Compare a 10–15 minute route with the same character/area, resolution, brightness, fan mode, charging state and starting temperature. Compare 0.1.23 60 fps with Unlimited for the pacing effect, or the prior APK for the complete change. Stop and Play between changes. Avoid an armed input trace. Check smoothness/input responsiveness as well as temperature.
+5. If lower heat is the priority, try **30 fps frame pacing**. It trades visual smoothness for fewer submitted frames; game/display FPS and temperature must still be observed on the device. Leave 60 Hz unchanged.
+
+The counters are aggregate source-path work counts, not displayed FPS, CPU/GPU utilization or direct power measurements. Battery temperature is not CPU/GPU temperature. The sample history remains bounded. Report stutter, missing/transparent content, stuck shutdown or input regressions with a support export.
+
+# Historical 0.1.22 defaults, power and launcher check
 
 The user confirms the 0.1.21 XInput reader repair works, including Save/Quit recovery. Keep that accepted DLL and the 0.1.20 cursor behavior unchanged. This pass promotes the repair to the default and reduces avoidable diagnostic/display work; it does not claim measured Thor FPS or temperature gains.
 

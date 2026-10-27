@@ -1,3 +1,11 @@
+# 0.1.23 graphics optimization pass
+
+The user accepts the 0.1.22 gothic UI and 60 Hz setting, but sees little performance or temperature benefit. They request three further implemented optimizations under standing change/push approval. The accepted 0.1.21 XInput reader/default and 0.1.20 cursor behavior are retained.
+
+This pass introduces PD2-only per-window X Present pacing (60 fps default; 30/Unlimited choices), blocking X Sync fence waits with explicit stop-before-join cancellation, and conservative opaque-window compositor work reduction. The display preference stays independent. New fixed-size counters join the existing support sampler; no per-frame file output is added. See [release notes](RELEASE-0.1.23.md), [capture/source evidence](evidence/2026-10-26-graphics-optimization.md) and [device checks](TESTING.md).
+
+Source is based on `a0606a42964d971a4b3f7d9b50b7ba178f95c93c`. Full qualification and the offered APK identity will be recorded after CI. The new local capture is 0.1.22, not a test of these changes. It has no frame-time/CPU-utilization measurements; battery 33→32°C and thermal status zero over about 96 seconds do not establish sustained cooling. Do not claim hardware gains or universal FPS limiting from these source changes.
+
 # Current pass — 0.1.22
 
 The user confirms 0.1.21 finally resolves controller recovery after Save/Quit. Preserve its exact XInput DLL and the provisionally accepted 0.1.20 cursor fix. See [accepted capture](evidence/2026-10-26-xinput-reader-accepted.md). The repaired reader becomes the default, including one-time preference migration; explicit manual fallback choices after migration remain persistent.

@@ -32,6 +32,9 @@ import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class PresentExtension extends Extension implements WindowManager.OnWindowModificationListener, XResourceManager.OnResourceLifecycleListener {
     public static final byte MAJOR_VERSION = 1;
@@ -43,6 +46,16 @@ public class PresentExtension extends Extension implements WindowManager.OnWindo
     private SyncExtension syncExtension;
     private long eglContextPtr;
     private ScheduledExecutorService idleNotifyScheduler;
+    private final PresentFramePacer framePacer;
+    private volatile boolean framePacingConfigured;
+    private volatile int framePacingFps;
+    private final AtomicLong presentRequests = new AtomicLong();
+    private final AtomicLong copyRequests = new AtomicLong();
+    private final AtomicLong cpuCopyRequests = new AtomicLong();
+    private final AtomicLong gpuCopyRequests = new AtomicLong();
+    private final AtomicLong legacyIdleScheduled = new AtomicLong();
+    private final AtomicLong nullPixmapRequests = new AtomicLong();
+    private final AtomicLong zeroTargetRequests = new AtomicLong();
 
     private static abstract class ClientOpcodes {
         private static final byte QUERY_VERSION = 0;
@@ -58,9 +71,47 @@ public class PresentExtension extends Extension implements WindowManager.OnWindo
     }
 
     public PresentExtension(XServer xServer, byte majorOpcode) {
+        this(xServer, majorOpcode, new PresentFramePacer());
+    }
+
+    PresentExtension(XServer xServer, byte majorOpcode, PresentFramePacer framePacer) {
         super(xServer, majorOpcode);
+        this.framePacer = framePacer;
         xServer.windowManager.addOnWindowModificationListener(this);
         xServer.windowManager.addOnResourceLifecycleListener(this);
+    }
+
+    /** Configure only the managed PD2 server, before client requests begin. */
+    public void configureFramePacing(int fps) {
+        framePacingFps = fps == 30 || fps == 60 ? fps : 0;
+        framePacer.configure(framePacingFps);
+        presentRequests.set(0);
+        copyRequests.set(0);
+        cpuCopyRequests.set(0);
+        gpuCopyRequests.set(0);
+        legacyIdleScheduled.set(0);
+        nullPixmapRequests.set(0);
+        zeroTargetRequests.set(0);
+        framePacingConfigured = true;
+    }
+
+    /** Aggregate path coverage and requested waits, not game FPS or a measured display rate. */
+    public JSONObject performanceSnapshot() {
+        PresentFramePacer.Snapshot pacing = framePacer.stats();
+        JSONObject report = new JSONObject();
+        try {
+            report.put("configured", framePacingConfigured).put("requestedFps", pacing.fps)
+                    .put("presentRequests", presentRequests.get()).put("imageCopies", copyRequests.get())
+                    .put("cpuImageCopies", cpuCopyRequests.get()).put("gpuImageCopies", gpuCopyRequests.get())
+                    .put("legacyIdleScheduled", legacyIdleScheduled.get())
+                    .put("nullPixmapRequests", nullPixmapRequests.get()).put("zeroTargetRequests", zeroTargetRequests.get())
+                    .put("pacingAttempts", pacing.presents).put("waits", pacing.waits)
+                    .put("requestedWaitNanos", pacing.requestedWaitNanos).put("actualWaitNanos", pacing.actualWaitNanos)
+                    .put("interruptedWaits", pacing.interruptedWaits).put("trackedWindows", pacing.trackedWindows)
+                    .put("elapsedNanos", pacing.elapsedNanos)
+                    .put("scope", "X Present path coverage and per-window producer pacing; not measured game FPS, GPU time or display refresh. GPU copies with positive targets retain legacy delayed idle release, which may reduce achieved cadence. No Present requests means this limiter did not cover the game rendering path.");
+        } catch (JSONException ignored) { }
+        return report;
     }
 
     @Override
@@ -164,37 +215,71 @@ public class PresentExtension extends Extension implements WindowManager.OnWindo
         long targetMSC = inputStream.readLong();
         inputStream.skip(client.getRemainingRequestLength());
 
-        Window window = xServer.windowManager.getWindow(windowId);
-        if (window == null) throw new BadWindow(windowId);
+        Window pacedWindow = null;
+        boolean paced = framePacingConfigured && framePacingFps > 0;
+        if (framePacingConfigured) {
+            // Snapshot valid resources briefly, then release every manager lock
+            // before blocking this request. Android input can acquire its locks.
+            try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER)) {
+                Window window = xServer.windowManager.getWindow(windowId);
+                if (window == null) throw new BadWindow(windowId);
+                Pixmap pixmap = xServer.pixmapManager.getPixmap(pixmapId);
+                if (pixmap != null) {
+                    if (window.getContent().visual.depth != pixmap.drawable.visual.depth) throw new BadMatch();
+                    pacedWindow = window;
+                }
+            }
+            if (pacedWindow != null) framePacer.pace(pacedWindow);
+        }
 
-        Pixmap pixmap = xServer.pixmapManager.getPixmap(pixmapId);
+        // A window can disappear or be resized while the request is paced.
+        // Resolve the resources again instead of copying through stale objects.
+        try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER)) {
+            Window window = xServer.windowManager.getWindow(windowId);
+            if (window == null || pacedWindow != null && window != pacedWindow) throw new BadWindow(windowId);
+            Pixmap pixmap = xServer.pixmapManager.getPixmap(pixmapId);
+            Drawable content = window.getContent();
+            if (pixmap != null && content.visual.depth != pixmap.drawable.visual.depth) throw new BadMatch();
+            presentRequests.incrementAndGet();
+            if (targetMSC == 0) zeroTargetRequests.incrementAndGet();
 
-        Drawable content = window.getContent();
-        if (pixmap != null && content.visual.depth != pixmap.drawable.visual.depth) throw new BadMatch();
+            final int frameTime = 1000000 / 60;
+            long ust = System.nanoTime() / 1000L;
+            long msc = ust / frameTime;
 
-        final int frameTime = 1000000 / 60;
-        long ust = System.nanoTime() / 1000L;
-        long msc = ust / frameTime;
+            synchronized (content.renderLock) {
+                sendCompleteNotify(window, serial, CompleteKind.PIXMAP, CompleteMode.COPY, ust, msc);
 
-        synchronized (content.renderLock) {
-            sendCompleteNotify(window, serial, CompleteKind.PIXMAP, CompleteMode.COPY, ust, msc);
+                if (pixmap != null) {
+                    Texture srcTexture = pixmap.drawable.getTexture();
+                    boolean gpuCopy = srcTexture instanceof GPUImage;
+                    if (gpuCopy) {
+                        if (eglContextPtr == 0) createCopyEGLContext(client);
+                        content.setData(null);
+                        content.getTexture().copyFromSource(srcTexture);
+                        content.forceUpdate();
+                        gpuCopyRequests.incrementAndGet();
+                    }
+                    else {
+                        content.copyArea((short)0, (short)0, xOff, yOff, pixmap.drawable.width, pixmap.drawable.height, pixmap.drawable);
+                        cpuCopyRequests.incrementAndGet();
+                    }
+                    copyRequests.incrementAndGet();
 
-            if (pixmap != null) {
-                Texture srcTexture = pixmap.drawable.getTexture();
-                if (srcTexture instanceof GPUImage) {
-                    if (eglContextPtr == 0) createCopyEGLContext(client);
-                    content.setData(null);
-                    content.getTexture().copyFromSource(srcTexture);
+                    // CPU copies finish before release. Preserve the original
+                    // positive-target GPU release: glFlush submits the GPU copy
+                    // but does not prove completion.
+                    if (targetMSC > 0 && (!paced || gpuCopy)) {
+                        legacyIdleScheduled.incrementAndGet();
+                        sendIdleNotifyScheduled(window, pixmap, serial, idleFence);
+                    }
+                    else sendIdleNotify(window, pixmap, serial, idleFence);
+                }
+                else {
+                    nullPixmapRequests.incrementAndGet();
                     content.forceUpdate();
                 }
-                else content.copyArea((short)0, (short)0, xOff, yOff, pixmap.drawable.width, pixmap.drawable.height, pixmap.drawable);
-
-                if (targetMSC > 0) {
-                    sendIdleNotifyScheduled(window, pixmap, serial, idleFence);
-                }
-                else sendIdleNotify(window, pixmap, serial, idleFence);
             }
-            else content.forceUpdate();
         }
     }
 
@@ -242,9 +327,7 @@ public class PresentExtension extends Extension implements WindowManager.OnWindo
                 queryVersion(client, inputStream, outputStream);
                 break;
             case ClientOpcodes.PRESENT_PIXMAP:
-                try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER)) {
-                    presentPixmap(client, inputStream, outputStream);
-                }
+                presentPixmap(client, inputStream, outputStream);
                 break;
             case ClientOpcodes.SELECT_INPUT:
                 try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
@@ -259,6 +342,7 @@ public class PresentExtension extends Extension implements WindowManager.OnWindo
     @Override
     public void onFreeResource(XResource resource) {
         if (resource instanceof Window) {
+            framePacer.forget(resource);
             sendConfigureNotify((Window)resource, FLAG_WINDOW_DESTROYED);
             synchronized (events) {
                 for (int i = events.size()-1; i >= 0; i--) {
@@ -271,6 +355,7 @@ public class PresentExtension extends Extension implements WindowManager.OnWindo
 
     @Override
     public void onUpdateWindowGeometry(Window window, boolean resized) {
+        framePacer.forget(window);
         window.removeTag("lastIdleTime");
         sendConfigureNotify(window, 0);
     }

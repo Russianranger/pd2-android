@@ -60,6 +60,7 @@ jobs:
           python3 tests/test_crash_recovery.py
           python3 tests/test_session_logs.py
           python3 tests/test_unix_socket_config.py
+          python3 tests/test_present_frame_pacing.py
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Verify Wine 9 controller backend

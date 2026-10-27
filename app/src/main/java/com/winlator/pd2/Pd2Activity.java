@@ -371,10 +371,28 @@ public final class Pd2Activity extends AppCompatActivity {
     }
 
     private void showPerformanceSettings() {
+        String[] choices = {"60 fps frame pacing (default)", "30 fps frame pacing", "Unlimited frame submissions"};
+        int fps = Pd2FramePacingPolicy.requestedFps(preferences);
+        int selected = fps == 30 ? 1 : fps == 0 ? 2 : 0;
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
+            .setCustomTitle(controllerSettingsHeader("Performance & temperature",
+                    "Limits game frame submissions on the Turnip/Zink presentation path. "
+                    + "30 fps can reduce work further; actual FPS may be lower. Applies next Play."))
+            .setSingleChoiceItems(choices, selected, (d, which) -> {
+                int chosen = which == 1 ? 30 : which == 2 ? 0 : 60;
+                preferences.edit().putInt(Pd2FramePacingPolicy.PREFERENCE, chosen).apply();
+                operation = chosen == 0 ? "Unlimited frame submissions selected for the next Play."
+                        : chosen + " fps frame pacing saved for the next Play.";
+                d.dismiss(); updateUi();
+            }).setNeutralButton("Display refresh", (d, which) -> showDisplayRefreshSettings())
+            .setNegativeButton("Close", null).show());
+    }
+
+    private void showDisplayRefreshSettings() {
         String[] choices = {"60 Hz display request (default)", "Device refresh rate"};
         int selected = preferences.getBoolean(Pd2DisplayPolicy.REQUEST_PREFERENCE, true) ? 0 : 1;
         Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
-            .setCustomTitle(controllerSettingsHeader("Performance & temperature",
+            .setCustomTitle(controllerSettingsHeader("Display refresh",
                     "60 Hz can reduce excess display work when Android supports the request. Applies next Play; "
                     + "this is not a game FPS cap. For a heat or battery check, export support logs after playing."))
             .setSingleChoiceItems(choices, selected, (d, which) -> {

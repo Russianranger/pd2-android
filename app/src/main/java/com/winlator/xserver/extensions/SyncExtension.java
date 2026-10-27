@@ -10,13 +10,22 @@ import com.winlator.xserver.errors.BadFence;
 import com.winlator.xserver.errors.BadIdChoice;
 import com.winlator.xserver.errors.BadImplementation;
 import com.winlator.xserver.errors.BadMatch;
+import com.winlator.xserver.errors.BadValue;
 import com.winlator.xserver.errors.XRequestError;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 
 public class SyncExtension extends Extension {
     private final SparseBooleanArray fences = new SparseBooleanArray();
+    private static final long WAIT_RECHECK_MS = 50;
+    // Fence state, lifecycle and counters share the predicate/wait monitor.
+    private boolean stopping;
+    private long generation;
+    private long awaitRequests, blockingWaits, completedAwaits, cancelledAwaits, interruptedAwaits, waitedNanos;
+    private int waitingClients;
 
     private static abstract class ClientOpcodes {
         private static final byte CREATE_FENCE = 14;
@@ -42,64 +51,148 @@ public class SyncExtension extends Extension {
 
     public void setTriggered(int id) {
         synchronized (fences) {
-            if (fences.indexOfKey(id) >= 0) fences.put(id, true);
+            if (fences.indexOfKey(id) >= 0) {
+                fences.put(id, true);
+                fences.notifyAll();
+            }
         }
     }
+
+    /** Stop waiters before the connector joins its request thread. */
+    public void cancelAwaiters() {
+        synchronized (fences) {
+            stopping = true;
+            generation++;
+            fences.notifyAll();
+        }
+    }
+
+    /** A restarted connector must not revive a waiter from the previous generation. */
+    public void startAwaiters() {
+        synchronized (fences) {
+            stopping = false;
+            generation++;
+            fences.notifyAll();
+        }
+    }
+
+    public JSONObject performanceSnapshot() {
+        synchronized (fences) {
+            JSONObject report = new JSONObject();
+            try {
+                report.put("awaitRequests", awaitRequests).put("blockingWaits", blockingWaits)
+                        .put("completedAwaits", completedAwaits).put("cancelledAwaits", cancelledAwaits)
+                        .put("interruptedAwaits", interruptedAwaits).put("waitedMillis", waitedNanos / 1_000_000)
+                        .put("waitingClients", waitingClients).put("running", !stopping)
+                        .put("maxRecheckMillis", WAIT_RECHECK_MS)
+                        .put("scope", "X Sync fence waits only; counters establish whether this path was used, not a measured temperature benefit.");
+            } catch (JSONException ignored) { }
+            return report;
+        }
+    }
+
+    private static long increment(long value) { return value == Long.MAX_VALUE ? value : value + 1; }
 
     private boolean isAnyTriggered(int[] ids) throws XRequestError {
+        boolean triggered = false;
+        for (int id : ids) {
+            if (fences.indexOfKey(id) < 0) throw new BadFence(id);
+            triggered |= fences.get(id);
+        }
+        return triggered;
+    }
+
+    void awaitFences(int[] ids) throws IOException, XRequestError {
         synchronized (fences) {
-            for (int id : ids) {
-                if (fences.indexOfKey(id) < 0) throw new BadFence(id);
-                if (fences.get(id)) return true;
+            awaitRequests = increment(awaitRequests);
+            if (ids.length == 0) throw new BadValue(0);
+            final long startedGeneration = generation;
+            for (;;) {
+                if (stopping || generation != startedGeneration) {
+                    cancelledAwaits = increment(cancelledAwaits);
+                    // Abort the request stream rather than dispatching buffered work
+                    // from a connector generation that is already shutting down.
+                    throw new IOException("X Sync fence wait cancelled");
+                }
+                if (isAnyTriggered(ids)) {
+                    completedAwaits = increment(completedAwaits);
+                    return;
+                }
+                // Checking the predicate and releasing its monitor in wait are atomic.
+                // Triggers normally wake immediately; the bounded recheck also handles
+                // spurious wakes without returning an untriggered fence as complete.
+                blockingWaits = increment(blockingWaits);
+                waitingClients++;
+                long before = System.nanoTime();
+                try {
+                    fences.wait(WAIT_RECHECK_MS);
+                } catch (InterruptedException interrupted) {
+                    interruptedAwaits = increment(interruptedAwaits);
+                    Thread.currentThread().interrupt();
+                    throw new IOException("X Sync fence wait interrupted", interrupted);
+                } finally {
+                    waitingClients--;
+                    long elapsed = Math.max(0, System.nanoTime() - before);
+                    waitedNanos = elapsed > Long.MAX_VALUE - waitedNanos ? Long.MAX_VALUE : waitedNanos + elapsed;
+                }
             }
-            return false;
         }
     }
 
-    private void createFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+    void createFence(int id, boolean initiallyTriggered) throws XRequestError {
         synchronized (fences) {
-            inputStream.skip(4);
-            int id = inputStream.readInt();
-
             if (fences.indexOfKey(id) >= 0) throw new BadIdChoice(id);
-
-            boolean initiallyTriggered = inputStream.readByte() == 1;
-            inputStream.skip(3);
-
             fences.put(id, initiallyTriggered);
         }
     }
 
-    private void triggerFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+    void triggerFence(int id) throws XRequestError {
         synchronized (fences) {
-            int id = inputStream.readInt();
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
             fences.put(id, true);
+            fences.notifyAll();
         }
     }
 
-    private void resetFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+    void resetFence(int id) throws XRequestError {
         synchronized (fences) {
-            int id = inputStream.readInt();
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
-
-            boolean triggered = fences.get(id);
-            if (!triggered) throw new BadMatch();
-
+            if (!fences.get(id)) throw new BadMatch();
             fences.put(id, false);
         }
     }
 
-    private void destroyFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+    void destroyFence(int id) throws XRequestError {
         synchronized (fences) {
-            int id = inputStream.readInt();
             if (fences.indexOfKey(id) < 0) throw new BadFence(id);
             fences.delete(id);
+            fences.notifyAll();
         }
+    }
+
+    private void createFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        inputStream.skip(4);
+        int id = inputStream.readInt();
+        boolean initiallyTriggered = inputStream.readByte() == 1;
+        inputStream.skip(3);
+        createFence(id, initiallyTriggered);
+    }
+
+    private void triggerFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        triggerFence(inputStream.readInt());
+    }
+
+    private void resetFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        resetFence(inputStream.readInt());
+    }
+
+    private void destroyFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        destroyFence(inputStream.readInt());
     }
 
     private void awaitFence(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int length = client.getRemainingRequestLength();
+        if (length <= 0 || (length & 3) != 0) throw new BadValue(length);
         int[] ids = new int[length / 4];
         int i = 0;
 
@@ -108,18 +201,7 @@ public class SyncExtension extends Extension {
             length -= 4;
         }
 
-        int busyWaitIter = 0;
-        while (!isAnyTriggered(ids)) {
-            try {
-                if (busyWaitIter++ < 500) {
-                    Thread.yield();
-                }
-                else TimeUnit.MICROSECONDS.sleep(100);
-            }
-            catch (InterruptedException e) {
-                break;
-            }
-        }
+        awaitFences(ids);
     }
 
     @Override

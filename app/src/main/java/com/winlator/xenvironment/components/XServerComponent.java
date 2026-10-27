@@ -6,6 +6,7 @@ import com.winlator.xconnector.UnixSocketConfig;
 import com.winlator.xserver.XClientConnectionHandler;
 import com.winlator.xserver.XClientRequestHandler;
 import com.winlator.xserver.XServer;
+import com.winlator.xserver.extensions.SyncExtension;
 
 public class XServerComponent extends EnvironmentComponent {
     private XConnectorEpoll connector;
@@ -20,6 +21,7 @@ public class XServerComponent extends EnvironmentComponent {
     @Override
     public void start() {
         if (connector != null) return;
+        xServer.getExtension(SyncExtension.class).startAwaiters();
         connector = new XConnectorEpoll(socketConfig, new XClientConnectionHandler(xServer), new XClientRequestHandler());
         connector.setInitialInputBufferCapacity(4096);
         connector.setInitialOutputBufferCapacity(4096);
@@ -30,6 +32,9 @@ public class XServerComponent extends EnvironmentComponent {
     @Override
     public void stop() {
         if (connector != null) {
+            // A request thread may be blocked inside SYNC AwaitFence. Cancellation
+            // must precede the connector's native stop/join, not client.destroy().
+            xServer.getExtension(SyncExtension.class).cancelAwaiters();
             connector.destroy();
             connector = null;
         }
