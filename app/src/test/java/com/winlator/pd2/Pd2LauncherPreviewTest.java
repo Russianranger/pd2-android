@@ -31,6 +31,7 @@ import org.robolectric.shadows.ShadowDialog;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 import java.time.Duration;
 
 import static org.junit.Assert.*;
@@ -51,7 +52,7 @@ public final class Pd2LauncherPreviewTest {
     @Test @Config(qualifiers = "w640dp-h360dp-land-xhdpi")
     public void thorLandscapeRendersReadableActionsAndFocusReachesToolsBelowTheFold() throws Exception {
         try (ActivityController<Pd2Activity> controller = Robolectric.buildActivity(Pd2Activity.class)) {
-            Pd2Activity activity = controller.setup().get();
+            Pd2Activity activity = controller.setup().windowFocusChanged(true).get();
             settle();
             View content = activity.findViewById(android.R.id.content);
             layout(content, 1280, 720);
@@ -63,7 +64,13 @@ public final class Pd2LauncherPreviewTest {
             Button first = (Button) findText(content, "Prepare runtime");
             assertNotNull(first);
             assertTrue("Prepare runtime must be enabled before testing keyboard focus", first.isEnabled());
+            System.out.println("PD2_LAUNCHER_FOCUS_WINDOW_BEFORE " + describeView(first));
+            assertTrue("The resumed launcher window must have focus before controller navigation", first.hasWindowFocus());
             assertTrue(first.requestFocusFromTouch());
+            StringBuilder diagnostics = new StringBuilder("PD2_LAUNCHER_FOCUS_LAYOUT decor=")
+                    .append(describeView(activity.getWindow().getDecorView())).append(" content=")
+                    .append(describeView(content)).append(" root=").append(describeView(first.getRootView()));
+            System.out.println(diagnostics);
             boolean toolsReached = false;
             for (int i = 0; i < 48; i++) {
                 View focused = activity.getCurrentFocus();
@@ -73,12 +80,23 @@ public final class Pd2LauncherPreviewTest {
                 }
                 // The launcher owns stick focus navigation. Direct Activity key
                 // dispatch skips ViewRootImpl's final unhandled-D-pad focus stage.
+                String before = "\nstep=" + i + " uptime=" + SystemClock.uptimeMillis()
+                        + " lastStick=" + lastStickNavigation(activity) + " focused=" + describeView(focused)
+                        + " nextDown=" + describeView(focused == null ? null : focused.focusSearch(View.FOCUS_DOWN));
+                diagnostics.append(before);
+                System.out.println("PD2_LAUNCHER_FOCUS_BEFORE " + before);
                 shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(240));
                 navigateStickDown(activity);
                 shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20));
+                String after = " afterUptime=" + SystemClock.uptimeMillis() + " afterLastStick="
+                        + lastStickNavigation(activity) + " afterFocused=" + describeView(activity.getCurrentFocus());
+                diagnostics.append(after);
+                System.out.println("PD2_LAUNCHER_FOCUS_AFTER " + after);
             }
             save(content, "pd2-launcher-landscape-tools.png");
-            assertTrue("Controller stick navigation must reach the support/tools actions below the first viewport", toolsReached);
+            System.out.println(diagnostics);
+            assertTrue("Controller stick navigation must reach the support/tools actions below the first viewport\n"
+                    + diagnostics, toolsReached);
         }
     }
 
@@ -179,8 +197,34 @@ public final class Pd2LauncherPreviewTest {
         MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_MOVE, 1,
                 new MotionEvent.PointerProperties[]{pointer}, new MotionEvent.PointerCoords[]{coordinates},
                 0, 0, 1.0f, 1.0f, 0, 0, InputDevice.SOURCE_JOYSTICK, 0);
-        try { assertTrue("The launcher must handle its controller stick navigation", activity.onGenericMotionEvent(event)); }
+        try {
+            System.out.println("PD2_LAUNCHER_FOCUS_EVENT uptime=" + SystemClock.uptimeMillis()
+                    + " source=" + event.getSource() + " x=" + event.getAxisValue(MotionEvent.AXIS_X)
+                    + " y=" + event.getAxisValue(MotionEvent.AXIS_Y));
+            assertEquals(InputDevice.SOURCE_JOYSTICK, event.getSource());
+            assertEquals(0.0f, event.getAxisValue(MotionEvent.AXIS_X), 0.001f);
+            assertEquals(1.0f, event.getAxisValue(MotionEvent.AXIS_Y), 0.001f);
+            assertTrue("The launcher must handle its controller stick navigation", activity.onGenericMotionEvent(event));
+        }
         finally { event.recycle(); }
+    }
+
+    private static long lastStickNavigation(Pd2Activity activity) throws Exception {
+        Field field = Pd2Activity.class.getDeclaredField("lastStickNavigation");
+        field.setAccessible(true);
+        return field.getLong(activity);
+    }
+
+    private static String describeView(View view) {
+        if (view == null) return "null";
+        int[] position = new int[2];
+        view.getLocationInWindow(position);
+        String label = view instanceof TextView ? ((TextView) view).getText().toString() : "";
+        if (label.length() > 48) label = label.substring(0, 48);
+        return view.getClass().getSimpleName() + "[" + label + ";enabled=" + view.isEnabled()
+                + ";touch=" + view.isInTouchMode() + ";windowFocus=" + view.hasWindowFocus()
+                + ";bounds=" + view.getLeft() + "," + view.getTop() + "," + view.getRight() + "," + view.getBottom()
+                + ";size=" + view.getWidth() + "x" + view.getHeight() + ";window=" + position[0] + "," + position[1] + "]";
     }
 
     private static void save(View view, String name) throws Exception {
