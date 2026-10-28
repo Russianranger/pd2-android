@@ -8,4 +8,8 @@ The accepted controller repair, cursor movement, Classic cursor selection, 60 FP
 
 See [capture evidence](evidence/2026-10-28-fps-scaling-followup.md) and the [device comparison](TESTING.md). CPU and image-transfer measurements favor targeting guest rendering work, but do not prove FSR is the bottleneck. Physical FPS improvement remains unverified.
 
-Qualification results and APK identity will be recorded after the build completes.
+[Full CI](https://github.com/Russianranger/pd2-android/actions/runs/40785221636) passes **493 Android tests / 52 suites**, ARM64 assembly, runtime pins and the packaged controller recovery gate. Twenty-one native previews match the inspected layouts. Independent APK checks verify the unchanged signature, 81 assets and 35 native libraries. These checks do not establish device FPS gains.
+
+APK: `PD2-Android-0.1.26-preview.apk`, version code 27, **174,262,628 bytes**. SHA-256: `9c47de427999fca5bd5178c91c1b9b8761f7598e9ce59f00f9003d27a446ea90`.
+
+Tested source: `7a50c466a19ca5f307da51dd526224f0464c81a7`.

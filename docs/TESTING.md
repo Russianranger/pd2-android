@@ -8,7 +8,7 @@ The user accepts the temperature benefit of the 60 FPS game cap and confirms tha
 4. For an isolated comparison, select **Performance & temperature → Graphics & audio → Image scaling → Restore game shader**, then Stop and Play the same route. Keep every other setting, brightness, charging and fan setting the same. The previous owned shader is restored unless a later manual edit must be preserved.
 5. Compare actual game FPS/smoothness and image quality. Capture request/compositor rates are not game FPS. CPU totals include all process threads; battery temperature is not CPU/GPU temperature. The config snapshot verifies a setting, not which DLL/preset executed.
 
-New tests cover string quoting and exact backslash-path restoration, existing six/seven-key journal compatibility, missing/untyped/unsafe presets, effect-schema independence, conflicts and requested/applied failure summaries. Runtime/controller/audio/graphics binaries are unchanged.
+New tests cover string quoting and exact backslash-path restoration, existing six/seven-key journal compatibility, missing/untyped/unsafe presets, effect-schema independence, conflicts and requested/applied failure summaries. Runtime/controller/audio/graphics binaries are unchanged. Final CI passes 493 tests across 52 suites, plus the packaged controller recovery gate. The new dialogs have been visually checked in landscape and enlarged-text portrait. These checks do not establish physical FPS gains.
 
 # Historical 0.1.25 cursor regression and FPS diagnosis
 
