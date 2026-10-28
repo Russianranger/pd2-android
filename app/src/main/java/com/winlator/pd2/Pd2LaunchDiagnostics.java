@@ -56,8 +56,10 @@ public final class Pd2LaunchDiagnostics {
                 .put("gameFrameLimitScope", "Requested D2GL config limit; applied/skipped result is recorded after verified Wine cleanup. Not measured game FPS.")
                 .put("lightGraphicsRequested", Pd2FramePacingPolicy.lightGraphics(
                         PreferenceManager.getDefaultSharedPreferences(context)))
+                .put("classicCursorRequested", Pd2FramePacingPolicy.classicCursor(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("presentFramePacingFps", 0)
-                .put("presentFramePacingScope", "Disabled: D2GL producer pacing replaces the uncovered X Present limiter; no X dispatch sleep is added.")
+                .put("presentFramePacingScope", "Disabled: no X dispatch sleep is added. Game frame settings are the default; explicit D2GL limits remain optional.")
                 .put("audioBufferRequestedMillis", Pd2AudioPolicy.latencyMillis(
                         PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("ecoAudioRequested", Pd2AudioPolicy.ecoMode(
@@ -132,6 +134,22 @@ public final class Pd2LaunchDiagnostics {
             if (status.optBoolean("enabled")) return "Last launch: Eco audio selected. Actual sample rate is in support logs.";
             return status.optBoolean("requested") ? "Last launch: Eco audio was not applied. Export support logs."
                     : "Last launch: Standard audio.";
+        } catch (IOException | JSONException | RuntimeException ignored) { return ""; }
+    }
+
+    public static synchronized String cursorSettingsSummary(Context context) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (!file.isFile() || file.length() > 128 * 1024) return "";
+            JSONObject status = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8))
+                    .optJSONObject("d2glSettings");
+            if (status == null) return "";
+            if (status.optBoolean("cursorApplied")) return "Last launch: classic cursor configured.";
+            if (status.optBoolean("classicCursorRequested"))
+                return "Last launch: classic cursor was not applied. Export support logs.";
+            if ("applied".equals(status.optString("status")) || "unchanged".equals(status.optString("status")))
+                return "Last launch: using the game cursor setting.";
+            return "Last launch: game cursor restoration was not verified. Export support logs.";
         } catch (IOException | JSONException | RuntimeException ignored) { return ""; }
     }
 

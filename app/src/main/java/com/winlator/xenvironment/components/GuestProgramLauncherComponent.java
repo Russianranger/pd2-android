@@ -49,6 +49,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private String pd2GameArguments;
     private int pd2FrameLimit = -1;
     private boolean pd2LightGraphics;
+    private boolean pd2ClassicCursor;
     private boolean pd2EcoAudio;
     private EnvVars envVars;
     private String box64Preset = Box64Preset.CONSERVATIVE;
@@ -58,11 +59,15 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     public void setPd2LaunchId(String id) { pd2LaunchId = id; }
     public void setPd2XInputReaderRequested(boolean requested) { pd2XInputReaderRequested = requested; }
     public void setPd2PerformanceSettings(File gameDirectory, String arguments, int fps, boolean light, boolean eco) {
+        setPd2PerformanceSettings(gameDirectory, arguments, fps, light, eco, false);
+    }
+    public void setPd2PerformanceSettings(File gameDirectory, String arguments, int fps, boolean light, boolean eco, boolean classicCursor) {
         pd2GameDirectory = gameDirectory;
         pd2GameArguments = arguments;
         pd2FrameLimit = fps;
         pd2LightGraphics = light;
         pd2EcoAudio = eco;
+        pd2ClassicCursor = classicCursor;
     }
     public String getPd2LaunchFailure() { return pd2LaunchFailure; }
 
@@ -144,19 +149,24 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
             if (pd2GameDirectory == null || directDraw) {
                 status = new org.json.JSONObject().put("status", "skipped")
                         .put("reason", directDraw ? "Wine DirectDraw compatibility does not use D2GL" : "No captured game directory")
-                        .put("capApplied", false).put("effectsApplied", false);
+                        .put("capApplied", false).put("effectsApplied", false).put("cursorApplied", false)
+                        .put("classicCursorRequested", pd2ClassicCursor);
             } else {
                 status = Pd2D2glConfig.prepareAfterCleanup(environment.getContext(), cleanup,
-                        pd2GameDirectory, pd2FrameLimit, pd2LightGraphics, pd2LaunchId);
+                        pd2GameDirectory, pd2FrameLimit, pd2LightGraphics, pd2ClassicCursor, pd2LaunchId);
             }
         } catch (java.io.IOException | org.json.JSONException | RuntimeException error) {
             status = new org.json.JSONObject();
-            try { status.put("status", "failed").put("reason", error.getClass().getSimpleName()); }
+            try { status.put("status", "failed").put("reason", error.getClass().getSimpleName())
+                    .put("requestedFps", pd2FrameLimit).put("lighterEffectsRequested", pd2LightGraphics)
+                    .put("classicCursorRequested", pd2ClassicCursor).put("cursorApplied", false)
+                    .put("capApplied", false).put("effectsApplied", false); }
             catch (org.json.JSONException ignored) { }
         }
         Pd2LaunchDiagnostics.performanceSettings(environment.getContext(), pd2LaunchId, "d2glSettings", status);
         Pd2Activity.appendLauncherLog(environment.getContext(), "D2GL settings: " + status.optString("status")
                 + "; capApplied=" + status.optBoolean("capApplied") + "; effectsApplied=" + status.optBoolean("effectsApplied")
+                + "; cursorApplied=" + status.optBoolean("cursorApplied")
                 + "; reason=" + status.optString("reason"));
     }
 

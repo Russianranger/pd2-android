@@ -13,12 +13,12 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 33, application = Application.class)
 public final class Pd2FramePacingPolicyTest {
-    @Test public void newAndExistingUsersDefaultTo60WithoutChangingDisplayRefreshPreferences() {
+    @Test public void implicitDefaultsRestoreGameFrameSettingsWithoutChangingDisplayRefreshPreferences() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(RuntimeEnvironment.getApplication());
-        assertEquals(60, Pd2FramePacingPolicy.requestedFps(preferences));
+        assertEquals(Pd2FramePacingPolicy.GAME_SETTINGS, Pd2FramePacingPolicy.requestedFps(preferences));
         assertFalse(preferences.contains(Pd2FramePacingPolicy.PREFERENCE));
         preferences.edit().putBoolean(Pd2DisplayPolicy.REQUEST_PREFERENCE, false).commit();
-        assertEquals(60, Pd2FramePacingPolicy.requestedFps(preferences));
+        assertEquals(Pd2FramePacingPolicy.GAME_SETTINGS, Pd2FramePacingPolicy.requestedFps(preferences));
     }
 
     @Test public void thirtyAndUncappedPersistWhileInvalidChoicesUseTheDefault() {
@@ -29,7 +29,7 @@ public final class Pd2FramePacingPolicyTest {
         }
         for (int invalid : new int[]{-2, 25, 120, Integer.MAX_VALUE}) {
             preferences.edit().putInt(Pd2FramePacingPolicy.PREFERENCE, invalid).commit();
-            assertEquals(60, Pd2FramePacingPolicy.requestedFps(preferences));
+            assertEquals(Pd2FramePacingPolicy.GAME_SETTINGS, Pd2FramePacingPolicy.requestedFps(preferences));
         }
         assertEquals(60f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
     }
@@ -38,9 +38,14 @@ public final class Pd2FramePacingPolicyTest {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(RuntimeEnvironment.getApplication());
         preferences.edit().putString(Pd2FramePacingPolicy.PREFERENCE, "invalid")
                 .putString(Pd2FramePacingPolicy.LIGHT_PREFERENCE, "invalid").commit();
-        assertEquals(60, Pd2FramePacingPolicy.requestedFps(preferences));
+        assertEquals(Pd2FramePacingPolicy.GAME_SETTINGS, Pd2FramePacingPolicy.requestedFps(preferences));
         assertTrue(Pd2FramePacingPolicy.lightGraphics(preferences));
         preferences.edit().putBoolean(Pd2FramePacingPolicy.LIGHT_PREFERENCE, false).commit();
         assertFalse(Pd2FramePacingPolicy.lightGraphics(preferences));
+        assertFalse(Pd2FramePacingPolicy.classicCursor(preferences));
+        preferences.edit().putBoolean(Pd2FramePacingPolicy.CLASSIC_CURSOR_PREFERENCE, true).commit();
+        assertTrue(Pd2FramePacingPolicy.classicCursor(preferences));
+        preferences.edit().putString(Pd2FramePacingPolicy.CLASSIC_CURSOR_PREFERENCE, "invalid").commit();
+        assertFalse(Pd2FramePacingPolicy.classicCursor(preferences));
     }
 }

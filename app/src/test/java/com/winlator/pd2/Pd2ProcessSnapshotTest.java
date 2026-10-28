@@ -213,6 +213,136 @@ public final class Pd2ProcessSnapshotTest {
         assertFalse(overflow.getBoolean("complete"));
     }
 
+    @Test public void cpuFieldsUseOwnUserAndSystemTicksWithTrickyCommAndPerIdentityIntervals() throws Exception {
+        File proc = temporary.newFolder("proc");
+        File directory = process(proc, 120, UID, "Game.exe", 10, 10, 3, 100);
+        write(new File(directory, "stat"), cpuStat(120, "odd ) name ( with spaces)", 100, "11", "13"));
+        Pd2ProcessSnapshot.CpuTracker cpu = new Pd2ProcessSnapshot.CpuTracker();
+        JSONObject firstReport = cpuCapture(proc, 120, cpu, 100, 1_000_000_000L);
+        JSONObject first = firstReport.getJSONArray("processes").getJSONObject(0);
+        assertEquals(11, first.getLong("cpuUserTicks"));
+        assertEquals(13, first.getLong("cpuSystemTicks"));
+        assertEquals(24, first.getLong("cpuTotalTicks"));
+        assertEquals(100, firstReport.getLong("clockTicksPerSecond"));
+        assertTrue(first.isNull("cpuDeltaTotalTicks"));
+        assertTrue(first.isNull("cpuPercentOfOneCore"));
+
+        write(new File(directory, "stat"), cpuStat(120, "new comm text", 100, "611", "413"));
+        JSONObject next = cpuCapture(proc, 120, cpu, 100, 6_000_000_000L)
+                .getJSONArray("processes").getJSONObject(0);
+        assertEquals(600, next.getLong("cpuDeltaUserTicks"));
+        assertEquals(400, next.getLong("cpuDeltaSystemTicks"));
+        assertEquals(1000, next.getLong("cpuDeltaTotalTicks"));
+        assertEquals(5_000_000_000L, next.getLong("cpuDeltaElapsedNanos"));
+        // Multithreaded process CPU is expressed per core, never clamped to 100%.
+        assertEquals(200d, next.getDouble("cpuPercentOfOneCore"), 0.00001d);
+        assertTrue(next.toString().length() < 1800);
+    }
+
+    @Test public void cpuPidReuseAndMissingIdentityNeverJoinDifferentLifetimes() throws Exception {
+        File proc = temporary.newFolder("proc");
+        File directory = process(proc, 121, UID, "Game.exe", 10, 10, 1, 100);
+        Pd2ProcessSnapshot.CpuTracker cpu = new Pd2ProcessSnapshot.CpuTracker();
+        cpuCapture(proc, 121, cpu, 100, 1_000_000_000L);
+        write(new File(directory, "stat"), cpuStat(121, "replacement", 200, "1000", "1000"));
+        assertNoCpuDelta(cpuCapture(proc, 121, cpu, 100, 2_000_000_000L));
+        write(new File(directory, "stat"), cpuStat(121, "replacement", 200, "1010", "1010"));
+        assertEquals(20, cpuCapture(proc, 121, cpu, 100, 3_000_000_000L)
+                .getJSONArray("processes").getJSONObject(0).getLong("cpuDeltaTotalTicks"));
+        write(new File(directory, "stat"), cpuStat(999, "wrong pid", 200, "1020", "1020"));
+        JSONObject wrong = cpuCapture(proc, 121, cpu, 100, 4_000_000_000L);
+        assertNoCpuDelta(wrong);
+        assertTrue(wrong.getJSONArray("processes").getJSONObject(0).isNull("cpuUserTicks"));
+        write(new File(directory, "stat"), cpuStat(121, "replacement", 200, "1030", "1030"));
+        assertNoCpuDelta(cpuCapture(proc, 121, cpu, 100, 5_000_000_000L));
+        assertTrue(new File(directory, "stat").delete());
+        assertNoCpuDelta(cpuCapture(proc, 121, cpu, 100, 6_000_000_000L));
+        write(new File(directory, "stat"), cpuStat(121, "replacement", 200, "1040", "1040"));
+        assertNoCpuDelta(cpuCapture(proc, 121, cpu, 100, 7_000_000_000L));
+    }
+
+    @Test public void cpuCounterResetNegativeMalformedAndOverflowAreUnknownNotLoadSpikes() throws Exception {
+        File proc = temporary.newFolder("proc");
+        File directory = process(proc, 122, UID, "Wine", 10, 10, 1, 100);
+        Pd2ProcessSnapshot.CpuTracker cpu = new Pd2ProcessSnapshot.CpuTracker();
+        write(new File(directory, "stat"), cpuStat(122, "Wine", 100, "100", "100"));
+        cpuCapture(proc, 122, cpu, 100, 1_000_000_000L);
+        // The total grew but user time decreased, so this is not a valid delta.
+        write(new File(directory, "stat"), cpuStat(122, "Wine", 100, "90", "120"));
+        assertNoCpuDelta(cpuCapture(proc, 122, cpu, 100, 2_000_000_000L));
+        for (String user : new String[]{"-1", "broken", "9223372036854775808", Long.toString(Long.MAX_VALUE)}) {
+            write(new File(directory, "stat"), cpuStat(122, "Wine", 100, user, "120"));
+            JSONObject report = cpuCapture(proc, 122, cpu, 100, 3_000_000_000L);
+            assertNoCpuDelta(report);
+            assertTrue(report.getJSONArray("processes").getJSONObject(0).isNull("cpuTotalTicks"));
+        }
+        write(new File(directory, "stat"), cpuStat(122, "Wine", 100, "100", "130"));
+        assertNoCpuDelta(cpuCapture(proc, 122, cpu, 100, 4_000_000_000L));
+        write(new File(directory, "stat"), cpuStat(122, "Wine", 100, "101", "131"));
+        assertEquals(2, cpuCapture(proc, 122, cpu, 100, 5_000_000_000L)
+                .getJSONArray("processes").getJSONObject(0).getLong("cpuDeltaTotalTicks"));
+    }
+
+    @Test public void cpuUnknownOrChangedTickRateKeepsRawTicksWithoutInventingPercent() throws Exception {
+        File proc = temporary.newFolder("proc");
+        File directory = process(proc, 123, UID, "Wine", 10, 10, 1, 100);
+        Pd2ProcessSnapshot.CpuTracker cpu = new Pd2ProcessSnapshot.CpuTracker();
+        cpuCapture(proc, 123, cpu, -1, 1_000_000_000L);
+        write(new File(directory, "stat"), cpuStat(123, "Wine", 100, "50", "50"));
+        JSONObject unknown = cpuCapture(proc, 123, cpu, 0, 2_000_000_000L);
+        assertTrue(unknown.isNull("clockTicksPerSecond"));
+        JSONObject process = unknown.getJSONArray("processes").getJSONObject(0);
+        assertEquals(100, process.getLong("cpuDeltaTotalTicks"));
+        assertTrue(process.isNull("cpuPercentOfOneCore"));
+        write(new File(directory, "stat"), cpuStat(123, "Wine", 100, "100", "100"));
+        JSONObject firstKnown = cpuCapture(proc, 123, cpu, 100, 3_000_000_000L);
+        assertTrue(firstKnown.getJSONArray("processes").getJSONObject(0).isNull("cpuPercentOfOneCore"));
+        write(new File(directory, "stat"), cpuStat(123, "Wine", 100, "150", "150"));
+        assertEquals(100d, cpuCapture(proc, 123, cpu, 100, 4_000_000_000L)
+                .getJSONArray("processes").getJSONObject(0).getDouble("cpuPercentOfOneCore"), 0.00001d);
+        write(new File(directory, "stat"), cpuStat(123, "Wine", 100, "200", "200"));
+        assertTrue(cpuCapture(proc, 123, cpu, 1000, 5_000_000_000L)
+                .getJSONArray("processes").getJSONObject(0).isNull("cpuPercentOfOneCore"));
+    }
+
+    @Test public void cpuNonMonotonicTimeAndMissingProcessesResetTheBaseline() throws Exception {
+        File proc = temporary.newFolder("proc");
+        File directory = process(proc, 124, UID, "Wine", 10, 10, 1, 100);
+        Pd2ProcessSnapshot.CpuTracker cpu = new Pd2ProcessSnapshot.CpuTracker();
+        cpuCapture(proc, 124, cpu, 100, 5_000_000_000L);
+        write(new File(directory, "stat"), cpuStat(124, "Wine", 100, "10", "10"));
+        assertNoCpuDelta(cpuCapture(proc, 124, cpu, 100, 5_000_000_000L));
+        assertNoCpuDelta(cpuCapture(proc, 124, cpu, 100, 4_000_000_000L));
+        assertNoCpuDelta(cpuCapture(proc, 124, cpu, 100, 0));
+        assertNoCpuDelta(cpuCapture(proc, 124, cpu, 100, 6_000_000_000L));
+        write(new File(directory, "status"), status(124, UID + 1, "other-owner", 10, 10, 1));
+        assertEquals(0, cpuCapture(proc, 124, cpu, 100, 7_000_000_000L).getJSONArray("processes").length());
+        write(new File(directory, "status"), status(124, UID, "Wine", 10, 10, 1));
+        assertNoCpuDelta(cpuCapture(proc, 124, cpu, 100, 8_000_000_000L));
+    }
+
+    @Test public void cpuTrackerNeverSharesBaselinesAcrossUidOrAppSessionIdentity() throws Exception {
+        File proc = temporary.newFolder("proc");
+        File directory = process(proc, 125, UID, "Wine", 10, 10, 1, 100);
+        Pd2ProcessSnapshot.CpuTracker cpu = new Pd2ProcessSnapshot.CpuTracker();
+        cpuCapture(proc, 125, cpu, 100, 1_000_000_000L);
+        write(new File(directory, "status"), status(125, UID + 1, "other-owner", 10, 10, 1));
+        write(new File(directory, "stat"), cpuStat(125, "other-owner", 100, "100", "100"));
+        JSONObject otherUid = Pd2ProcessSnapshot.capture(proc, UID + 1, 125, cpu, 100, () -> 2_000_000_000L);
+        assertNoCpuDelta(otherUid);
+        assertNoCpuDelta(Pd2ProcessSnapshot.capture(proc, UID + 1, 999, cpu, 100, () -> 3_000_000_000L));
+    }
+
+    private static JSONObject cpuCapture(File proc, int pid, Pd2ProcessSnapshot.CpuTracker cpu, long clock, long nanos) {
+        return Pd2ProcessSnapshot.capture(proc, UID, pid, cpu, clock, () -> nanos);
+    }
+
+    private static void assertNoCpuDelta(JSONObject report) throws Exception {
+        JSONObject process = report.getJSONArray("processes").getJSONObject(0);
+        assertTrue(process.isNull("cpuDeltaTotalTicks"));
+        assertTrue(process.isNull("cpuPercentOfOneCore"));
+    }
+
     private static File process(File root, int pid, int uid, String name, long rss, long hwm, int threads, long start) throws Exception {
         File directory = new File(root, Integer.toString(pid));
         assertTrue(directory.mkdir());
@@ -229,8 +359,16 @@ public final class Pd2ProcessSnapshotTest {
     }
 
     private static String stat(int pid, String name, long start) {
+        return cpuStat(pid, name, start, "0", "0");
+    }
+
+    private static String cpuStat(int pid, String name, long start, String user, String system) {
         StringBuilder fields = new StringBuilder(pid + " (" + name + ") S");
-        for (int field = 4; field < 22; field++) fields.append(" 0");
+        for (int field = 4; field < 22; field++) {
+            // Large child CPU values must never be added to the process's own time.
+            fields.append(' ').append(field == 14 ? user : field == 15 ? system
+                    : field == 16 || field == 17 ? "500000" : "0");
+        }
         return fields.append(' ').append(start).append(" 0 0\n").toString();
     }
 

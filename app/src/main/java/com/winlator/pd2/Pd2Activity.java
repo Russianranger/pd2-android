@@ -288,6 +288,7 @@ public final class Pd2Activity extends AppCompatActivity {
                     .putExtra("pd2_session", true).putExtra("container_id", container.id)
                     .putExtra("pd2_frame_limit", Pd2FramePacingPolicy.requestedFps(preferences))
                     .putExtra("pd2_light_graphics", Pd2FramePacingPolicy.lightGraphics(preferences))
+                    .putExtra("pd2_classic_cursor", Pd2FramePacingPolicy.classicCursor(preferences))
                     .putExtra("pd2_audio_eco", Pd2AudioPolicy.ecoMode(preferences))
                     .putExtra("pd2_launch_id", launchId).putExtra("exec_path", game.getPath()).putExtra("exec_args", arguments);
                 XServerDisplayActivity.setPd2LaunchPending(true);
@@ -374,13 +375,13 @@ public final class Pd2Activity extends AppCompatActivity {
     }
 
     private void showPerformanceSettings() {
-        String[] choices = {"60 fps game limit (default)", "30 fps game limit", "Unlimited", "Restore game frame settings"};
+        String[] choices = {"60 fps game limit", "30 fps game limit", "Unlimited", "Game frame settings (default)"};
         int fps = Pd2FramePacingPolicy.requestedFps(preferences);
         int selected = fps == 30 ? 1 : fps == 0 ? 2 : fps == Pd2FramePacingPolicy.GAME_SETTINGS ? 3 : 0;
         String last = Pd2LaunchDiagnostics.graphicsSettingsSummary(this);
         Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
             .setCustomTitle(controllerSettingsHeader("Performance & temperature",
-                    last.isEmpty() ? "Set the D2GL game limit. Applies after Stop + Play; actual FPS may be lower."
+                    last.isEmpty() ? "Game settings restores prior frame timing. Changes apply after Stop + Play."
                             : last + " Applies after Stop + Play."))
             .setSingleChoiceItems(choices, selected, (d, which) -> {
                 int chosen = which == 1 ? 30 : which == 2 ? 0 : which == 3 ? Pd2FramePacingPolicy.GAME_SETTINGS : 60;
@@ -395,12 +396,28 @@ public final class Pd2Activity extends AppCompatActivity {
     }
 
     private void showGraphicsAudioSettings() {
-        String[] choices = {"Graphics effects", "Audio buffering", "Audio quality"};
+        String[] choices = {"Graphics effects", "Audio buffering", "Audio quality", "Game cursor"};
         Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("Graphics & audio")
             .setItems(choices, (d, which) -> {
                 if (which == 0) showGraphicsEffectsSettings();
                 else if (which == 1) showAudioBufferSettings();
-                else showAudioQualitySettings();
+                else if (which == 2) showAudioQualitySettings();
+                else showGameCursorSettings();
+            }).setNegativeButton("Close", null).show());
+    }
+
+    private void showGameCursorSettings() {
+        String[] choices = {"Use game cursor setting (default)", "Classic cursor · black-square fallback"};
+        String last = Pd2LaunchDiagnostics.cursorSettingsSummary(this);
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
+            .setCustomTitle(controllerSettingsHeader("Game cursor",
+                    "Classic uses the original game cursor instead of D2GL's HD cursor. Applies after Stop + Play."
+                    + (last.isEmpty() ? "" : "\n" + last)))
+            .setSingleChoiceItems(choices, Pd2FramePacingPolicy.classicCursor(preferences) ? 1 : 0, (d, which) -> {
+                preferences.edit().putBoolean(Pd2FramePacingPolicy.CLASSIC_CURSOR_PREFERENCE, which == 1).apply();
+                operation = which == 1 ? "Classic game cursor selected for the next Play."
+                        : "Previous game cursor setting will be restored on the next clean Play.";
+                d.dismiss(); updateUi();
             }).setNegativeButton("Close", null).show());
     }
 

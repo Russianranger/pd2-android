@@ -1,4 +1,16 @@
-# 0.1.24 active-renderer and audio check
+# 0.1.25 cursor regression and FPS diagnosis
+
+1. Install over the existing app; keep the runtime, import, saves, working controller reader and 60 Hz display request. Keep **Eco audio** selected, since the user reports improvement and its actual 22.05 kHz negotiation is confirmed.
+2. Choose **Performance & temperature → Game frame settings (default)**, then **Stop client → Play**. This restores the frame settings owned by the 0.1.24 launcher and removes its Android content redraw delay. Explicit previously saved frame limits remain selected until changed, so select this choice for the regression check. Observe the title-menu cursor first; record whether its square disappears.
+3. If the square remains, choose **Graphics & audio → Game cursor → Classic cursor**, then Stop and Play. This changes only an existing Boolean `features.hd_cursor`; missing/unrecognized fields are kept and reported. Verify the original cursor in menus, inventory, item pickup and gameplay. **Use game cursor setting** restores the launcher-owned value while preserving later edits. No game DLL or controller binding changes are required.
+4. Test initial Native input, Save/Quit/re-entry and cursor stopping. Export while the game is still running after a comparable 10–15 minute route. Record perceived stutter and any visible game FPS number; Android redraw counts are not game FPS.
+5. `launch.json.d2glSettings` records applied/restored status, bounded `fieldChanges` with before/after values and `classicCursorRequested`/`cursorApplied`. Its `current` values and `installation-files.json.d2glSettingsAtExport` also expose recognized HD-cursor, shader preset, window size and frame-latency settings without changing them.
+6. In `memory.json`, process entries now include user/system/total CPU ticks and valid adjacent-sample deltas, measured using the device clock tick rate. `cpuPercentOfOneCore=100` means one CPU's worth of execution; it can exceed 100. The first sample, missing/reset/reused process identities or unknown clock rate produce null percentages. These are sampled CPU observations, not GPU utilization or measured FPS. Audio rate/buffer/underrun counters remain under `displayRefresh.audio`.
+7. `displayRefresh.mitShm` identifies whether the shared-image request path and borrowed-buffer branch ran, including nonzero-offset/subrectangle requests. Use this to decide whether the separately reproduced buffer-lifetime hazard is relevant. Logical byte estimates are not measured GPU uploads, and the counter does not establish cursor causation.
+
+The frame rollback is regression containment; the original setting changed in 0.1.24 and the exact cursor cause are not fully recoverable from the supplied capture. Classic cursor is a source-supported fallback, not a claimed physical fix. No new speed or cooling gain is established by these automated tests.
+
+# Historical 0.1.24 active-renderer and audio check
 
 1. Install over the current app; reuse runtime, import and saves. Keep the accepted controller reader, Turnip/Zink, GameNative arguments, Stability and 60 Hz display request. Stop and Play.
 2. Check initial Native input, Save/Quit/re-entry and cursor stopping. Check that game/menu/transparent content remains correct, then Stop/Play again to check audio and renderer teardown.

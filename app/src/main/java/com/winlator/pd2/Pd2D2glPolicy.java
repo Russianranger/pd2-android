@@ -21,12 +21,13 @@ public final class Pd2D2glPolicy {
     public static final String SOURCE_COMMIT = "55148de0aec79d487f5bcef1842cfdc3effd2f62";
     static final String[] FRAME_KEYS = {"screen.window_vsync", "screen.foreground_fps_active", "screen.foreground_fps_value"};
     static final String[] EFFECT_KEYS = {"graphics.bloom", "graphics.fxaa", "graphics.sharpen"};
+    static final String[] CURSOR_KEYS = {"features.hd_cursor"};
+    static final String[][] OWNED_GROUPS = {FRAME_KEYS, EFFECT_KEYS, CURSOR_KEYS};
     static final Object MISSING = new Object();
     private Pd2D2glPolicy() {}
 
     static boolean allowed(String key) {
-        for (String item : FRAME_KEYS) if (item.equals(key)) return true;
-        for (String item : EFFECT_KEYS) if (item.equals(key)) return true;
+        for (String[] group : OWNED_GROUPS) for (String item : group) if (item.equals(key)) return true;
         return false;
     }
 
@@ -52,14 +53,24 @@ public final class Pd2D2glPolicy {
             for (String key : EFFECT_KEYS) if (!(value(key) instanceof Boolean)) return false;
             return true;
         }
+        boolean cursorSchema() { return value(CURSOR_KEYS[0]) instanceof Boolean; }
         JSONObject current() throws JSONException {
             JSONObject values = new JSONObject();
-            for (String[] group : new String[][]{FRAME_KEYS, EFFECT_KEYS}) {
+            for (String[] group : OWNED_GROUPS) {
                 for (String key : group) {
                     Object value = value(key);
                     if (value instanceof Boolean || integral(value)) values.put(key, value);
                 }
             }
+            // Diagnostics only: these settings never enter the mutation spans or ownership journal.
+            for (String key : new String[]{"screen.window_size_width", "screen.window_size_height"}) {
+                Object value = value(key);
+                if (range(value, key.endsWith("width") ? 800 : 600, 32767)) values.put(key, value);
+            }
+            Object latency = value("other.frame_latency");
+            if (range(latency, 1, 5)) values.put("other.frame_latency", latency);
+            Object preset = value("graphics.shader_preset");
+            if (safePreset(preset)) values.put("graphics.shader_preset", preset);
             return values;
         }
         byte[] replace(Map<String, Object> changes) throws IOException {
@@ -107,6 +118,11 @@ public final class Pd2D2glPolicy {
     }
 
     static Map<String, Object> desired(Document document, int fps, boolean light) throws IOException {
+        return desired(document, fps, light, false);
+    }
+
+    static Map<String, Object> desired(Document document, int fps, boolean light, boolean classicCursor)
+            throws IOException {
         if (fps != -1 && fps != 0 && fps != 30 && fps != 60) throw new IOException("Unsupported D2GL frame limit");
         Map<String, Object> desired = new LinkedHashMap<>();
         if (fps >= 0) {
@@ -115,6 +131,7 @@ public final class Pd2D2glPolicy {
             desired.put(FRAME_KEYS[2], fps > 0 ? fps : document.value(FRAME_KEYS[2]));
         }
         if (light && document.lightSchema()) for (String key : EFFECT_KEYS) desired.put(key, false);
+        if (classicCursor && document.cursorSchema()) desired.put(CURSOR_KEYS[0], false);
         return desired;
     }
 
@@ -122,6 +139,15 @@ public final class Pd2D2glPolicy {
         return allowed(key) && (FRAME_KEYS[2].equals(key) ? range(value, 25, 240) : value instanceof Boolean);
     }
     static boolean integral(Object value) { return value instanceof Integer || value instanceof Long; }
+    static boolean safePreset(Object value) {
+        if (!(value instanceof String)) return false;
+        String path = (String)value;
+        if (path.isEmpty() || path.length() > 96 || !path.matches("[A-Za-z0-9_ .\\\\/-]+")) return false;
+        for (String part : path.replace('\\', '/').split("/", -1)) {
+            if (part.isEmpty() || part.equals(".") || part.equals("..")) return false;
+        }
+        return true;
+    }
     private static boolean range(Object value, long min, long max) {
         return integral(value) && ((Number)value).longValue() >= min && ((Number)value).longValue() <= max;
     }

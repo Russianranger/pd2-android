@@ -93,6 +93,25 @@ public final class Pd2LaunchDiagnosticsTest {
                 new EnvVars(Pd2LaunchPolicy.environment("  -DDRAW\t-w ", false)).get("WINEDLLOVERRIDES"));
     }
 
+    @Test public void cursorFallbackSummarySeparatesRequestedFromApplied() throws Exception {
+        Application app = RuntimeEnvironment.getApplication();
+        File report = new File(app.getFilesDir(), "pd2/logs/launch.json");
+        assertTrue(report.getParentFile().mkdirs() || report.getParentFile().isDirectory());
+        Files.write(report.toPath(), new JSONObject().put("launchId", "current").toString().getBytes(StandardCharsets.UTF_8));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("classicCursorRequested", true).put("cursorApplied", false));
+        assertTrue(Pd2LaunchDiagnostics.cursorSettingsSummary(app).contains("not applied"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("classicCursorRequested", true).put("cursorApplied", true));
+        assertTrue(Pd2LaunchDiagnostics.cursorSettingsSummary(app).contains("classic cursor configured"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("status", "unchanged").put("classicCursorRequested", false).put("cursorApplied", false));
+        assertTrue(Pd2LaunchDiagnostics.cursorSettingsSummary(app).contains("using the game cursor setting"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("status", "failed").put("classicCursorRequested", false).put("cursorApplied", false));
+        assertTrue(Pd2LaunchDiagnostics.cursorSettingsSummary(app).contains("restoration was not verified"));
+    }
+
     @Test public void hidExperimentKeepsGraphicsOverridesAndTargetsTheSysLoaderNames() {
         String original = new EnvVars(Pd2LaunchPolicy.environment(Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS, false))
                 .get("WINEDLLOVERRIDES");

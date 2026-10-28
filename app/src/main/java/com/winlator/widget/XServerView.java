@@ -12,6 +12,7 @@ import android.widget.FrameLayout;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.xserver.XServer;
 import com.winlator.xserver.extensions.PresentExtension;
+import com.winlator.xserver.extensions.MITSHMExtension;
 import com.winlator.xserver.extensions.SyncExtension;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -123,6 +124,7 @@ public class XServerView extends GLSurfaceView {
             snapshot.put("presentation", ((PresentExtension) xServer.getExtensionByName("Present")).performanceSnapshot());
             snapshot.put("synchronization", ((SyncExtension) xServer.getExtensionByName("SYNC")).performanceSnapshot());
             snapshot.put("compositor", renderer.performanceSnapshot());
+            snapshot.put("mitShm", ((MITSHMExtension) xServer.getExtensionByName("MIT-SHM")).performanceSnapshot());
             ContentFrameCoalescer frames = contentFrames;
             if (frames != null) {
                 ContentFrameCoalescer.Snapshot counters = frames.snapshot();

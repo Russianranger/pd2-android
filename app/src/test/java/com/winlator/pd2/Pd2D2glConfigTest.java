@@ -41,6 +41,9 @@ public final class Pd2D2glConfigTest {
     private JSONObject prepare(Fixture f, int fps, boolean light) {
         return Pd2D2glConfig.prepareFiles(f.files, f.game, fps, light, LAUNCH, null);
     }
+    private JSONObject prepare(Fixture f, int fps, boolean light, boolean classicCursor) {
+        return Pd2D2glConfig.prepareFiles(f.files, f.game, fps, light, classicCursor, LAUNCH, null);
+    }
     private byte[] read(File file) throws Exception { return Files.readAllBytes(file.toPath()); }
     private File state(Fixture f, String name) throws Exception {
         String id = new String(read(new File(f.game, ".pd2-d2gl-installation-id")), StandardCharsets.UTF_8).trim();
@@ -99,6 +102,120 @@ public final class Pd2D2glConfigTest {
         assertEquals(30, config(f).getJSONObject("screen").getInt("foreground_fps_value"));
         prepare(f, -1, false);
         assertEquals(90, config(f).getJSONObject("screen").getInt("foreground_fps_value"));
+    }
+
+    @Test public void classicCursorAppliesAndTheOldOverloadRestoresExactlyItsOwnedValue() throws Exception {
+        Fixture f = fixture();
+        JSONObject applied = prepare(f, -1, false, true);
+        assertEquals("applied", applied.getString("status"));
+        assertTrue(applied.getBoolean("classicCursorRequested"));
+        assertTrue(applied.getBoolean("cursorApplied"));
+        assertFalse(applied.getJSONObject("current").getBoolean("features.hd_cursor"));
+        assertFalse(applied.getBoolean("capApplied"));
+        assertFalse(applied.getBoolean("effectsApplied"));
+        assertEquals(1, applied.getInt("changedFields"));
+        JSONObject change = applied.getJSONArray("fieldChanges").getJSONObject(0);
+        assertEquals("features.hd_cursor", change.getString("field"));
+        assertTrue(change.getBoolean("before"));
+        assertFalse(change.getBoolean("after"));
+        assertArrayEquals(bytes(Pd2D2glPolicyTest.config().replace("\"hd_cursor\": true", "\"hd_cursor\": false")), read(f.config));
+        JSONObject restored = prepare(f, -1, false);
+        assertEquals(1, restored.getInt("restoredFields"));
+        assertFalse(restored.getBoolean("classicCursorRequested"));
+        assertFalse(restored.getBoolean("cursorApplied"));
+        assertTrue(restored.getJSONObject("current").getBoolean("features.hd_cursor"));
+        assertArrayEquals(f.original, read(f.config));
+    }
+
+    @Test public void userSelectedClassicCursorIsNeverChangedBackWithoutLauncherOwnership() throws Exception {
+        Fixture f = fixture();
+        byte[] user = bytes(Pd2D2glPolicyTest.config().replace("\"hd_cursor\": true", "\"hd_cursor\": false"));
+        Files.write(f.config.toPath(), user);
+        JSONObject applied = prepare(f, -1, false, true);
+        assertTrue(applied.getBoolean("cursorApplied"));
+        assertEquals(0, applied.getInt("changedFields"));
+        assertFalse(new File(f.game, ".pd2-d2gl-installation-id").exists());
+        prepare(f, -1, false);
+        assertArrayEquals(user, read(f.config));
+    }
+
+    @Test public void laterUserCursorValueIsRebasedOrPreservedWithoutCoercion() throws Exception {
+        Fixture f = fixture();
+        prepare(f, -1, false, true);
+        Files.write(f.config.toPath(), f.original);
+        assertEquals(1, prepare(f, -1, false, true).getInt("userValuesRebased"));
+        prepare(f, -1, false);
+        assertArrayEquals(f.original, read(f.config));
+        prepare(f, -1, false, true);
+        byte[] manual = bytes(new String(read(f.config), StandardCharsets.UTF_8)
+                .replace("\"hd_cursor\": false", "\"hd_cursor\": \"custom\""));
+        Files.write(f.config.toPath(), manual);
+        JSONObject restored = prepare(f, -1, false);
+        assertEquals(1, restored.getInt("conflictsPreserved"));
+        assertArrayEquals(manual, read(f.config));
+    }
+
+    @Test public void unavailableCursorFieldSkipsOnlyCursorAndDoesNotInventASetting() throws Exception {
+        for (String value : new String[]{"\"another_cursor\": true", "\"hd_cursor\": \"true\"", "\"hd_cursor\": null"}) {
+            Fixture f = fixture();
+            byte[] original = bytes(Pd2D2glPolicyTest.config().replace("\"hd_cursor\": true", value));
+            Files.write(f.config.toPath(), original);
+            JSONObject applied = prepare(f, 60, false, true);
+            assertTrue(applied.getBoolean("capApplied"));
+            assertFalse(applied.getBoolean("cursorApplied"));
+            assertTrue(applied.getString("cursorReason").contains("missing or unrecognized"));
+            assertEquals(3, applied.getInt("changedFields"));
+            assertFalse(applied.getJSONObject("current").has("features.hd_cursor"));
+            prepare(f, -1, false);
+            assertArrayEquals(original, read(f.config));
+        }
+    }
+
+    @Test public void anOwnedCursorBecomingUntypedDoesNotBlockOtherChangesOrGetOverwritten() throws Exception {
+        Fixture f = fixture();
+        prepare(f, -1, false, true);
+        Files.write(f.config.toPath(), bytes(new String(read(f.config), StandardCharsets.UTF_8)
+                .replace("\"hd_cursor\": false", "\"hd_cursor\": \"custom\"")));
+        JSONObject applied = prepare(f, 60, false, true);
+        assertTrue(applied.getBoolean("capApplied"));
+        assertFalse(applied.getBoolean("cursorApplied"));
+        JSONObject entries = new JSONObject(new String(read(state(f, "journal.json")), StandardCharsets.UTF_8)).getJSONObject("entries");
+        assertTrue(entries.has("features.hd_cursor"));
+        prepare(f, -1, false);
+        assertEquals("custom", config(f).getJSONObject("features").getString("hd_cursor"));
+        assertTrue(config(f).getJSONObject("screen").getBoolean("window_vsync"));
+    }
+
+    @Test public void sixFieldVersionOneJournalsCanAddCursorAndRestoreAllSevenFields() throws Exception {
+        Fixture f = fixture();
+        prepare(f, 60, true);
+        File journal = state(f, "journal.json");
+        JSONObject old = new JSONObject(new String(read(journal), StandardCharsets.UTF_8));
+        assertEquals("pd2-d2gl-json-1", old.getString("revision"));
+        assertEquals(6, old.getJSONObject("entries").length());
+        assertFalse(old.getJSONObject("entries").has("features.hd_cursor"));
+        JSONObject applied = prepare(f, 60, true, true);
+        assertTrue(applied.getBoolean("cursorApplied"));
+        assertEquals(1, applied.getJSONArray("fieldChanges").length());
+        JSONObject updated = new JSONObject(new String(read(journal), StandardCharsets.UTF_8));
+        assertEquals(old.getString("revision"), updated.getString("revision"));
+        assertEquals(7, updated.getJSONObject("entries").length());
+        assertArrayEquals(f.original, read(state(f, "original.json")));
+        assertEquals(7, prepare(f, -1, false).getInt("restoredFields"));
+        assertArrayEquals(f.original, read(f.config));
+    }
+
+    @Test public void readOnlySnapshotFieldsCannotBeInjectedIntoOwnershipJournal() throws Exception {
+        Fixture f = fixture();
+        prepare(f, 60, false);
+        byte[] applied = read(f.config);
+        File journal = state(f, "journal.json");
+        JSONObject saved = new JSONObject(new String(read(journal), StandardCharsets.UTF_8));
+        saved.getJSONObject("entries").put("other.frame_latency",
+                new JSONObject().put("original", 3).put("applied", 1));
+        Files.write(journal.toPath(), bytes(saved.toString()));
+        assertEquals("failed", prepare(f, -1, false).getString("status"));
+        assertArrayEquals(applied, read(f.config));
     }
 
     @Test public void unlimitedDisablesTheLimiterWithoutWritingZeroAndFrameRestoreIsIndependent() throws Exception {
@@ -205,7 +322,11 @@ public final class Pd2D2glConfigTest {
         JSONObject snapshot = Pd2D2glConfig.inspectFiles(f.files, f.game);
         assertEquals("observed", snapshot.getString("status")); assertTrue(snapshot.getBoolean("schemaRecognized"));
         assertEquals(Pd2D2glConfig.hash(f.original), snapshot.getString("configSha256"));
-        assertEquals(6, snapshot.getJSONObject("current").length());
+        assertEquals(11, snapshot.getJSONObject("current").length());
+        assertEquals("user\\preset.slangp", snapshot.getJSONObject("current").getString("graphics.shader_preset"));
+        assertEquals(1280, snapshot.getJSONObject("current").getInt("screen.window_size_width"));
+        assertEquals(720, snapshot.getJSONObject("current").getInt("screen.window_size_height"));
+        assertEquals(3, snapshot.getJSONObject("current").getInt("other.frame_latency"));
         assertFalse(snapshot.getJSONObject("current").has("unknown"));
         assertArrayEquals(f.original, read(f.config));
         assertFalse(new File(f.game, ".pd2-d2gl-installation-id").exists());

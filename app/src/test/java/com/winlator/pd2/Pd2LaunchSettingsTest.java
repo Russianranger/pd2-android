@@ -61,7 +61,7 @@ public final class Pd2LaunchSettingsTest {
             open.setAccessible(true);
             open.invoke(activity);
             AlertDialog dialog = (AlertDialog) ShadowDialog.getLatestDialog();
-            assertEquals(0, dialog.getListView().getCheckedItemPosition());
+            assertEquals(3, dialog.getListView().getCheckedItemPosition());
             dialog.getListView().performItemClick(null, 1, 1);
             assertEquals(30, Pd2FramePacingPolicy.requestedFps(preferences));
             assertEquals(0f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
@@ -117,6 +117,18 @@ public final class Pd2LaunchSettingsTest {
             assertEquals(30, Pd2FramePacingPolicy.requestedFps(preferences));
             assertEquals(60f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
             assertEquals(backend, Pd2ControllerBackendPreferences.get(preferences));
+
+            dialog = openDialog(activity, "showGameCursorSettings");
+            assertEquals(0, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 1, 1);
+            assertTrue(Pd2FramePacingPolicy.classicCursor(preferences));
+            assertTrue(Pd2AudioPolicy.ecoMode(preferences));
+            assertEquals(30, Pd2FramePacingPolicy.requestedFps(preferences));
+            assertEquals(backend, Pd2ControllerBackendPreferences.get(preferences));
+            dialog = openDialog(activity, "showGameCursorSettings");
+            assertEquals(1, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 0, 0);
+            assertFalse(Pd2FramePacingPolicy.classicCursor(preferences));
 
             dialog = openDialog(activity, "showAudioQualitySettings");
             assertEquals(1, dialog.getListView().getCheckedItemPosition());

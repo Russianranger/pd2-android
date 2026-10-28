@@ -72,6 +72,52 @@ public final class Pd2D2glPolicyTest {
         assertFalse(desired.containsKey("graphics.bloom"));
     }
 
+    @Test public void classicCursorChangesOnlyTheExistingTypedGuestSetting() throws Exception {
+        Pd2D2glPolicy.Document document = Pd2D2glPolicy.parse(bytes(config()));
+        Map<String, Object> desired = Pd2D2glPolicy.desired(document, -1, false, true);
+        assertEquals(1, desired.size());
+        assertEquals(false, desired.get("features.hd_cursor"));
+        assertArrayEquals(bytes(config().replace("\"hd_cursor\": true", "\"hd_cursor\": false")),
+                document.replace(desired));
+        assertTrue(Pd2D2glPolicy.desired(document, -1, false).isEmpty());
+        for (String replacement : new String[]{"\"another_cursor\": true", "\"hd_cursor\": \"true\"",
+                "\"hd_cursor\": 1", "\"hd_cursor\": null"}) {
+            document = Pd2D2glPolicy.parse(bytes(config().replace("\"hd_cursor\": true", replacement)));
+            assertFalse(document.cursorSchema());
+            assertEquals(3, Pd2D2glPolicy.desired(document, 60, false, true).size());
+            assertFalse(Pd2D2glPolicy.desired(document, 60, false, true).containsKey("features.hd_cursor"));
+        }
+    }
+
+    @Test public void readOnlyShaderResolutionAndLatencyCannotBecomeOwnedSettings() throws Exception {
+        Pd2D2glPolicy.Document document = Pd2D2glPolicy.parse(bytes(config()));
+        JSONObject current = document.current();
+        assertEquals("user\\preset.slangp", current.getString("graphics.shader_preset"));
+        assertEquals(1280, current.getInt("screen.window_size_width"));
+        assertEquals(720, current.getInt("screen.window_size_height"));
+        assertEquals(3, current.getInt("other.frame_latency"));
+        for (String key : new String[]{"graphics.shader_preset", "screen.window_size_width",
+                "screen.window_size_height", "other.frame_latency"}) {
+            assertFalse(Pd2D2glPolicy.allowed(key));
+            assertFalse(Pd2D2glPolicy.validOwnedValue(key, current.get(key)));
+            try { document.replace(java.util.Collections.singletonMap(key, current.get(key))); fail(); }
+            catch (IOException expected) { assertTrue(expected.getMessage().contains("Unsupported")); }
+        }
+    }
+
+    @Test public void shaderSnapshotAcceptsOnlyBoundedRelativePresetPaths() throws Exception {
+        for (String path : new String[]{"anti-aliasing\\advanced-aa.slangp", "user/preset 2.slangp", "x.slangp"})
+            assertTrue(path, Pd2D2glPolicy.safePreset(path));
+        for (Object path : new Object[]{null, 1, "", "/private/file", "C:\\private\\file", "../file",
+                "user/../file", "user\\..\\file", "user//file", "user/./file", "preset\nmetadata", "a".repeat(97)})
+            assertFalse(String.valueOf(path), Pd2D2glPolicy.safePreset(path));
+        String unsafe = config().replace("user\\\\preset.slangp", "../private.slangp")
+                .replace("\"frame_latency\": 3", "\"frame_latency\": 99");
+        JSONObject current = Pd2D2glPolicy.parse(bytes(unsafe)).current();
+        assertFalse(current.has("graphics.shader_preset"));
+        assertFalse(current.has("other.frame_latency"));
+    }
+
     @Test public void unknownScreenTypesAndLimitsAreRejectedBeforeMutation() throws Exception {
         for (String text : new String[]{config().replace("\"foreground_fps_value\": 144", "\"foreground_fps_value\": 144.5"),
                 config().replace("\"window_vsync\": true", "\"window_vsync\": \"true\""),

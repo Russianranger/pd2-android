@@ -18,10 +18,13 @@ import com.winlator.xserver.errors.XRequestError;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class MITSHMExtension extends Extension {
     public static final byte MAJOR_VERSION = 1;
     public static final byte MINOR_VERSION = 1;
+    private final ShmPutImageStats putImageStats = new ShmPutImageStats();
 
     private static abstract class ClientOpcodes {
         private static final byte QUERY_VERSION = 0;
@@ -48,6 +51,20 @@ public class MITSHMExtension extends Extension {
     @Override
     public byte getErrorCount() {
         return 1;
+    }
+
+    /** Request/branch observations; sampled by existing diagnostics, never written per request. */
+    public JSONObject performanceSnapshot() {
+        ShmPutImageStats.Snapshot counts = putImageStats.snapshot();
+        JSONObject report = new JSONObject();
+        try {
+            report.put("requests", counts.requests).put("sharedBorrowed", counts.sharedBorrowed)
+                    .put("copied", counts.copied).put("nonzeroOffset", counts.nonzeroOffset)
+                    .put("subrect", counts.subrect).put("logicalBytes", counts.logicalBytes)
+                    .put("unknownByteEstimates", counts.unknownByteEstimates)
+                    .put("scope", "MIT-SHM PutImage requests after source/GC validation. sharedBorrowed and copied identify existing branch selection, not completed transfers or zero-copy proof. subrect includes partial source or destination coverage. logicalBytes estimates requested four-byte pixels for depth24/32, excluding strides, offsets and transport. Not FPS.");
+        } catch (JSONException ignored) { }
+        return report;
     }
 
     private void queryVersion(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
@@ -89,7 +106,7 @@ public class MITSHMExtension extends Extension {
         byte depth = inputStream.readByte();
         inputStream.skip(3);
         int shmseg = inputStream.readInt();
-        inputStream.skip(4);
+        int offset = inputStream.readInt(); // Observation only: existing transfer semantics are unchanged.
 
         Drawable drawable = xServer.drawableManager.getDrawable(drawableId);
         if (drawable == null) throw new BadDrawable(drawableId);
@@ -104,7 +121,13 @@ public class MITSHMExtension extends Extension {
             throw new UnsupportedOperationException("GC Function other than COPY is not supported.");
         }
 
-        if (drawable.isUseSharedData()) {
+        boolean borrowed = drawable.isUseSharedData();
+        boolean partial = srcX != 0 || srcY != 0 || dstX != 0 || dstY != 0
+                || srcWidth != totalWidth || srcHeight != totalHeight
+                || srcWidth != drawable.width || srcHeight != drawable.height;
+        putImageStats.record(borrowed, offset, partial, ShmPutImageStats.estimateBytes(srcWidth, srcHeight, depth));
+
+        if (borrowed) {
             synchronized (drawable.renderLock) {
                 if (drawable.getData() != data) drawable.setData(data);
                 drawable.forceUpdate();

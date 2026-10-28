@@ -175,6 +175,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private volatile ALSAServerComponent pd2AudioServer;
     private int pd2FrameLimit = 60;
     private boolean pd2LightGraphics;
+    private boolean pd2ClassicCursor;
     private boolean pd2EcoAudio;
     private static volatile boolean pd2LaunchPending;
     private static final java.util.concurrent.atomic.AtomicInteger pd2EnvironmentWorkers = new java.util.concurrent.atomic.AtomicInteger();
@@ -264,6 +265,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     "pd2_frame_limit", com.winlator.pd2.Pd2FramePacingPolicy.requestedFps(preferences)));
             pd2LightGraphics = getIntent().getBooleanExtra("pd2_light_graphics",
                     com.winlator.pd2.Pd2FramePacingPolicy.lightGraphics(preferences));
+            pd2ClassicCursor = getIntent().getBooleanExtra("pd2_classic_cursor",
+                    com.winlator.pd2.Pd2FramePacingPolicy.classicCursor(preferences));
             pd2EcoAudio = getIntent().getBooleanExtra("pd2_audio_eco",
                     com.winlator.pd2.Pd2AudioPolicy.ecoMode(preferences));
             pd2ActiveSession = new WeakReference<>(this);
@@ -838,7 +841,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             String gamePath = getIntent().getStringExtra("exec_path");
             guestProgramLauncherComponent.setPd2PerformanceSettings(
                     gamePath == null ? null : new File(gamePath).getParentFile(),
-                    getIntent().getStringExtra("exec_args"), pd2FrameLimit, pd2LightGraphics, pd2EcoAudio);
+                    getIntent().getStringExtra("exec_args"), pd2FrameLimit, pd2LightGraphics, pd2EcoAudio, pd2ClassicCursor);
         }
         guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
             if (pd2Session && !pd2StopRequested) {

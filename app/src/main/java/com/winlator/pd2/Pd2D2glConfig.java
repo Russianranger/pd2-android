@@ -4,6 +4,7 @@ import android.content.Context;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -34,12 +35,19 @@ public final class Pd2D2glConfig {
     public static JSONObject prepareAfterCleanup(Context context, Pd2WineSession.Result cleanup,
                                                 File capturedProjectD2Directory, int fps,
                                                 boolean lighterEffects, String launchId) throws IOException {
+        return prepareAfterCleanup(context, cleanup, capturedProjectD2Directory, fps, lighterEffects, false, launchId);
+    }
+
+    public static JSONObject prepareAfterCleanup(Context context, Pd2WineSession.Result cleanup,
+                                                File capturedProjectD2Directory, int fps,
+                                                boolean lighterEffects, boolean classicCursorRequested,
+                                                String launchId) throws IOException {
         requireCleanup(cleanup);
         File files = context.getFilesDir();
         try {
             return prepareFiles(files.getCanonicalFile(), normalizeCapturedDirectory(files, capturedProjectD2Directory),
-                    fps, lighterEffects, launchId, null);
-        } catch (IOException error) { return failure(status(fps, lighterEffects), error); }
+                    fps, lighterEffects, classicCursorRequested, launchId, null);
+        } catch (IOException error) { return failure(status(fps, lighterEffects, classicCursorRequested), error); }
     }
 
     /** Bounded, read-only snapshot; the hash/values describe the file, not what a running DLL read. */
@@ -60,8 +68,13 @@ public final class Pd2D2glConfig {
 
     static JSONObject prepareFiles(File files, File game, int fps, boolean light, String launchId,
                                    TransactionHook hook) {
+        return prepareFiles(files, game, fps, light, false, launchId, hook);
+    }
+
+    static JSONObject prepareFiles(File files, File game, int fps, boolean light, boolean classicCursorRequested,
+                                   String launchId, TransactionHook hook) {
         synchronized (LOCK) {
-            JSONObject report = status(fps, light);
+            JSONObject report = status(fps, light, classicCursorRequested);
             try {
                 if (fps != -1 && fps != 0 && fps != 30 && fps != 60)
                     throw new IOException("Unsupported D2GL frame limit; config kept");
@@ -77,9 +90,11 @@ public final class Pd2D2glConfig {
                     return skipped(report, unsupported.getMessage());
                 }
                 describe(report, document, before);
-                Map<String, Object> desired = Pd2D2glPolicy.desired(document, fps, light);
+                Map<String, Object> desired = Pd2D2glPolicy.desired(document, fps, light, classicCursorRequested);
                 if (light && !document.lightSchema())
                     report.put("effectsReason", "Existing graphics booleans are not recognized; effects kept");
+                if (classicCursorRequested && !document.cursorSchema())
+                    report.put("cursorReason", "Existing features.hd_cursor Boolean is missing or unrecognized; cursor setting kept");
 
                 File marker = new File(game, MARKER);
                 safe(files, marker);
@@ -90,7 +105,7 @@ public final class Pd2D2glConfig {
                     for (Map.Entry<String, Object> item : desired.entrySet())
                         changes |= !same(document.value(item.getKey()), item.getValue());
                     if (!changes) {
-                        applied(report, document, fps, light);
+                        applied(report, document, fps, light, classicCursorRequested);
                         return unchanged(report, "Existing D2GL settings already match the request");
                     }
                     id = UUID.randomUUID().toString();
@@ -133,11 +148,16 @@ public final class Pd2D2glConfig {
                 Map<String, Entry> next = new LinkedHashMap<>();
                 Map<String, Object> changes = new LinkedHashMap<>();
                 int restored = 0, conflicts = 0, rebased = 0;
-                for (String[] group : new String[][]{Pd2D2glPolicy.FRAME_KEYS, Pd2D2glPolicy.EFFECT_KEYS}) {
+                for (String[] group : Pd2D2glPolicy.OWNED_GROUPS) {
                     for (String key : group) {
                         Entry owned = previous.get(key);
                         Object current = document.value(key);
                         if (light && !document.lightSchema() && key.startsWith("graphics.")) {
+                            if (owned != null) next.put(key, owned);
+                            continue;
+                        }
+                        if (classicCursorRequested && !document.cursorSchema()
+                                && Pd2D2glPolicy.CURSOR_KEYS[0].equals(key)) {
                             if (owned != null) next.put(key, owned);
                             continue;
                         }
@@ -156,6 +176,10 @@ public final class Pd2D2glConfig {
                     }
                 }
                 byte[] after = changes.isEmpty() ? before : document.replace(changes);
+                JSONArray fieldChanges = new JSONArray();
+                for (Map.Entry<String, Object> change : changes.entrySet()) fieldChanges.put(new JSONObject()
+                        .put("field", change.getKey()).put("before", document.value(change.getKey()))
+                        .put("after", change.getValue()));
                 if (after.length > MAX_CONFIG_BYTES) throw new IOException("D2GL replacement exceeds its size limit; config kept");
                 State transaction = new State(id, relative(files, game), config.getName(), baselineHash,
                         hash(before), hash(after), launchId, true, next, previous);
@@ -174,10 +198,11 @@ public final class Pd2D2glConfig {
                 document = Pd2D2glPolicy.parse(actual);
                 describe(report, document, actual);
                 report.put("changedFields", changes.size()).put("restoredFields", restored)
-                        .put("conflictsPreserved", conflicts).put("userValuesRebased", rebased);
-                applied(report, document, fps, light);
+                        .put("conflictsPreserved", conflicts).put("userValuesRebased", rebased)
+                        .put("fieldChanges", fieldChanges);
+                applied(report, document, fps, light, classicCursorRequested);
                 report.put("status", changes.isEmpty() && !report.optBoolean("capApplied")
-                                && !report.optBoolean("effectsApplied") ? "unchanged" : "applied")
+                                && !report.optBoolean("effectsApplied") && !report.optBoolean("cursorApplied") ? "unchanged" : "applied")
                         .put("reason", conflicts > 0 ? "Launcher-owned settings restored; later user changes kept"
                                 : changes.isEmpty() ? "Existing D2GL settings match the captured request"
                                 : "Validated D2GL settings written atomically before launch");
@@ -230,7 +255,7 @@ public final class Pd2D2glConfig {
         return result;
     }
     private static Map<String, Entry> entries(JSONObject object) throws IOException, JSONException {
-        if (object == null || object.length() > 6) throw new IOException("Invalid D2GL ownership journal; config kept");
+        if (object == null || object.length() > 7) throw new IOException("Invalid D2GL ownership journal; config kept");
         Map<String, Entry> result = new LinkedHashMap<>();
         Iterator<String> keys = object.keys();
         while (keys.hasNext()) {
@@ -354,13 +379,18 @@ public final class Pd2D2glConfig {
         return a == b || a != null && a.equals(b);
     }
     private static JSONObject status(int fps, boolean light) {
+        return status(fps, light, false);
+    }
+    private static JSONObject status(int fps, boolean light, boolean classicCursorRequested) {
         JSONObject object = new JSONObject();
         try { object.put("revision", Pd2D2glPolicy.REVISION).put("sourceCommit", Pd2D2glPolicy.SOURCE_COMMIT)
                 .put("scope", "Existing JSON settings only; DLL identity and achieved game FPS are not measured")
-                .put("requestedFps", fps).put("lighterEffectsRequested", light).put("status", "skipped")
+                .put("requestedFps", fps).put("lighterEffectsRequested", light)
+                .put("classicCursorRequested", classicCursorRequested).put("cursorApplied", false).put("status", "skipped")
                 .put("schemaRecognized", false).put("configFound", false).put("capApplied", false)
                 .put("effectsApplied", false).put("changedFields", 0).put("restoredFields", 0)
-                .put("conflictsPreserved", 0).put("userValuesRebased", 0).put("backupAvailable", false); }
+                .put("conflictsPreserved", 0).put("userValuesRebased", 0).put("backupAvailable", false)
+                .put("fieldChanges", new JSONArray()); }
         catch (JSONException ignored) { }
         return object;
     }
@@ -368,16 +398,18 @@ public final class Pd2D2glConfig {
         report.put("configFound", true).put("schemaRecognized", true).put("configBytes", bytes.length)
                 .put("configSha256", hash(bytes)).put("current", document.current());
     }
-    private static void applied(JSONObject report, Pd2D2glPolicy.Document document, int fps, boolean light) throws JSONException {
+    private static void applied(JSONObject report, Pd2D2glPolicy.Document document, int fps, boolean light,
+                                boolean classicCursorRequested) throws JSONException {
         report.put("capApplied", fps >= 0 && Boolean.FALSE.equals(document.value(Pd2D2glPolicy.FRAME_KEYS[0]))
                 && Boolean.valueOf(fps > 0).equals(document.value(Pd2D2glPolicy.FRAME_KEYS[1]))
                 && (fps == 0 || same(document.value(Pd2D2glPolicy.FRAME_KEYS[2]), fps)));
         boolean effects = light && document.lightSchema();
         for (String key : Pd2D2glPolicy.EFFECT_KEYS) effects &= Boolean.FALSE.equals(document.value(key));
         report.put("effectsApplied", effects);
+        report.put("cursorApplied", classicCursorRequested && Boolean.FALSE.equals(document.value(Pd2D2glPolicy.CURSOR_KEYS[0])));
     }
     private static JSONObject unchanged(JSONObject report, String reason) throws JSONException {
-        return report.put("status", report.optBoolean("capApplied") || report.optBoolean("effectsApplied")
+        return report.put("status", report.optBoolean("capApplied") || report.optBoolean("effectsApplied") || report.optBoolean("cursorApplied")
                 ? "applied" : "unchanged").put("reason", reason);
     }
     private static JSONObject skipped(JSONObject report, String reason) throws JSONException { return report.put("status", "skipped").put("reason", reason); }

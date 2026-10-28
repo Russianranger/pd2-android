@@ -59,6 +59,11 @@ public final class Pd2MemoryDiagnosticsTest {
             assertEquals("request-accepted", sample.getJSONObject("displayRefresh").getString("state"));
             assertTrue(sample.getJSONObject("thermal").has("batteryTemperatureCelsius"));
             assertTrue(sample.getJSONObject("thermal").has("androidThermalStatus"));
+            assertTrue(sample.has("appElapsedCpuMillis"));
+            JSONObject processes = sample.getJSONObject("processes");
+            assertTrue(processes.has("clockTicksPerSecond"));
+            assertTrue(processes.getString("cpuScope").contains("100 means one CPU core"));
+            assertEquals(Pd2ProcessSnapshot.MAX_ENTRIES, processes.getInt("entryLimit"));
             assertTrue(requests.get() > 0);
             assertTrue(file.length() <= Pd2MemoryDiagnostics.MAX_REPORT_BYTES);
         } finally { monitor.close(); assertTrue(monitor.awaitTermination(5000)); }

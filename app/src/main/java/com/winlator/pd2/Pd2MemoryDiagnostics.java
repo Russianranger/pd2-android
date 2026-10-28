@@ -4,6 +4,9 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Debug;
 import android.os.Process;
+import android.os.SystemClock;
+import android.system.Os;
+import android.system.OsConstants;
 import androidx.preference.PreferenceManager;
 import com.winlator.services.ForegroundService;
 import org.json.JSONArray;
@@ -45,8 +48,10 @@ public final class Pd2MemoryDiagnostics implements AutoCloseable {
     public static Pd2MemoryDiagnostics start(Context context, String id, Runnable controllerCheckpoint,
                                             Supplier<JSONObject> displaySnapshot) {
         Context app = context.getApplicationContext();
+        Pd2ProcessSnapshot.CpuTracker cpu = new Pd2ProcessSnapshot.CpuTracker();
+        final long clockTicks = clockTicksPerSecond();
         return new Pd2MemoryDiagnostics(app.getFilesDir(), id, () -> {
-            JSONObject sample = collect(app);
+            JSONObject sample = collect(app, cpu, clockTicks);
             if (displaySnapshot != null) {
                 try { sample.put("displayRefresh", displaySnapshot.get()); }
                 catch (JSONException | RuntimeException ignored) { }
@@ -106,7 +111,7 @@ public final class Pd2MemoryDiagnostics implements AutoCloseable {
         return new JSONObject().put("launchId", launchId).put("sampleIntervalMs", intervalMs)
                 .put("maxSamples", MAX_SAMPLES).put("maxReportBytes", MAX_REPORT_BYTES)
                 .put("retainedSamples", samples.size()).put("byteLimitTrimmed", byteTrimmed)
-                .put("scope", "Device memory, app heaps, visible same-UID processes, battery temperature and Android thermal status; sampled, not final values at death. RSS sums double-count shared pages; GPU/hidden processes may be absent. Battery temperature is not CPU/GPU temperature.")
+                .put("scope", "Device memory, app heaps, visible same-UID process memory/CPU, battery temperature and Android thermal status; sampled, not final values at death. RSS sums double-count shared pages; GPU/hidden processes may be absent. Battery temperature is not CPU/GPU temperature.")
                 .put("samples", new JSONArray(samples));
     }
 
@@ -145,12 +150,18 @@ public final class Pd2MemoryDiagnostics implements AutoCloseable {
         }
     }
 
-    private static JSONObject collect(Context app) {
+    private static long clockTicksPerSecond() {
+        try { return Os.sysconf(OsConstants._SC_CLK_TCK); }
+        catch (RuntimeException error) { return -1; }
+    }
+
+    private static JSONObject collect(Context app, Pd2ProcessSnapshot.CpuTracker cpu, long clockTicks) {
         JSONObject sample = new JSONObject();
         try {
             sample.put("thermal", Pd2ThermalDiagnostics.collect(app));
             Runtime java = Runtime.getRuntime();
             sample.put("appPid", Process.myPid()).put("appUid", Process.myUid())
+                    .put("appElapsedCpuMillis", Process.getElapsedCpuTime())
                     .put("javaUsedBytes", java.totalMemory() - java.freeMemory())
                     .put("javaCommittedBytes", java.totalMemory()).put("javaMaxBytes", java.maxMemory())
                     .put("nativeAllocatedBytes", Debug.getNativeHeapAllocatedSize())
@@ -167,7 +178,8 @@ public final class Pd2MemoryDiagnostics implements AutoCloseable {
                 ActivityManager.getMyMemoryState(process);
                 sample.put("appImportance", process.importance).put("androidLastTrimLevel", process.lastTrimLevel);
             } else sample.put("deviceMemoryStatus", "unavailable");
-            sample.put("processes", Pd2ProcessSnapshot.capture(new File("/proc"), Process.myUid(), Process.myPid()));
+            sample.put("processes", Pd2ProcessSnapshot.capture(new File("/proc"), Process.myUid(), Process.myPid(),
+                    cpu, clockTicks, SystemClock::elapsedRealtimeNanos));
         } catch (JSONException | RuntimeException failure) {
             try { sample.put("sampleError", failure.getClass().getSimpleName()); } catch (JSONException ignored) { }
         }
