@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "host": "Linux x86_64",
+  "compiler": "Ubuntu GCC13.3.0",
+  "snapshot": "20260828T000000Z",
+  "packages": [
+    {
+      "package": "binutils-aarch64-linux-gnu",
+      "version": "2.42-4ubuntu2.10",
+      "filename": "binutils-aarch64-linux-gnu_2.42-4ubuntu2.10_amd64.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/b/binutils/binutils-aarch64-linux-gnu_2.42-4ubuntu2.10_amd64.deb",
+      "bytes": 3710688,
+      "sha256": "6bb25a05c50681e240b453f6572d8066f2358dee984d0ff1dbcd08852642adf2"
+    },
+    {
+      "package": "cpp-13-aarch64-linux-gnu",
+      "version": "13.3.0-6ubuntu2~24.04.1cross1",
+      "filename": "cpp-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/g/gcc-13-cross/cpp-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb",
+      "bytes": 10752882,
+      "sha256": "6aafe2a7820e497263d871519326dc3e5bcecc0583cc49852c05abda8c1d2e55"
+    },
+    {
+      "package": "gcc-13-aarch64-linux-gnu-base",
+      "version": "13.3.0-6ubuntu2~24.04.1cross1",
+      "filename": "gcc-13-aarch64-linux-gnu-base_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/g/gcc-13-cross/gcc-13-aarch64-linux-gnu-base_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb",
+      "bytes": 51896,
+      "sha256": "2246058ef9d122c26c9ae9b2ab6843d2504806e68e45c7842dd30dda15e94723"
+    },
+    {
+      "package": "gcc-13-aarch64-linux-gnu",
+      "version": "13.3.0-6ubuntu2~24.04.1cross1",
+      "filename": "gcc-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/g/gcc-13-cross/gcc-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1cross1_amd64.deb",
+      "bytes": 21069414,
+      "sha256": "154d549389d13010bc0ef2e89c7870e22c4193afa69335f8e57c5fc891e75578"
+    },
+    {
+      "package": "libasound2-dev",
+      "version": "1.2.11-1ubuntu0.3",
+      "filename": "libasound2-dev_1.2.11-1ubuntu0.3_amd64.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/a/alsa-lib/libasound2-dev_1.2.11-1ubuntu0.3_amd64.deb",
+      "bytes": 115386,
+      "sha256": "b83795b1ba0e40cfa8363359fd17a06260838d8ae0f315531771a62f7c7e215a"
+    },
+    {
+      "package": "libc6-dev-arm64-cross",
+      "version": "2.39-0ubuntu8cross1",
+      "filename": "libc6-dev-arm64-cross_2.39-0ubuntu8cross1_all.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/c/cross-toolchain-base/libc6-dev-arm64-cross_2.39-0ubuntu8cross1_all.deb",
+      "bytes": 1628660,
+      "sha256": "04c6956de42669a53e620ad04a32475ea0bd4325808c227bf5ba52498f0d3f90"
+    },
+    {
+      "package": "libgcc-13-dev-arm64-cross",
+      "version": "13.3.0-6ubuntu2~24.04.1cross1",
+      "filename": "libgcc-13-dev-arm64-cross_13.3.0-6ubuntu2~24.04.1cross1_all.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/g/gcc-13-cross/libgcc-13-dev-arm64-cross_13.3.0-6ubuntu2~24.04.1cross1_all.deb",
+      "bytes": 2616044,
+      "sha256": "eda9d79e18170fd46ee0ed62aa391f52bfe8c1a336d53162f2e1c0a675af548f"
+    },
+    {
+      "package": "linux-libc-dev-arm64-cross",
+      "version": "6.8.0-25.25cross1",
+      "filename": "linux-libc-dev-arm64-cross_6.8.0-25.25cross1_all.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/main/c/cross-toolchain-base/linux-libc-dev-arm64-cross_6.8.0-25.25cross1_all.deb",
+      "bytes": 1374680,
+      "sha256": "6a5a00b8ba8de66862e05493def87a5cbbb23b949601e45a5e3cbde56505cb6b"
+    },
+    {
+      "package": "qemu-user-static",
+      "version": "1:8.2.2+ds-0ubuntu1.18",
+      "filename": "qemu-user-static_1%3a8.2.2+ds-0ubuntu1.18_amd64.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260828T000000Z/pool/universe/q/qemu/qemu-user-static_8.2.2+ds-0ubuntu1.18_amd64.deb",
+      "bytes": 14709858,
+      "sha256": "5bb397f66063efa349f6fd5cb3b68cd96f29edd0994e4ba5115cf0859a716bf0"
+    }
+  ]
+}

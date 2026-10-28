@@ -79,9 +79,59 @@ public final class Pd2LaunchSettingsTest {
             dialog = (AlertDialog) ShadowDialog.getLatestDialog();
             dialog.getListView().performItemClick(null, 2, 2);
             assertEquals(0, Pd2FramePacingPolicy.requestedFps(preferences));
+            open.invoke(activity);
+            dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            dialog.getListView().performItemClick(null, 3, 3);
+            assertEquals(Pd2FramePacingPolicy.GAME_SETTINGS, Pd2FramePacingPolicy.requestedFps(preferences));
             assertEquals(60f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
             assertEquals(backend, Pd2ControllerBackendPreferences.get(preferences));
         }
+    }
+
+    @Test public void graphicsAndAudioChoicesPersistIndependentlyAndKeepControllerAndDisplay() throws Exception {
+        try (ActivityController<Pd2Activity> controller = Robolectric.buildActivity(Pd2Activity.class)) {
+            Pd2Activity activity = controller.setup().get();
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
+            int backend = Pd2ControllerBackendPreferences.get(preferences);
+            preferences.edit().putInt(Pd2FramePacingPolicy.PREFERENCE, 30).commit();
+            AlertDialog dialog = openDialog(activity, "showPerformanceSettings");
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick();
+            shadowOf(Looper.getMainLooper()).idle();
+            dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            dialog.getListView().performItemClick(null, 0, 0);
+            shadowOf(Looper.getMainLooper()).idle();
+            dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+            assertEquals(0, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 1, 1);
+            assertFalse(Pd2FramePacingPolicy.lightGraphics(preferences));
+
+            dialog = openDialog(activity, "showAudioBufferSettings");
+            assertEquals(0, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 1, 1);
+            assertEquals(64, Pd2AudioPolicy.latencyMillis(preferences));
+            dialog = openDialog(activity, "showAudioQualitySettings");
+            assertEquals(0, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 1, 1);
+            assertTrue(Pd2AudioPolicy.ecoMode(preferences));
+            assertEquals(64, Pd2AudioPolicy.latencyMillis(preferences));
+            assertEquals(30, Pd2FramePacingPolicy.requestedFps(preferences));
+            assertEquals(60f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
+            assertEquals(backend, Pd2ControllerBackendPreferences.get(preferences));
+
+            dialog = openDialog(activity, "showAudioQualitySettings");
+            assertEquals(1, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 0, 0);
+            assertFalse(Pd2AudioPolicy.ecoMode(preferences));
+            assertEquals(64, Pd2AudioPolicy.latencyMillis(preferences));
+        }
+    }
+
+    private static AlertDialog openDialog(Pd2Activity activity, String name) throws Exception {
+        java.lang.reflect.Method open = Pd2Activity.class.getDeclaredMethod(name);
+        open.setAccessible(true);
+        open.invoke(activity);
+        shadowOf(Looper.getMainLooper()).idle();
+        return (AlertDialog) ShadowDialog.getLatestDialog();
     }
 
     private static View findText(View view, String text) {

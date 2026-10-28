@@ -51,9 +51,17 @@ public final class Pd2LaunchDiagnostics {
                 .put("displayFrameRateRequestedHz", Pd2DisplayPolicy.requestedFrameRate(
                         PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("displayFrameRateScope", "Android 11+ Surface request; device may choose another rate; not a game FPS limit")
-                .put("presentFramePacingFps", Pd2FramePacingPolicy.requestedFps(
+                .put("gameFrameLimitRequestedFps", Pd2FramePacingPolicy.requestedFps(
                         PreferenceManager.getDefaultSharedPreferences(context)))
-                .put("presentFramePacingScope", "Per-window X Present submission pacing; not measured game/display FPS. Other presentation paths are not capped.")
+                .put("gameFrameLimitScope", "Requested D2GL config limit; applied/skipped result is recorded after verified Wine cleanup. Not measured game FPS.")
+                .put("lightGraphicsRequested", Pd2FramePacingPolicy.lightGraphics(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
+                .put("presentFramePacingFps", 0)
+                .put("presentFramePacingScope", "Disabled: D2GL producer pacing replaces the uncovered X Present limiter; no X dispatch sleep is added.")
+                .put("audioBufferRequestedMillis", Pd2AudioPolicy.latencyMillis(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
+                .put("ecoAudioRequested", Pd2AudioPolicy.ecoMode(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("cpuPreset", container.getBox64Preset()).put("environment", container.getEnvVars())
                 .put("wineVersion", container.getWineVersion()).put("winePath", "/opt/wine")
                 .put("runtimeRevision", Pd2Runtime.RUNTIME_REVISION)
@@ -78,6 +86,53 @@ public final class Pd2LaunchDiagnostics {
             report.put("runtimeExitedAt", System.currentTimeMillis()).put("runtimeExitStatus", status);
             write(reportFile, report);
         } catch (IOException | JSONException ignored) { }
+    }
+
+    /** The caller supplies only bounded settings/counters, never an entire imported config. */
+    public static synchronized void performanceSettings(Context context, String id, String key, JSONObject status) {
+        if (!"d2glSettings".equals(key) && !"audioRuntime".equals(key)) return;
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (id == null || status == null || !file.isFile() || file.length() > 128 * 1024) return;
+            if (status.toString().length() > 16 * 1024) return;
+            JSONObject report = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            if (!id.equals(report.optString("launchId"))) return;
+            report.put(key, status);
+            write(file, report);
+        } catch (IOException | JSONException ignored) { }
+    }
+
+    /** Small launcher summary so a skipped config is visible without claiming the cap ran. */
+    public static synchronized String graphicsSettingsSummary(Context context) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (!file.isFile() || file.length() > 128 * 1024) return "";
+            JSONObject report = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            JSONObject status = report.optJSONObject("d2glSettings");
+            if (status == null) return "";
+            if (status.optBoolean("capApplied")) {
+                int fps = status.optInt("requestedFps", 0);
+                return fps > 0 ? "Last launch: D2GL configured for " + fps + " fps."
+                        : "Last launch: D2GL configured without a frame limit.";
+            }
+            if (status.optInt("requestedFps", 60) == Pd2FramePacingPolicy.GAME_SETTINGS
+                    && ("applied".equals(status.optString("status")) || "unchanged".equals(status.optString("status"))))
+                return "Last launch: using game frame settings.";
+            return "Last launch: D2GL settings were not applied. Export support logs.";
+        } catch (IOException | JSONException | RuntimeException ignored) { return ""; }
+    }
+
+    public static synchronized String audioSettingsSummary(Context context) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (!file.isFile() || file.length() > 128 * 1024) return "";
+            JSONObject status = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8))
+                    .optJSONObject("audioRuntime");
+            if (status == null) return "";
+            if (status.optBoolean("enabled")) return "Last launch: Eco audio selected. Actual sample rate is in support logs.";
+            return status.optBoolean("requested") ? "Last launch: Eco audio was not applied. Export support logs."
+                    : "Last launch: Standard audio.";
+        } catch (IOException | JSONException | RuntimeException ignored) { return ""; }
     }
 
     public static synchronized void wineCleanup(Context context, String id, JSONObject cleanup) {
@@ -162,6 +217,13 @@ public final class Pd2LaunchDiagnostics {
         if (!game.equals(base)) inventory(installed, game, files);
         return new JSONObject().put("scope", "Top-level base and ProjectD2 files; PE headers and selected core-file SHA-256 hashes, no binaries or saves")
                 .put("maxFilesPerDirectory", 256).put("maxHashBytes", MAX_HASH_BYTES).put("files", files);
+    }
+
+    public static JSONObject installationFiles(Context context, File installed,
+                                               Pd2InstallValidator.Result installation) throws JSONException {
+        File game = new File(installed, installation.gameExecutableRelativePath).getParentFile();
+        return installationFiles(installed, installation)
+                .put("d2glSettingsAtExport", Pd2D2glConfig.inspect(context, game));
     }
 
     private static void inventory(File installed, File directory, JSONArray result) throws JSONException {

@@ -23,6 +23,8 @@ public class ALSARequestHandler implements RequestHandler {
         if (inputStream.available() < 5) return false;
         byte requestCode = inputStream.readByte();
         int requestLength = inputStream.readInt();
+        if (requestLength < 0 || requestLength > ALSAClient.MAX_BUFFER_BYTES)
+            throw new IOException("Invalid ALSA request length");
 
         switch (requestCode) {
             case RequestCodes.CLOSE:
@@ -38,12 +40,19 @@ public class ALSARequestHandler implements RequestHandler {
                 alsaClient.pause();
                 break;
             case RequestCodes.PREPARE:
+                if (requestLength != 10) throw new IOException("Invalid ALSA PREPARE length");
                 if (inputStream.available() < requestLength) return false;
 
-                alsaClient.setChannels(inputStream.readByte());
-                alsaClient.setDataType(ALSAClient.DataType.values()[inputStream.readByte()]);
-                alsaClient.setSampleRate(inputStream.readInt());
-                alsaClient.setBufferSize(inputStream.readInt());
+                int prepareChannels = Byte.toUnsignedInt(inputStream.readByte());
+                ALSAClient.DataType prepareType = readDataType(inputStream);
+                int prepareRate = inputStream.readInt();
+                int prepareFrames = inputStream.readInt();
+                if (!ALSAClient.validBuffer(prepareFrames, prepareChannels, prepareType, prepareRate))
+                    throw new IOException("Invalid ALSA PCM buffer");
+                alsaClient.setChannels(prepareChannels);
+                alsaClient.setDataType(prepareType);
+                alsaClient.setSampleRate(prepareRate);
+                alsaClient.setBufferSize(prepareFrames);
                 alsaClient.prepare();
 
                 if (ALSAClient.USE_SHARED_MEMORY) createSharedMemory(alsaClient, outputStream);
@@ -69,25 +78,41 @@ public class ALSARequestHandler implements RequestHandler {
                 }
                 break;
             case RequestCodes.MIN_BUFFER_SIZE:
-                byte channels = inputStream.readByte();
-                ALSAClient.DataType dataType = ALSAClient.DataType.values()[inputStream.readByte()];
+                if (requestLength != 6) throw new IOException("Invalid ALSA MIN_BUFFER_SIZE length");
+                if (inputStream.available() < requestLength) return false;
+                int channels = Byte.toUnsignedInt(inputStream.readByte());
+                ALSAClient.DataType dataType = readDataType(inputStream);
                 int sampleRate = inputStream.readInt();
+                if (!ALSAClient.validFormat(channels, dataType, sampleRate))
+                    throw new IOException("Invalid ALSA PCM format");
                 int minBufferSize = ALSAClient.latencyMillisToBufferSize(alsaClient.options.latencyMillis, channels, dataType, sampleRate);
 
                 try (XStreamLock lock = outputStream.lock()) {
                     outputStream.writeInt(minBufferSize);
                 }
                 break;
+            default:
+                throw new IOException("Unknown ALSA request");
         }
         return true;
+    }
+
+    private ALSAClient.DataType readDataType(XInputStream inputStream) throws IOException {
+        int type = Byte.toUnsignedInt(inputStream.readByte());
+        if (type >= ALSAClient.DataType.values().length) throw new IOException("Invalid ALSA PCM encoding");
+        return ALSAClient.DataType.values()[type];
     }
 
     private void copySharedBuffer(ALSAClient alsaClient, int requestLength, XOutputStream outputStream) throws IOException {
         ByteBuffer sharedBuffer = alsaClient.getSharedBuffer();
         ByteBuffer auxBuffer = alsaClient.getAuxBuffer();
+        if (auxBuffer == null || requestLength > auxBuffer.capacity()
+                || requestLength > sharedBuffer.capacity() - ALSAClient.BUFFER_OFFSET)
+            throw new IOException("Invalid ALSA shared write length");
 
-        auxBuffer.position(0).limit(requestLength);
-        sharedBuffer.position(ALSAClient.BUFFER_OFFSET).limit(ALSAClient.BUFFER_OFFSET + requestLength);
+        // Reset limits first: the preceding write can have been shorter than this one.
+        auxBuffer.clear().limit(requestLength);
+        sharedBuffer.clear().position(ALSAClient.BUFFER_OFFSET).limit(ALSAClient.BUFFER_OFFSET + requestLength);
         auxBuffer.put(sharedBuffer);
 
         try (XStreamLock lock = outputStream.lock()) {

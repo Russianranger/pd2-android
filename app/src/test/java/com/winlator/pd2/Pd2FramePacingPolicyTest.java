@@ -23,14 +23,24 @@ public final class Pd2FramePacingPolicyTest {
 
     @Test public void thirtyAndUncappedPersistWhileInvalidChoicesUseTheDefault() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(RuntimeEnvironment.getApplication());
-        for (int fps : new int[]{30, 0, 60}) {
+        for (int fps : new int[]{30, 0, 60, -1}) {
             preferences.edit().putInt(Pd2FramePacingPolicy.PREFERENCE, fps).commit();
             assertEquals(fps, Pd2FramePacingPolicy.requestedFps(preferences));
         }
-        for (int invalid : new int[]{-1, 25, 120, Integer.MAX_VALUE}) {
+        for (int invalid : new int[]{-2, 25, 120, Integer.MAX_VALUE}) {
             preferences.edit().putInt(Pd2FramePacingPolicy.PREFERENCE, invalid).commit();
             assertEquals(60, Pd2FramePacingPolicy.requestedFps(preferences));
         }
         assertEquals(60f, Pd2DisplayPolicy.requestedFrameRate(preferences), 0f);
+    }
+
+    @Test public void invalidPreferenceTypesRecoverAndLightEffectsCanBeRestored() {
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(RuntimeEnvironment.getApplication());
+        preferences.edit().putString(Pd2FramePacingPolicy.PREFERENCE, "invalid")
+                .putString(Pd2FramePacingPolicy.LIGHT_PREFERENCE, "invalid").commit();
+        assertEquals(60, Pd2FramePacingPolicy.requestedFps(preferences));
+        assertTrue(Pd2FramePacingPolicy.lightGraphics(preferences));
+        preferences.edit().putBoolean(Pd2FramePacingPolicy.LIGHT_PREFERENCE, false).commit();
+        assertFalse(Pd2FramePacingPolicy.lightGraphics(preferences));
     }
 }

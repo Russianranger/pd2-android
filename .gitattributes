@@ -4,3 +4,8 @@ app/src/main/assets/pd2/controller/winebus.so binary
 
 # Preserve the upstream font license verbatim.
 app/src/main/assets/fonts/OFL-CinzelDecorative.txt whitespace=-blank-at-eol
+
+# Preserve the complete upstream LGPL text and the compiled optional audio asset.
+runtime/audio-rate/COPYING.LIB whitespace=-blank-at-eol
+app/src/main/assets/pd2/audio/COPYING.LIB whitespace=-blank-at-eol
+app/src/main/assets/pd2/audio/libasound_module_pcm_pd2_eco.so binary

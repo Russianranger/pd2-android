@@ -1,0 +1,18 @@
+{
+  "revision": "alsa-eco-1",
+  "bytes": 71448,
+  "sha256": "c3c344f2f8740aaca3db6ba6216b6908dcceb367358cdca31e1907ec7043a3bd",
+  "sampleRate": 22050,
+  "architecture": "aarch64-linux-gnu",
+  "license": "LGPL-2.1",
+  "licenseSha256": "e237fa56668030e928551ddd60f05df5fe957f75eab874bbd017e085ed722e7c",
+  "sourceSha256": {
+    "runtime/audio-rate/COPYING.LIB": "e237fa56668030e928551ddd60f05df5fe957f75eab874bbd017e085ed722e7c",
+    "runtime/audio-rate/README.md": "196bc0257b755622577af6d18865533d64a666a7cbd5f14dd6ebe181d84d1ee3",
+    "runtime/audio-rate/TOOLCHAIN.json": "45f2e7cca285221519471653d8b9f88a85df21f2adf394e8565db96bb22080c2",
+    "runtime/audio-rate/module_pcm_pd2_eco.c": "7051193b5039a5041de60cf5adc2c873f966bcfc47294d508c9a1d99aa7a16b6",
+    "runtime/audio-rate/test_pcm.c": "553c80f3f106de93ebc864bc28c4025f7aa2b735ecef0582dccbe22c9b6bbfe0",
+    "runtime/audio-rate/vendor/module_pcm_android_aserver_d2.c": "2a725e584a03e8d41caa1efc7517ff5bbd4737faf6d31c1c21a1203d14e72f00",
+    "scripts/build-audio-rate-runtime.py": "ea3fcb14dfc73e22b697605a0081d06059279616fdf667fc9a46018a5b6b94fe"
+  }
+}

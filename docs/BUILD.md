@@ -44,11 +44,23 @@ python3 tests/test_crash_recovery.py
 python3 tests/test_session_logs.py
 python3 tests/test_unix_socket_config.py
 python3 tests/test_present_frame_pacing.py
+python3 tests/test_audio_bridge.py
+python3 scripts/build-audio-rate-runtime.py --check
+python3 scripts/build-audio-rate-runtime.py --test
 sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;24.0.8215888' 'cmake;3.22.1'
 ./gradlew --no-daemon :app:testDebugUnitTest
 ./gradlew --no-daemon :app:assembleDebug
 ./scripts/package-preview.sh
 ```
+
+The optional Eco audio module is separately built against the exact packaged ARM64
+glibc/libasound ABI. Its pinned source/toolchain and complete LGPL license are in
+`runtime/audio-rate/`; it does not replace the original PCM plugin. The `--check`
+gate verifies the shipped asset and ELF dependencies. The `--test` gate uses the
+pinned ARM64 loader/libasound under QEMU with an explicit mock Android AServer
+transport to compare original and Eco rate negotiation and PCM lifecycle. This is
+not an Android audible test. Android unit tests additionally cover the atomic
+installer, D2GL apply/restore, audio bridge and redraw scheduler.
 
 The first source build downloads pinned upstream assets and the roughly 148 MB
 [official Winlator 10.1 APK](https://github.com/brunodev85/winlator/releases/tag/v10.1.0)

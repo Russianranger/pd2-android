@@ -286,6 +286,9 @@ public final class Pd2Activity extends AppCompatActivity {
                         + "; arguments=" + arguments + "; CPU=" + (preferences.getBoolean(Pd2LaunchPolicy.CPU_PREFERENCE, false) ? "interpreter" : "stability"));
                 Intent intent = new Intent(this, XServerDisplayActivity.class)
                     .putExtra("pd2_session", true).putExtra("container_id", container.id)
+                    .putExtra("pd2_frame_limit", Pd2FramePacingPolicy.requestedFps(preferences))
+                    .putExtra("pd2_light_graphics", Pd2FramePacingPolicy.lightGraphics(preferences))
+                    .putExtra("pd2_audio_eco", Pd2AudioPolicy.ecoMode(preferences))
                     .putExtra("pd2_launch_id", launchId).putExtra("exec_path", game.getPath()).putExtra("exec_args", arguments);
                 XServerDisplayActivity.setPd2LaunchPending(true);
                 startActivity(intent);
@@ -371,21 +374,79 @@ public final class Pd2Activity extends AppCompatActivity {
     }
 
     private void showPerformanceSettings() {
-        String[] choices = {"60 fps frame pacing (default)", "30 fps frame pacing", "Unlimited frame submissions"};
+        String[] choices = {"60 fps game limit (default)", "30 fps game limit", "Unlimited", "Restore game frame settings"};
         int fps = Pd2FramePacingPolicy.requestedFps(preferences);
-        int selected = fps == 30 ? 1 : fps == 0 ? 2 : 0;
+        int selected = fps == 30 ? 1 : fps == 0 ? 2 : fps == Pd2FramePacingPolicy.GAME_SETTINGS ? 3 : 0;
+        String last = Pd2LaunchDiagnostics.graphicsSettingsSummary(this);
         Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
             .setCustomTitle(controllerSettingsHeader("Performance & temperature",
-                    "Limits game frame submissions on the Turnip/Zink presentation path. "
-                    + "30 fps can reduce work further; actual FPS may be lower. Applies next Play."))
+                    last.isEmpty() ? "Set the D2GL game limit. Applies after Stop + Play; actual FPS may be lower."
+                            : last + " Applies after Stop + Play."))
             .setSingleChoiceItems(choices, selected, (d, which) -> {
-                int chosen = which == 1 ? 30 : which == 2 ? 0 : 60;
+                int chosen = which == 1 ? 30 : which == 2 ? 0 : which == 3 ? Pd2FramePacingPolicy.GAME_SETTINGS : 60;
                 preferences.edit().putInt(Pd2FramePacingPolicy.PREFERENCE, chosen).apply();
-                operation = chosen == 0 ? "Unlimited frame submissions selected for the next Play."
-                        : chosen + " fps frame pacing saved for the next Play.";
+                operation = chosen == Pd2FramePacingPolicy.GAME_SETTINGS ? "Game frame settings will be restored on the next clean Play."
+                        : chosen == 0 ? "Unlimited selected for the next Play."
+                        : chosen + " fps D2GL game limit saved for the next Play.";
                 d.dismiss(); updateUi();
             }).setNeutralButton("Display refresh", (d, which) -> showDisplayRefreshSettings())
+            .setPositiveButton("Graphics & audio", (d, which) -> showGraphicsAudioSettings())
             .setNegativeButton("Close", null).show());
+    }
+
+    private void showGraphicsAudioSettings() {
+        String[] choices = {"Graphics effects", "Audio buffering", "Audio quality"};
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("Graphics & audio")
+            .setItems(choices, (d, which) -> {
+                if (which == 0) showGraphicsEffectsSettings();
+                else if (which == 1) showAudioBufferSettings();
+                else showAudioQualitySettings();
+            }).setNegativeButton("Close", null).show());
+    }
+
+    private void showGraphicsEffectsSettings() {
+        String[] choices = {"Lighter effects (default)", "Restore game effects"};
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
+            .setCustomTitle(controllerSettingsHeader("Graphics effects",
+                    "Lighter disables supported bloom, FXAA and sharpening effects to reduce rendering work. "
+                    + "Resolution stays the same. Applies after Stop + Play."))
+            .setSingleChoiceItems(choices, Pd2FramePacingPolicy.lightGraphics(preferences) ? 0 : 1, (d, which) -> {
+                preferences.edit().putBoolean(Pd2FramePacingPolicy.LIGHT_PREFERENCE, which == 0).apply();
+                operation = which == 0 ? "Lighter graphics effects selected for the next Play."
+                        : "Game effects will be restored on the next clean Play.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
+    }
+
+    private void showAudioBufferSettings() {
+        String[] choices = {"Balanced · 32 ms (default)", "More buffering · 64 ms", "Low latency · 16 ms (previous)"};
+        int latency = Pd2AudioPolicy.latencyMillis(preferences);
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
+            .setCustomTitle(controllerSettingsHeader("Audio buffering",
+                    "More buffering can smooth brief audio interruptions, with slightly later sound. "
+                    + "Support logs include audio underruns. Applies after Stop + Play."))
+            .setSingleChoiceItems(choices, latency == 64 ? 1 : latency == 16 ? 2 : 0, (d, which) -> {
+                int chosen = which == 1 ? 64 : which == 2 ? 16 : 32;
+                preferences.edit().putInt(Pd2AudioPolicy.PREFERENCE, chosen).apply();
+                operation = chosen + " ms audio buffering saved for the next Play.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
+    }
+
+    private void showAudioQualitySettings() {
+        String[] choices = {"Standard audio (default)", "Eco audio · 22.05 kHz"};
+        String last = Pd2LaunchDiagnostics.audioSettingsSummary(this);
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
+            .setCustomTitle(controllerSettingsHeader("Audio quality",
+                    "Eco lowers the audio mixing rate to reduce CPU work; sound may be less crisp. "
+                    + "This is separate from buffering. Applies after Stop + Play."
+                    + (last.isEmpty() ? "" : "\n" + last)))
+            .setSingleChoiceItems(choices, Pd2AudioPolicy.ecoMode(preferences) ? 1 : 0, (d, which) -> {
+                preferences.edit().putBoolean(Pd2AudioPolicy.ECO_PREFERENCE, which == 1).apply();
+                operation = which == 1 ? "Eco audio selected for the next Play."
+                        : "Standard audio selected for the next Play.";
+                d.dismiss(); updateUi();
+            }).setNegativeButton("Close", null).show());
     }
 
     private void showDisplayRefreshSettings() {
@@ -537,7 +598,7 @@ public final class Pd2Activity extends AppCompatActivity {
                 Pd2AttemptReports.exportArchived(getFilesDir(), out);
                 if (installation != null && installation.valid) {
                     out.putNextEntry(new ZipEntry("installation-files.json"));
-                    out.write(Pd2LaunchDiagnostics.installationFiles(Pd2Installer.installedDirectory(this), installation)
+                    out.write(Pd2LaunchDiagnostics.installationFiles(this, Pd2Installer.installedDirectory(this), installation)
                             .toString(2).getBytes(StandardCharsets.UTF_8));
                     out.closeEntry();
                     Pd2LaunchDiagnostics.exportGameLogs(Pd2Installer.installedDirectory(this), installation, out);

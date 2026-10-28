@@ -1,4 +1,15 @@
-# 0.1.23 graphics optimization check
+# 0.1.24 active-renderer and audio check
+
+1. Install over the current app; reuse runtime, import and saves. Keep the accepted controller reader, Turnip/Zink, GameNative arguments, Stability and 60 Hz display request. Stop and Play.
+2. Check initial Native input, Save/Quit/re-entry and cursor stopping. Check that game/menu/transparent content remains correct, then Stop/Play again to check audio and renderer teardown.
+3. Start with **60 fps game limit**, **Lighter effects**, **32 ms Balanced audio**, **Standard audio**. The launcher reports the last D2GL applied/skipped result under Performance & temperature. Export while running after a few minutes. Inspect `launch.json.d2glSettings`: recognized schema, requested FPS, applied flags and allowlisted values. A skipped result means the game limiter/effects were not applied; do not infer success from the selected preference.
+4. Compare the same 10–15 minute route, brightness, fan mode, charging state and starting temperature. `memory.json` includes `displayRefresh.audio` (actual rate, buffer size/capacity, underruns, partial/zero/error writes and write timing), `contentRedraw` and compositor counts. Counters establish path activity, not game FPS, audible success or CPU/GPU temperature.
+5. If audio still stutters, compare **64 ms** with 32 ms after Stop/Play. Record whether music, effects or both stutter. Separately compare opt-in **Eco audio** with Standard at the same buffer size. Check `launch.json.audioRuntime` and the negotiated audio sample rate: Eco must actually negotiate 22050 Hz. Test music/effects, mono/stereo streams, title/game transitions, pause/resume and shutdown; report sound-quality changes.
+6. Compare 30 fps only if lower rendering work is preferred over smoothness. Restore game frame settings and Restore game effects should restore launcher-owned values while retaining later user edits. The original backup remains. Do not replace DLLs or re-import merely to reset these choices.
+
+No hardware gain is established by the automated build. An initially empty DirectSound buffer warning alone is not proof of Android underruns. Export before Stop when possible; capture any regression before changing other settings.
+
+# Historical 0.1.23 graphics optimization check
 
 The user accepts the gothic launcher and 60 Hz request but reports little performance/temperature improvement from 0.1.22. The controller reader and cursor fixes remain accepted. These changes reduce work in specific graphics paths; a build/test pass does not establish Thor FPS or cooling gains.
 

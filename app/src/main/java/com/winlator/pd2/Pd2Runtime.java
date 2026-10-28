@@ -156,7 +156,8 @@ public final class Pd2Runtime {
         container.setDXWrapper(DXWrappers.WINED3D);
         container.setDXWrapperConfig("");
         container.setAudioDriver(AudioDrivers.ALSA);
-        container.setAudioDriverConfig("");
+        container.setAudioDriverConfig(Pd2AudioPolicy.configuration(
+                PreferenceManager.getDefaultSharedPreferences(context)));
         container.setBox64Preset(Pd2LaunchPolicy.cpuPreset());
         container.setWinComponents(WIN_COMPONENTS);
         container.setStartupSelection(Container.STARTUP_SELECTION_ESSENTIAL);
@@ -347,7 +348,8 @@ public final class Pd2Runtime {
                 .put("dxwrapper", DXWrappers.WINED3D)
                 .put("dxwrapperConfig", "")
                 .put("audioDriver", AudioDrivers.ALSA)
-                .put("audioDriverConfig", "")
+                .put("audioDriverConfig", Pd2AudioPolicy.configuration(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("wincomponents", WIN_COMPONENTS)
                 .put("drives", "P:" + Pd2Installer.installedDirectory(context).getAbsolutePath())
                 .put("hudMode", 0)

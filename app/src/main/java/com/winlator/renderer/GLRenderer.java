@@ -215,7 +215,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
 
     @Override
     public void onUpdateWindowContent(Window window) {
-        xServerView.requestRender();
+        xServerView.requestContentRender();
     }
 
     @Override

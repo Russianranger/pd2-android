@@ -62,6 +62,26 @@ public final class Pd2LaunchDiagnosticsTest {
         assertEquals("new-session", current.getString("launchId"));
     }
 
+    @Test public void performanceSettingsAreLaunchScopedAndReportSkippedCapsHonestly() throws Exception {
+        Application app = RuntimeEnvironment.getApplication();
+        File report = new File(app.getFilesDir(), "pd2/logs/launch.json");
+        assertTrue(report.getParentFile().mkdirs() || report.getParentFile().isDirectory());
+        Files.write(report.toPath(), new JSONObject().put("launchId", "current").toString().getBytes(StandardCharsets.UTF_8));
+        JSONObject applied = new JSONObject().put("status", "applied").put("requestedFps", 30).put("capApplied", true);
+        Pd2LaunchDiagnostics.performanceSettings(app, "old", "d2glSettings", applied);
+        assertFalse(new JSONObject(read(report)).has("d2glSettings"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "arbitrary", applied);
+        assertFalse(new JSONObject(read(report)).has("arbitrary"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings", applied);
+        assertTrue(Pd2LaunchDiagnostics.graphicsSettingsSummary(app).contains("configured for 30 fps"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("status", "skipped").put("capApplied", false));
+        assertTrue(Pd2LaunchDiagnostics.graphicsSettingsSummary(app).contains("not applied"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("oversized", "x".repeat(20 * 1024)));
+        assertEquals("skipped", new JSONObject(read(report)).getJSONObject("d2glSettings").getString("status"));
+    }
+
     @Test public void directDrawBypassesNativeWrapperWhileGlidePreservesIt() {
         EnvVars directDraw = new EnvVars(Pd2LaunchPolicy.environment("-ddraw -w", false));
         assertEquals("ddraw=b;glide3x=n,b;mscoree,mshtml=d", directDraw.get("WINEDLLOVERRIDES"));

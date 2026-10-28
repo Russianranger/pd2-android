@@ -92,3 +92,13 @@ The bundled font is 60,408 bytes, SHA-256
 `5b862be329103ad287a10f0a53e27a40e8cc519999253f1a0223e2dc330b10b8`.
 The launcher ornament is original vector artwork; no Diablo artwork or logo was
 added for this visual refresh.
+
+## Optional Eco audio module
+
+`runtime/audio-rate/` retains the D2Android 1.4.1 ALSA plugin source at
+`N1v0k/D2Android-Releases` commit `2cd50c37293598e23dc423a0a0b68886d6bf5b47`,
+derived from Winlator's Android ALSA bridge, under GNU LGPL 2.1. The complete
+license, original source, local changes, reproducible build inputs and tests are
+included there. The separately named PCM module constrains negotiation to
+22.05 kHz only when Eco audio is selected; the original runtime plugin remains
+intact. See its [build/provenance notes](runtime/audio-rate/README.md).

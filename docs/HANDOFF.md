@@ -1,4 +1,16 @@
-# 0.1.23 graphics optimization pass
+# 0.1.24 active D2GL and audio pass
+
+The user reports no apparent gains and some audio stutter on 0.1.23, asks for a source comparison with D2Android, then says to continue the recommendations. Standing change/main-push approval applies. Preserve the accepted reader, cursor, gothic UI and 60 Hz display request. Base: `7c7da989baf470cb45d3e16f837e4e90d1ee0839`.
+
+[Capture/source evidence](evidence/2026-10-27-active-rendering-audio.md) establishes that the 0.1.23 X Present limiter and Sync waits were unused, while compositor culling ran. The DirectSound warnings also existed earlier and do not identify Android audio starvation. No hardware speed/temperature gain is established.
+
+0.1.24/code25 changes supported existing D2GL JSON settings after exact-prefix cleanup: 60 fps by default (30/Unlimited/Restore choices), disabling V-Sync as required by its limiter; default lighter bloom/FXAA/sharpening effects, with restoration. Unrelated bytes, resolution, binaries and saves remain unchanged. Atomic backups and a per-import journal preserve later user changes and reject unrecognized configs. App-root aliases are normalized without accepting symlinks inside the imported tree. The launcher exposes applied/skipped status and support export includes only six allowlisted config values. Android content redraw requests coalesce nonblockingly; urgent pointer/control updates remain immediate. The uncovered X Present sleep is disabled for PD2.
+
+Audio uses32ms default buffering with16/64ms choices and bounded actual AudioTrack underrun/rate/buffer/write diagnostics. Zero-progress loops, counter overflow/stale-observation races, shared-buffer length growth and pre-join shutdown are covered by21 host scenarios/139checks. Optional Eco selects a new uniquely named ARM64 ALSA module at22.05kHz; Standard keeps the original. Asset71448bytes, SHA256 `c3c344f2f8740aaca3db6ba6216b6908dcceb367358cdca31e1907ec7043a3bd`. Its exact packaged-library QEMU probe passes 8 scenarios / 2,428 checks, including byte-identical reproducible rebuild and original48kHz vsEco22.05kHz negotiation under a48kHz request. Transport is mocked; Android sound/CPU benefit is unmeasured.
+
+Independent reviews found no source blocker in the config transaction/restore, audio protocol/teardown, optional Eco installer/ABI, or content scheduler. Thirteen pure scheduler tests pass. Local Android qualification passes 464 tests across 52 suites, zero failures/errors/skips, with 15 native UI previews. All 206 dependency pins verify; all 78 existing assets match 0.1.23 byte-for-byte, with three new audio assets. CI qualification and the offered APK identity are pending at this source checkpoint; do not label an APK qualified before those results. [Release notes](RELEASE-0.1.24.md) and [device checks](TESTING.md) describe the test.
+
+# Historical 0.1.23 graphics optimization pass
 
 The user accepts the 0.1.22 gothic UI and 60 Hz setting, but sees little performance or temperature benefit. They request three further implemented optimizations under standing change/push approval. The accepted 0.1.21 XInput reader/default and 0.1.20 cursor behavior are retained.
 

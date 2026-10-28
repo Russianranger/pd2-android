@@ -27,6 +27,8 @@ import com.winlator.pd2.Pd2InputTraceRuntime;
 import com.winlator.pd2.Pd2XInputReaderRuntime;
 import com.winlator.pd2.Pd2ControllerBackendPolicy;
 import com.winlator.pd2.Pd2LaunchPolicy;
+import com.winlator.pd2.Pd2D2glConfig;
+import com.winlator.pd2.Pd2AudioRuntime;
 
 import java.io.File;
 import java.util.List;
@@ -43,6 +45,11 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private boolean pd2InputTraceApplied;
     private boolean pd2InputTraceRestoreAttempted;
     private boolean pd2XInputReaderRequested;
+    private File pd2GameDirectory;
+    private String pd2GameArguments;
+    private int pd2FrameLimit = -1;
+    private boolean pd2LightGraphics;
+    private boolean pd2EcoAudio;
     private EnvVars envVars;
     private String box64Preset = Box64Preset.CONSERVATIVE;
     private Callback<Integer> terminationCallback;
@@ -50,6 +57,13 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
 
     public void setPd2LaunchId(String id) { pd2LaunchId = id; }
     public void setPd2XInputReaderRequested(boolean requested) { pd2XInputReaderRequested = requested; }
+    public void setPd2PerformanceSettings(File gameDirectory, String arguments, int fps, boolean light, boolean eco) {
+        pd2GameDirectory = gameDirectory;
+        pd2GameArguments = arguments;
+        pd2FrameLimit = fps;
+        pd2LightGraphics = light;
+        pd2EcoAudio = eco;
+    }
     public String getPd2LaunchFailure() { return pd2LaunchFailure; }
 
     private void recordLaunchFailure(String message) {
@@ -99,6 +113,8 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                                 launchEnvironment.get("WINEDEBUG")));
                     }
                     recordInputTrace("beforeLaunch", null);
+                    prepareGraphicsSettings(result);
+                    prepareAudioSettings(result);
                     return true;
                 } catch (java.io.IOException | RuntimeException error) {
                     recordLaunchFailure("Cannot prepare the controller runtime: " + error.getMessage());
@@ -116,6 +132,53 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 return false;
             }
         }
+    }
+
+    private void prepareGraphicsSettings(Pd2WineSession.Result cleanup) {
+        org.json.JSONObject status;
+        try {
+            boolean directDraw = false;
+            if (pd2GameArguments != null) for (String token : pd2GameArguments.trim().split("\\s+")) {
+                if ("-ddraw".equalsIgnoreCase(token)) directDraw = true;
+            }
+            if (pd2GameDirectory == null || directDraw) {
+                status = new org.json.JSONObject().put("status", "skipped")
+                        .put("reason", directDraw ? "Wine DirectDraw compatibility does not use D2GL" : "No captured game directory")
+                        .put("capApplied", false).put("effectsApplied", false);
+            } else {
+                status = Pd2D2glConfig.prepareAfterCleanup(environment.getContext(), cleanup,
+                        pd2GameDirectory, pd2FrameLimit, pd2LightGraphics, pd2LaunchId);
+            }
+        } catch (java.io.IOException | org.json.JSONException | RuntimeException error) {
+            status = new org.json.JSONObject();
+            try { status.put("status", "failed").put("reason", error.getClass().getSimpleName()); }
+            catch (org.json.JSONException ignored) { }
+        }
+        Pd2LaunchDiagnostics.performanceSettings(environment.getContext(), pd2LaunchId, "d2glSettings", status);
+        Pd2Activity.appendLauncherLog(environment.getContext(), "D2GL settings: " + status.optString("status")
+                + "; capApplied=" + status.optBoolean("capApplied") + "; effectsApplied=" + status.optBoolean("effectsApplied")
+                + "; reason=" + status.optString("reason"));
+    }
+
+    private void prepareAudioSettings(Pd2WineSession.Result cleanup) {
+        org.json.JSONObject status;
+        try {
+            status = Pd2AudioRuntime.prepareAfterCleanup(environment.getContext(), cleanup,
+                    pd2EcoAudio, launchEnvironment);
+        } catch (java.io.IOException | RuntimeException error) {
+            // A failed optional installer must not leave a stale route to its own module.
+            try { Pd2AudioRuntime.prepareAfterCleanup(environment.getContext(), cleanup, false, launchEnvironment); }
+            catch (java.io.IOException | RuntimeException ignored) { }
+            status = new org.json.JSONObject();
+            try {
+                String reason = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+                status.put("requested", pd2EcoAudio).put("enabled", false)
+                        .put("status", "failed").put("reason", reason.substring(0, Math.min(512, reason.length())));
+            } catch (org.json.JSONException ignored) { }
+        }
+        Pd2LaunchDiagnostics.performanceSettings(environment.getContext(), pd2LaunchId, "audioRuntime", status);
+        Pd2Activity.appendLauncherLog(environment.getContext(), "Eco audio: requested=" + pd2EcoAudio
+                + "; enabled=" + status.optBoolean("enabled") + "; reason=" + status.optString("reason"));
     }
 
     private void recordCleanup(Pd2WineSession.Result result) {

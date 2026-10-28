@@ -172,6 +172,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private String pd2LaunchFailure;
     private boolean runtimeLaunchRejected;
     private com.winlator.pd2.Pd2MemoryDiagnostics pd2MemoryDiagnostics;
+    private volatile ALSAServerComponent pd2AudioServer;
+    private int pd2FrameLimit = 60;
+    private boolean pd2LightGraphics;
+    private boolean pd2EcoAudio;
     private static volatile boolean pd2LaunchPending;
     private static final java.util.concurrent.atomic.AtomicInteger pd2EnvironmentWorkers = new java.util.concurrent.atomic.AtomicInteger();
     private final Pd2ThumbButtons pd2ThumbButtons = new Pd2ThumbButtons();
@@ -256,6 +260,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         pd2Session = getIntent().getBooleanExtra("pd2_session", false);
         pd2MouseKeyboard = preferences.getBoolean("pd2_mouse_keyboard", false);
         if (pd2Session) {
+            pd2FrameLimit = com.winlator.pd2.Pd2FramePacingPolicy.normalize(getIntent().getIntExtra(
+                    "pd2_frame_limit", com.winlator.pd2.Pd2FramePacingPolicy.requestedFps(preferences)));
+            pd2LightGraphics = getIntent().getBooleanExtra("pd2_light_graphics",
+                    com.winlator.pd2.Pd2FramePacingPolicy.lightGraphics(preferences));
+            pd2EcoAudio = getIntent().getBooleanExtra("pd2_audio_eco",
+                    com.winlator.pd2.Pd2AudioPolicy.ecoMode(preferences));
             pd2ActiveSession = new WeakReference<>(this);
             pd2LaunchPending = false;
             winHandler.controllerDiagnostics.setLaunchId(getIntent().getStringExtra("pd2_launch_id"));
@@ -264,7 +274,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             winHandler.controllerDiagnostics.save();
             pd2MemoryDiagnostics = com.winlator.pd2.Pd2MemoryDiagnostics.start(this,
                     getIntent().getStringExtra("pd2_launch_id"), winHandler.controllerDiagnostics::save,
-                    () -> xServerView == null ? null : xServerView.frameRateSnapshot());
+                    this::pd2PerformanceSnapshot);
         }
         boolean useAndroidClipboardOnWine = preferences.getBoolean("use_android_clipboard_on_wine", false);
         clipboardManager = useAndroidClipboardOnWine ? (ClipboardManager)getSystemService(CLIPBOARD_SERVICE) : null;
@@ -365,7 +375,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         xServer = new XServer(this, screenInfo);
         if (pd2Session) {
             ((com.winlator.xserver.extensions.PresentExtension) xServer.getExtensionByName("Present"))
-                    .configureFramePacing(com.winlator.pd2.Pd2FramePacingPolicy.requestedFps(preferences));
+                    // D2GL caps its producer. Do not stack a sleeping X request limiter on it.
+                    .configureFramePacing(0);
         }
         xServer.setWinHandler(winHandler);
         final boolean[] flags = {false, shortcut != null || getIntent().hasExtra("exec_path")};
@@ -507,6 +518,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
     @Override
     protected synchronized void onDestroy() {
+        if (xServerView != null) xServerView.closeRenderPacing();
         if (pd2InputManager != null) {
             pd2InputManager.unregisterInputDeviceListener(pd2InputDeviceListener);
             pd2InputManager = null;
@@ -539,6 +551,17 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         if (!pd2Session || ownsSession) ForegroundService.stopSession(this);
         if (runtimeActiveSession.get() == this) runtimeActiveSession.clear();
         super.onDestroy();
+    }
+
+    private org.json.JSONObject pd2PerformanceSnapshot() {
+        org.json.JSONObject snapshot = xServerView == null ? new org.json.JSONObject()
+                : xServerView.frameRateSnapshot();
+        ALSAServerComponent audio = pd2AudioServer;
+        if (audio != null) {
+            try { snapshot.put("audio", audio.performanceSnapshot()); }
+            catch (org.json.JSONException ignored) { }
+        }
+        return snapshot;
     }
 
     @Override public void onTrimMemory(int level) {
@@ -779,7 +802,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             envVars.put("ANDROID_ASERVER_USE_SHM", ALSAClient.USE_SHARED_MEMORY ? "true" : "false");
 
             ALSAClient.Options options = ALSAClient.Options.fromKeyValueSet(audioDriverConfig);
-            pendingEnvironment.addComponent(new ALSAServerComponent(UnixSocketConfig.create(rootPath, UnixSocketConfig.ALSA_SERVER_PATH), options));
+            ALSAServerComponent audioServer = new ALSAServerComponent(
+                    UnixSocketConfig.create(rootPath, UnixSocketConfig.ALSA_SERVER_PATH), options);
+            if (pd2Session) pd2AudioServer = audioServer;
+            pendingEnvironment.addComponent(audioServer);
         }
         else if (audioDriver.equals(AudioDrivers.PULSEAUDIO)) {
             PulseAudioComponent pulseAudioComponent = new PulseAudioComponent(UnixSocketConfig.create(rootPath, UnixSocketConfig.PULSE_SERVER_PATH));
@@ -809,6 +835,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             guestProgramLauncherComponent.setPd2XInputReaderRequested(
                     container != null && Pd2ControllerBackendPolicy.repairsReader(
                             container.getExtra("pd2ControllerBackend", "standard")));
+            String gamePath = getIntent().getStringExtra("exec_path");
+            guestProgramLauncherComponent.setPd2PerformanceSettings(
+                    gamePath == null ? null : new File(gamePath).getParentFile(),
+                    getIntent().getStringExtra("exec_args"), pd2FrameLimit, pd2LightGraphics, pd2EcoAudio);
         }
         guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
             if (pd2Session && !pd2StopRequested) {
@@ -876,6 +906,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         FrameLayout rootView = findViewById(R.id.FLXServerDisplay);
         xServerView = new XServerView(this, xServer,
                 pd2Session ? Pd2DisplayPolicy.requestedFrameRate(preferences) : 0f);
+        if (pd2Session) xServerView.configureContentFramePacing(pd2FrameLimit);
         final GLRenderer renderer = xServerView.getRenderer();
         renderer.setCursorVisible(false);
         if (pd2Session) applyPd2CursorVisibility();

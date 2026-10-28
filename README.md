@@ -1,8 +1,10 @@
 # Project Diablo 2 Android launcher
 
-Current preview: **0.1.23**. This pass adds three graphics optimizations: default 60 fps X Present submission pacing, sleeping fence waits, and less compositor work for hidden/opaque windows. The accepted gothic launcher, 60 Hz display request, cursor fix and default XInput reader repair are retained.
+Current preview: **0.1.24**. This pass targets D2GL's actual foreground frame limiter, adds reversible lighter graphics effects, and improves the audio bridge with 32 ms default buffering and actual Android underrun diagnostics. An optional Eco audio mode negotiates 22.05 kHz to reduce mixing work. The accepted gothic launcher, 60 Hz display request, cursor fix and default XInput reader repair are retained.
 
-Install over the existing app and reuse its runtime, prefix, import and saves. **Performance & temperature** offers 60 fps (default), 30 fps or Unlimited submission pacing; its **Display refresh** button keeps the separate 60 Hz preference. Pacing affects the X Present path used by Turnip/Zink, not every possible rendering backend, and actual FPS may be lower. Support samples now count presentation, fence waits and compositor work so active paths can be verified. Physical performance and temperature improvement still need a comparable sustained-play test. See [Testing](docs/TESTING.md), [release notes](docs/RELEASE-0.1.23.md), [optimization evidence](docs/evidence/2026-10-26-graphics-optimization.md) and [handoff](docs/HANDOFF.md).
+Install over the existing app and reuse its runtime, prefix, import and saves. **Performance & temperature** offers 60 fps (default), 30 fps, Unlimited, and restoration of game frame settings; its **Display refresh** button keeps the independent 60 Hz preference. The game cap applies only to a recognized existing D2GL JSON configuration, after verified Wine shutdown. The dialog reports whether the previous launch applied it. Android content redraws are also coalesced without sleeping the guest request thread; pointer/menu redraws remain immediate. The unused 0.1.23 X Present limiter is disabled for PD2. Actual FPS and temperature gains still need a comparable device test.
+
+**Graphics & audio** contains reversible lighter effects (bloom/FXAA/sharpening off), 16/32/64 ms buffering, and optional Eco audio. Changes apply after **Stop client → Play**. Source game files, saves and game DLLs are preserved; only six supported settings in the app-private `ProjectD2/d2gl.json` may be changed, with verified backups and preservation of later user edits. Resolution remains 1280×720. See [Testing](docs/TESTING.md), [release notes](docs/RELEASE-0.1.24.md), [capture/source evidence](docs/evidence/2026-10-27-active-rendering-audio.md) and [handoff](docs/HANDOFF.md).
 
 ## First preview
 
@@ -14,7 +16,7 @@ Install over the existing app and reuse its runtime, prefix, import and saves. *
 - Inspect accepted Android pads and input/bridge counters through **Controller status**; support export includes `controller.json`.
 - Select Turnip/Zink or Turnip/VirGL, and choose Glide or DirectDraw launch arguments for compatibility testing.
 
-The app preserves imported game files and official PD2 DLLs. It does not include Diablo II assets, game licenses, account credentials, a PD2 updater, or a loot-filter manager. Update your installation through its normal updater before importing it.
+The app preserves game binaries, official PD2 DLLs and saves. Performance controls can update supported D2GL settings in its private imported copy, with reversible backups; the source installation is not edited. It does not include Diablo II assets, game licenses, account credentials, a PD2 updater, or a loot-filter manager. Update your installation through its normal updater before importing it.
 
 ## Install and import
 
@@ -58,6 +60,6 @@ GameNative once your game files are imported.
 The targeted Wine 9 HID backend is built from the included source and pinned
 Wine 9 headers; [Build instructions](docs/BUILD.md) describe its artifact/ABI checks.
 
-[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the focused controller test; [Handoff](docs/HANDOFF.md) records evidence and remaining gates. [0.1.23 notes](docs/RELEASE-0.1.23.md) describe the current changes; [accepted reader evidence](docs/evidence/2026-10-26-xinput-reader-accepted.md) records the latest physical result and its diagnostic limits. Earlier release notes retain the driver experiment, accepted restart, memory diagnostics, socket repair, identity experiment and container-management history.
+[Build instructions](docs/BUILD.md) describe the pinned toolchain and preview signing. [Testing](docs/TESTING.md) contains the focused controller test; [Handoff](docs/HANDOFF.md) records evidence and remaining gates. [0.1.24 notes](docs/RELEASE-0.1.24.md) describe the current changes; [accepted reader evidence](docs/evidence/2026-10-26-xinput-reader-accepted.md) records the latest physical result and its diagnostic limits. Earlier release notes retain the driver experiment, accepted restart, memory diagnostics, socket repair, identity experiment and container-management history.
 
 Third-party runtime components and their licenses are listed in [Third-party notices](THIRD_PARTY_NOTICES.md). This project is an independent launcher and is not affiliated with Blizzard Entertainment or the Project Diablo 2 team.
