@@ -85,6 +85,8 @@ public final class Pd2LauncherPreviewTest {
             previewDialog(activity, "showAudioBufferSettings", "pd2-audio-buffer-landscape.png", 1184, 672);
             previewDialog(activity, "showAudioQualitySettings", "pd2-audio-quality-landscape.png", 1184, 672);
             previewDialog(activity, "showGameCursorSettings", "pd2-game-cursor-landscape.png", 1184, 672);
+            previewDialog(activity, "showGraphicsAudioSettings", "pd2-graphics-audio-landscape.png", 1184, 672);
+            previewDialog(activity, "showImageScalingSettings", "pd2-image-scaling-landscape.png", 1184, 672);
 
             Button first = (Button) findText(content, "Prepare runtime");
             assertNotNull(first);
@@ -132,6 +134,8 @@ public final class Pd2LauncherPreviewTest {
             previewDialog(activity, "showAudioBufferSettings", "pd2-audio-buffer-portrait-large-font.png", 656, 1184);
             previewDialog(activity, "showAudioQualitySettings", "pd2-audio-quality-portrait-large-font.png", 656, 1184);
             previewDialog(activity, "showGameCursorSettings", "pd2-game-cursor-portrait-large-font.png", 656, 1184);
+            previewDialog(activity, "showGraphicsAudioSettings", "pd2-graphics-audio-portrait-large-font.png", 656, 1184);
+            previewDialog(activity, "showImageScalingSettings", "pd2-image-scaling-portrait-large-font.png", 656, 1184);
         } finally {
             RuntimeEnvironment.setFontScale(previousFontScale);
         }

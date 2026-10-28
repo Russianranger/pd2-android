@@ -44,6 +44,9 @@ public final class Pd2D2glConfigTest {
     private JSONObject prepare(Fixture f, int fps, boolean light, boolean classicCursor) {
         return Pd2D2glConfig.prepareFiles(f.files, f.game, fps, light, classicCursor, LAUNCH, null);
     }
+    private JSONObject prepare(Fixture f, int fps, boolean light, boolean classicCursor, boolean simpleScaling) {
+        return Pd2D2glConfig.prepareFiles(f.files, f.game, fps, light, classicCursor, simpleScaling, LAUNCH, null);
+    }
     private byte[] read(File file) throws Exception { return Files.readAllBytes(file.toPath()); }
     private File state(Fixture f, String name) throws Exception {
         String id = new String(read(new File(f.game, ".pd2-d2gl-installation-id")), StandardCharsets.UTF_8).trim();
@@ -56,8 +59,10 @@ public final class Pd2D2glConfigTest {
                 new Pd2WineSession.Result("afterStop", 0, 0, true, 0, ""),
                 new Pd2WineSession.Result("beforeLaunch", 0, 1, true, 0, ""),
                 new Pd2WineSession.Result("beforeLaunch", 0, 0, false, 0, "")}) {
-            try { Pd2D2glConfig.prepareAfterCleanup(null, cleanup, null, 60, true, LAUNCH); fail(); }
-            catch (IOException expected) { assertTrue(expected.getMessage().contains("cleanup")); }
+            for (boolean scaling : new boolean[]{false, true}) {
+                try { Pd2D2glConfig.prepareAfterCleanup(null, cleanup, null, 60, true, true, scaling, LAUNCH); fail(); }
+                catch (IOException expected) { assertTrue(expected.getMessage().contains("cleanup")); }
+            }
         }
         Pd2D2glConfig.requireCleanup(new Pd2WineSession.Result("beforeLaunch", 1, 0, true, 0, ""));
     }
@@ -216,6 +221,135 @@ public final class Pd2D2glConfigTest {
         Files.write(journal.toPath(), bytes(saved.toString()));
         assertEquals("failed", prepare(f, -1, false).getString("status"));
         assertArrayEquals(applied, read(f.config));
+    }
+
+    @Test public void simpleScalingChangesOnlyThePresetAndRestoresBackslashValues() throws Exception {
+        Fixture f = fixture();
+        JSONObject applied = prepare(f, -1, false, false, true);
+        assertTrue(applied.getBoolean("simpleScalingRequested"));
+        assertTrue(applied.getBoolean("scalingApplied"));
+        assertEquals("applied", applied.getString("status"));
+        assertFalse(applied.getBoolean("capApplied"));
+        assertFalse(applied.getBoolean("effectsApplied"));
+        assertFalse(applied.getBoolean("cursorApplied"));
+        assertEquals(1, applied.getInt("changedFields"));
+        assertEquals("bilinear.slangp", config(f).getJSONObject("graphics").getString("shader_preset"));
+        JSONObject change = applied.getJSONArray("fieldChanges").getJSONObject(0);
+        assertEquals("graphics.shader_preset", change.getString("field"));
+        assertEquals("user\\preset.slangp", change.getString("before"));
+        assertEquals("bilinear.slangp", change.getString("after"));
+        assertArrayEquals(f.original, read(state(f, "original.json")));
+        assertEquals(0, prepare(f, -1, false, false, true).getInt("changedFields"));
+        JSONObject restored = prepare(f, -1, false, false);
+        assertFalse(restored.getBoolean("simpleScalingRequested"));
+        assertFalse(restored.getBoolean("scalingApplied"));
+        assertEquals(1, restored.getInt("restoredFields"));
+        assertArrayEquals(f.original, read(f.config));
+    }
+
+    @Test public void existingBilinearSelectionIsNotClaimedOrChangedOnDisable() throws Exception {
+        Fixture f = fixture();
+        byte[] original = bytes(Pd2D2glPolicyTest.config().replace("user\\\\preset.slangp", "bilinear.slangp"));
+        Files.write(f.config.toPath(), original);
+        JSONObject applied = prepare(f, -1, false, false, true);
+        assertTrue(applied.getBoolean("scalingApplied"));
+        assertEquals(0, applied.getInt("changedFields"));
+        assertFalse(new File(f.game, ".pd2-d2gl-installation-id").exists());
+        prepare(f, -1, false, false);
+        assertArrayEquals(original, read(f.config));
+    }
+
+    @Test public void userShaderChangesArePreservedOnDisableAndRebasedOnExplicitReapply() throws Exception {
+        Fixture f = fixture();
+        prepare(f, -1, false, false, true);
+        String manual = new String(read(f.config), StandardCharsets.UTF_8)
+                .replace("bilinear.slangp", "fsr\\\\fsr-easu.slangp");
+        Files.write(f.config.toPath(), bytes(manual));
+        JSONObject disabled = prepare(f, -1, false, false);
+        assertEquals(1, disabled.getInt("conflictsPreserved"));
+        assertArrayEquals(bytes(manual), read(f.config));
+        prepare(f, -1, false, false, true);
+        manual = new String(read(f.config), StandardCharsets.UTF_8).replace("bilinear.slangp", "custom/shader.slangp");
+        Files.write(f.config.toPath(), bytes(manual));
+        assertEquals(1, prepare(f, -1, false, false, true).getInt("userValuesRebased"));
+        prepare(f, -1, false, false);
+        assertArrayEquals(bytes(manual), read(f.config));
+    }
+
+    @Test public void missingUntypedOrUnsafePresetSkipsScalingButAllowsOtherSettings() throws Exception {
+        for (String value : new String[]{"\"other_shader\": \"custom.slangp\"", "\"shader_preset\": false",
+                "\"shader_preset\": null", "\"shader_preset\": \"../private.slangp\""}) {
+            Fixture f = fixture();
+            byte[] original = bytes(Pd2D2glPolicyTest.config()
+                    .replace("\"shader_preset\": \"user\\\\preset.slangp\"", value));
+            Files.write(f.config.toPath(), original);
+            JSONObject applied = prepare(f, 60, false, true, true);
+            assertTrue(applied.getBoolean("capApplied"));
+            assertTrue(applied.getBoolean("cursorApplied"));
+            assertFalse(applied.getBoolean("scalingApplied"));
+            assertTrue(applied.getString("scalingReason").contains("missing or unrecognized"));
+            assertFalse(applied.getJSONObject("current").has("graphics.shader_preset"));
+            assertEquals(4, applied.getInt("changedFields"));
+            prepare(f, -1, false, false);
+            assertArrayEquals(original, read(f.config));
+        }
+    }
+
+    @Test public void unknownEffectsDoNotSuppressScalingApplyOrRestore() throws Exception {
+        Fixture f = fixture();
+        byte[] original = bytes(Pd2D2glPolicyTest.config().replace("\"fxaa\": true, ", ""));
+        Files.write(f.config.toPath(), original);
+        JSONObject applied = prepare(f, -1, true, false, true);
+        assertTrue(applied.getBoolean("scalingApplied"));
+        assertFalse(applied.getBoolean("effectsApplied"));
+        assertEquals(1, applied.getInt("changedFields"));
+        assertEquals(1, prepare(f, -1, true, false).getInt("restoredFields"));
+        assertArrayEquals(original, read(f.config));
+    }
+
+    @Test public void sevenFieldVersionOneJournalCanAddScalingAndRestoreAllEight() throws Exception {
+        Fixture f = fixture();
+        prepare(f, 60, true, true);
+        File journal = state(f, "journal.json");
+        JSONObject old = new JSONObject(new String(read(journal), StandardCharsets.UTF_8));
+        assertEquals("pd2-d2gl-json-1", old.getString("revision"));
+        assertEquals(7, old.getJSONObject("entries").length());
+        assertFalse(old.getJSONObject("entries").has("graphics.shader_preset"));
+        JSONObject applied = prepare(f, 60, true, true, true);
+        assertTrue(applied.getBoolean("scalingApplied"));
+        assertEquals(1, applied.getInt("changedFields"));
+        JSONObject saved = new JSONObject(new String(read(journal), StandardCharsets.UTF_8));
+        assertEquals(old.getString("revision"), saved.getString("revision"));
+        assertEquals(8, saved.getJSONObject("entries").length());
+        assertEquals(8, prepare(f, -1, false, false).getInt("restoredFields"));
+        assertArrayEquals(f.original, read(f.config));
+        assertArrayEquals(f.original, read(state(f, "original.json")));
+    }
+
+    @Test public void interruptedScalingTransactionRecoversAndKeepsTheOriginal() throws Exception {
+        Fixture f = fixture();
+        JSONObject interrupted = Pd2D2glConfig.prepareFiles(f.files, f.game, -1, false, false, true, LAUNCH,
+                ignored -> { throw new IOException("Fixture scaling interruption"); });
+        assertEquals("failed", interrupted.getString("status"));
+        assertArrayEquals(f.original, read(f.config));
+        assertTrue(prepare(f, -1, false, false, true).getBoolean("scalingApplied"));
+        prepare(f, -1, false, false);
+        assertArrayEquals(f.original, read(f.config));
+    }
+
+    @Test public void anOwnedPresetBecomingUnsafeNeverGetsOverwritten() throws Exception {
+        Fixture f = fixture();
+        prepare(f, -1, false, false, true);
+        byte[] manual = bytes(new String(read(f.config), StandardCharsets.UTF_8)
+                .replace("bilinear.slangp", "../user.slangp"));
+        Files.write(f.config.toPath(), manual);
+        JSONObject applied = prepare(f, -1, false, true, true);
+        assertFalse(applied.getBoolean("scalingApplied"));
+        assertTrue(applied.getBoolean("cursorApplied"));
+        assertTrue(new JSONObject(new String(read(state(f, "journal.json")), StandardCharsets.UTF_8))
+                .getJSONObject("entries").has("graphics.shader_preset"));
+        prepare(f, -1, false, false);
+        assertEquals("../user.slangp", config(f).getJSONObject("graphics").getString("shader_preset"));
     }
 
     @Test public void unlimitedDisablesTheLimiterWithoutWritingZeroAndFrameRestoreIsIndependent() throws Exception {

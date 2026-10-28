@@ -289,6 +289,7 @@ public final class Pd2Activity extends AppCompatActivity {
                     .putExtra("pd2_frame_limit", Pd2FramePacingPolicy.requestedFps(preferences))
                     .putExtra("pd2_light_graphics", Pd2FramePacingPolicy.lightGraphics(preferences))
                     .putExtra("pd2_classic_cursor", Pd2FramePacingPolicy.classicCursor(preferences))
+                    .putExtra("pd2_simple_scaling", Pd2FramePacingPolicy.simpleScaling(preferences))
                     .putExtra("pd2_audio_eco", Pd2AudioPolicy.ecoMode(preferences))
                     .putExtra("pd2_launch_id", launchId).putExtra("exec_path", game.getPath()).putExtra("exec_args", arguments);
                 XServerDisplayActivity.setPd2LaunchPending(true);
@@ -396,13 +397,29 @@ public final class Pd2Activity extends AppCompatActivity {
     }
 
     private void showGraphicsAudioSettings() {
-        String[] choices = {"Graphics effects", "Audio buffering", "Audio quality", "Game cursor"};
+        String[] choices = {"Graphics effects", "Audio buffering", "Audio quality", "Game cursor", "Image scaling"};
         Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this).setTitle("Graphics & audio")
             .setItems(choices, (d, which) -> {
                 if (which == 0) showGraphicsEffectsSettings();
                 else if (which == 1) showAudioBufferSettings();
                 else if (which == 2) showAudioQualitySettings();
-                else showGameCursorSettings();
+                else if (which == 3) showGameCursorSettings();
+                else showImageScalingSettings();
+            }).setNegativeButton("Close", null).show());
+    }
+
+    private void showImageScalingSettings() {
+        String[] choices = {"Simple · bilinear (default)", "Restore game shader"};
+        String last = Pd2LaunchDiagnostics.scalingSettingsSummary(this);
+        Pd2ControllerDialogs.enable(Pd2LauncherTheme.dialog(this)
+            .setCustomTitle(controllerSettingsHeader("Image scaling",
+                    "Simple uses a lighter scaling shader. The picture may look softer. Applies after Stop + Play."
+                    + (last.isEmpty() ? "" : "\n" + last)))
+            .setSingleChoiceItems(choices, Pd2FramePacingPolicy.simpleScaling(preferences) ? 0 : 1, (d, which) -> {
+                preferences.edit().putBoolean(Pd2FramePacingPolicy.SIMPLE_SCALING_PREFERENCE, which == 0).apply();
+                operation = which == 0 ? "Simple image scaling selected for the next Play."
+                        : "Previous game shader will be restored on the next clean Play.";
+                d.dismiss(); updateUi();
             }).setNegativeButton("Close", null).show());
     }
 

@@ -1,4 +1,14 @@
-# 0.1.25 cursor regression and FPS diagnosis
+# 0.1.26 active scaling comparison
+
+Base `d4b75793466145de0975f95ac85e0c53907e9f5d`. User confirms 60 FPS cap helps temperature and Classic cursor fixes the square; FPS remains poor. Standing implementation/main-push approval applies. [New capture evidence](evidence/2026-10-28-fps-scaling-followup.md) attributes one new 0.1.25 launch and separates the user's later cursor observation from the captured HD-cursor=true setting.
+
+The steady 60.386-second window has 1,944 full 1280×720 shared-image requests, 1,944 forwarded content redraws, zero merged requests and 1,945 compositor passes. Guest CPU is 123.17% of one core, app 13.68%. FSR EASU remains configured while bloom/FXAA/sharpen are false. This supports a simpler-shader comparison, not proof of CPU/GPU bottleneck or displayed FPS. Eco remains healthy. D2Android's borrowed image/upload path matches ours; copying every framebuffer or modifying unused glCopyTexImage paths is not justified.
+
+0.1.26/code 27 adds default-on `pd2_simple_scaling`, independently captured through the launch Intent and exact-prefix-cleanup transaction. It changes only existing safe `graphics.shader_preset` strings to `bilinear.slangp`, D2GL's source-defined built-in fallback. Restore game shader uses the existing conflict-aware journal; explicit false persists. Original overloads delegate false. Eight owned keys retain journal revision1 and old six/seven-key compatibility. JSON string values are quoted, effect-schema guards are limited to actual effect keys, and missing/untyped preset settings are retained. Status separates requested/configured/skipped; actual preset execution is not observed. No preset asset is added and imported DLL/archive identity is not qualified by schema matching alone.
+
+Keep frame60, Classic, Eco, controller and runtime selections; no coalescer or shared-buffer ownership change is included, to isolate the shader comparison. Inherited shared-buffer reuse/detach lifetime hazards remain a separate correctness investigation. Source/CI/APK qualification pending.
+
+# Historical 0.1.25 cursor regression and FPS diagnosis
 
 User feedback on 0.1.24: FPS still lags, Eco audio improves sound, and the game cursor becomes a black striped square. Supplied screenshot/capture and exact attempt attribution are recorded in [evidence](evidence/2026-10-27-cursor-performance-followup.md). Standing implementation/main-push approval applies. Base: `5d5ad3cd59edba975e4a24e64abd1721a964f066`. Preserve accepted controller recovery, cursor movement, gothic UI, 60 Hz request and the user's Eco selection.
 

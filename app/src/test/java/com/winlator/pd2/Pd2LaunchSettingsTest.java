@@ -122,6 +122,16 @@ public final class Pd2LaunchSettingsTest {
             assertEquals(0, dialog.getListView().getCheckedItemPosition());
             dialog.getListView().performItemClick(null, 1, 1);
             assertTrue(Pd2FramePacingPolicy.classicCursor(preferences));
+            dialog = openDialog(activity, "showImageScalingSettings");
+            assertEquals(0, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 1, 1);
+            assertFalse(Pd2FramePacingPolicy.simpleScaling(preferences));
+            dialog = openDialog(activity, "showImageScalingSettings");
+            assertEquals(1, dialog.getListView().getCheckedItemPosition());
+            dialog.getListView().performItemClick(null, 0, 0);
+            assertTrue(Pd2FramePacingPolicy.simpleScaling(preferences));
+            assertTrue(Pd2FramePacingPolicy.classicCursor(preferences));
+            assertFalse(Pd2FramePacingPolicy.lightGraphics(preferences));
             assertTrue(Pd2AudioPolicy.ecoMode(preferences));
             assertEquals(30, Pd2FramePacingPolicy.requestedFps(preferences));
             assertEquals(backend, Pd2ControllerBackendPreferences.get(preferences));

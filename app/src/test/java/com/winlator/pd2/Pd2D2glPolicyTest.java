@@ -89,14 +89,18 @@ public final class Pd2D2glPolicyTest {
         }
     }
 
-    @Test public void readOnlyShaderResolutionAndLatencyCannotBecomeOwnedSettings() throws Exception {
+    @Test public void resolutionAndLatencyRemainReadOnlyWhilePresetValuesAreStrictlyTyped() throws Exception {
         Pd2D2glPolicy.Document document = Pd2D2glPolicy.parse(bytes(config()));
         JSONObject current = document.current();
         assertEquals("user\\preset.slangp", current.getString("graphics.shader_preset"));
         assertEquals(1280, current.getInt("screen.window_size_width"));
         assertEquals(720, current.getInt("screen.window_size_height"));
         assertEquals(3, current.getInt("other.frame_latency"));
-        for (String key : new String[]{"graphics.shader_preset", "screen.window_size_width",
+        assertTrue(Pd2D2glPolicy.allowed("graphics.shader_preset"));
+        assertTrue(Pd2D2glPolicy.validOwnedValue("graphics.shader_preset", "user\\preset.slangp"));
+        assertFalse(Pd2D2glPolicy.validOwnedValue("graphics.shader_preset", true));
+        assertFalse(Pd2D2glPolicy.validOwnedValue("graphics.shader_preset", "../preset.slangp"));
+        for (String key : new String[]{"screen.window_size_width",
                 "screen.window_size_height", "other.frame_latency"}) {
             assertFalse(Pd2D2glPolicy.allowed(key));
             assertFalse(Pd2D2glPolicy.validOwnedValue(key, current.get(key)));
@@ -116,6 +120,32 @@ public final class Pd2D2glPolicyTest {
         JSONObject current = Pd2D2glPolicy.parse(bytes(unsafe)).current();
         assertFalse(current.has("graphics.shader_preset"));
         assertFalse(current.has("other.frame_latency"));
+    }
+
+    @Test public void simpleScalingUsesTheOfficialFallbackAndQuotesStringTokens() throws Exception {
+        Pd2D2glPolicy.Document document = Pd2D2glPolicy.parse(bytes(config()));
+        Map<String, Object> desired = Pd2D2glPolicy.desired(document, -1, false, false, true);
+        assertEquals(1, desired.size());
+        assertEquals("bilinear.slangp", desired.get("graphics.shader_preset"));
+        byte[] after = document.replace(desired);
+        assertArrayEquals(bytes(config().replace("user\\\\preset.slangp", "bilinear.slangp")), after);
+        document = Pd2D2glPolicy.parse(after);
+        after = document.replace(java.util.Collections.singletonMap("graphics.shader_preset", "user\\preset.slangp"));
+        assertArrayEquals(bytes(config()), after);
+        assertEquals("user\\preset.slangp", new JSONObject(new String(after, StandardCharsets.UTF_8))
+                .getJSONObject("graphics").getString("shader_preset"));
+        assertTrue(Pd2D2glPolicy.desired(document, -1, false, false).isEmpty());
+    }
+
+    @Test public void unavailableOrUnsafePresetIsNeverInventedOrCoerced() throws Exception {
+        for (String value : new String[]{"\"other_preset\": \"bilinear.slangp\"", "\"shader_preset\": true",
+                "\"shader_preset\": null", "\"shader_preset\": 1", "\"shader_preset\": \"../private.slangp\""}) {
+            String original = config().replace("\"shader_preset\": \"user\\\\preset.slangp\"", value);
+            Pd2D2glPolicy.Document document = Pd2D2glPolicy.parse(bytes(original));
+            assertFalse(document.scalingSchema());
+            assertTrue(Pd2D2glPolicy.desired(document, -1, false, false, true).isEmpty());
+            assertEquals(4, Pd2D2glPolicy.desired(document, 60, false, true, true).size());
+        }
     }
 
     @Test public void unknownScreenTypesAndLimitsAreRejectedBeforeMutation() throws Exception {

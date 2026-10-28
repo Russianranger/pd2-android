@@ -19,15 +19,22 @@ import java.util.Set;
 public final class Pd2D2glPolicy {
     public static final String REVISION = "pd2-d2gl-json-1";
     public static final String SOURCE_COMMIT = "55148de0aec79d487f5bcef1842cfdc3effd2f62";
+    /** The fallback selected by the official D2GL Upscaler::loadDefaultPreset. */
+    public static final String SIMPLE_SCALING_PRESET = "bilinear.slangp";
     static final String[] FRAME_KEYS = {"screen.window_vsync", "screen.foreground_fps_active", "screen.foreground_fps_value"};
     static final String[] EFFECT_KEYS = {"graphics.bloom", "graphics.fxaa", "graphics.sharpen"};
     static final String[] CURSOR_KEYS = {"features.hd_cursor"};
-    static final String[][] OWNED_GROUPS = {FRAME_KEYS, EFFECT_KEYS, CURSOR_KEYS};
+    static final String[] SCALING_KEYS = {"graphics.shader_preset"};
+    static final String[][] OWNED_GROUPS = {FRAME_KEYS, EFFECT_KEYS, CURSOR_KEYS, SCALING_KEYS};
     static final Object MISSING = new Object();
     private Pd2D2glPolicy() {}
 
     static boolean allowed(String key) {
         for (String[] group : OWNED_GROUPS) for (String item : group) if (item.equals(key)) return true;
+        return false;
+    }
+    static boolean effectKey(String key) {
+        for (String item : EFFECT_KEYS) if (item.equals(key)) return true;
         return false;
     }
 
@@ -54,12 +61,13 @@ public final class Pd2D2glPolicy {
             return true;
         }
         boolean cursorSchema() { return value(CURSOR_KEYS[0]) instanceof Boolean; }
+        boolean scalingSchema() { return safePreset(value(SCALING_KEYS[0])); }
         JSONObject current() throws JSONException {
             JSONObject values = new JSONObject();
             for (String[] group : OWNED_GROUPS) {
                 for (String key : group) {
                     Object value = value(key);
-                    if (value instanceof Boolean || integral(value)) values.put(key, value);
+                    if (validOwnedValue(key, value)) values.put(key, value);
                 }
             }
             // Diagnostics only: these settings never enter the mutation spans or ownership journal.
@@ -69,8 +77,6 @@ public final class Pd2D2glPolicy {
             }
             Object latency = value("other.frame_latency");
             if (range(latency, 1, 5)) values.put("other.frame_latency", latency);
-            Object preset = value("graphics.shader_preset");
-            if (safePreset(preset)) values.put("graphics.shader_preset", preset);
             return values;
         }
         byte[] replace(Map<String, Object> changes) throws IOException {
@@ -83,7 +89,9 @@ public final class Pd2D2glPolicy {
             StringBuilder result = new StringBuilder(text);
             for (String key : keys) {
                 Span span = spans.get(key);
-                result.replace(span.start, span.end, String.valueOf(changes.get(key)));
+                Object value = changes.get(key);
+                result.replace(span.start, span.end,
+                        value instanceof String ? JSONObject.quote((String)value) : String.valueOf(value));
             }
             return result.toString().getBytes(StandardCharsets.UTF_8);
         }
@@ -123,6 +131,11 @@ public final class Pd2D2glPolicy {
 
     static Map<String, Object> desired(Document document, int fps, boolean light, boolean classicCursor)
             throws IOException {
+        return desired(document, fps, light, classicCursor, false);
+    }
+
+    static Map<String, Object> desired(Document document, int fps, boolean light, boolean classicCursor,
+                                       boolean simpleScaling) throws IOException {
         if (fps != -1 && fps != 0 && fps != 30 && fps != 60) throw new IOException("Unsupported D2GL frame limit");
         Map<String, Object> desired = new LinkedHashMap<>();
         if (fps >= 0) {
@@ -132,11 +145,13 @@ public final class Pd2D2glPolicy {
         }
         if (light && document.lightSchema()) for (String key : EFFECT_KEYS) desired.put(key, false);
         if (classicCursor && document.cursorSchema()) desired.put(CURSOR_KEYS[0], false);
+        if (simpleScaling && document.scalingSchema()) desired.put(SCALING_KEYS[0], SIMPLE_SCALING_PRESET);
         return desired;
     }
 
     static boolean validOwnedValue(String key, Object value) {
-        return allowed(key) && (FRAME_KEYS[2].equals(key) ? range(value, 25, 240) : value instanceof Boolean);
+        return allowed(key) && (SCALING_KEYS[0].equals(key) ? safePreset(value)
+                : FRAME_KEYS[2].equals(key) ? range(value, 25, 240) : value instanceof Boolean);
     }
     static boolean integral(Object value) { return value instanceof Integer || value instanceof Long; }
     static boolean safePreset(Object value) {

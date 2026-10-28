@@ -112,6 +112,27 @@ public final class Pd2LaunchDiagnosticsTest {
         assertTrue(Pd2LaunchDiagnostics.cursorSettingsSummary(app).contains("restoration was not verified"));
     }
 
+    @Test public void scalingSummaryDoesNotReportAnUnappliedRequestOrFailedRestorationAsSuccess() throws Exception {
+        Application app = RuntimeEnvironment.getApplication();
+        File report = new File(app.getFilesDir(), "pd2/logs/launch.json");
+        assertTrue(report.getParentFile().mkdirs() || report.getParentFile().isDirectory());
+        Files.write(report.toPath(), new JSONObject().put("launchId", "current").toString().getBytes(StandardCharsets.UTF_8));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings", new JSONObject().put("status", "applied"));
+        assertEquals("", Pd2LaunchDiagnostics.scalingSettingsSummary(app));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("simpleScalingRequested", true).put("scalingApplied", false));
+        assertTrue(Pd2LaunchDiagnostics.scalingSettingsSummary(app).contains("not applied"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("simpleScalingRequested", true).put("scalingApplied", true));
+        assertTrue(Pd2LaunchDiagnostics.scalingSettingsSummary(app).contains("bilinear scaling configured"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("status", "unchanged").put("simpleScalingRequested", false));
+        assertTrue(Pd2LaunchDiagnostics.scalingSettingsSummary(app).contains("using the game shader"));
+        Pd2LaunchDiagnostics.performanceSettings(app, "current", "d2glSettings",
+                new JSONObject().put("status", "failed").put("simpleScalingRequested", false));
+        assertTrue(Pd2LaunchDiagnostics.scalingSettingsSummary(app).contains("restoration was not verified"));
+    }
+
     @Test public void hidExperimentKeepsGraphicsOverridesAndTargetsTheSysLoaderNames() {
         String original = new EnvVars(Pd2LaunchPolicy.environment(Pd2LaunchPolicy.GAMENATIVE_ARGUMENTS, false))
                 .get("WINEDLLOVERRIDES");

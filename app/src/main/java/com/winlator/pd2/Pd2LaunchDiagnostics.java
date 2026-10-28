@@ -58,6 +58,8 @@ public final class Pd2LaunchDiagnostics {
                         PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("classicCursorRequested", Pd2FramePacingPolicy.classicCursor(
                         PreferenceManager.getDefaultSharedPreferences(context)))
+                .put("simpleScalingRequested", Pd2FramePacingPolicy.simpleScaling(
+                        PreferenceManager.getDefaultSharedPreferences(context)))
                 .put("presentFramePacingFps", 0)
                 .put("presentFramePacingScope", "Disabled: no X dispatch sleep is added. Game frame settings are the default; explicit D2GL limits remain optional.")
                 .put("audioBufferRequestedMillis", Pd2AudioPolicy.latencyMillis(
@@ -150,6 +152,22 @@ public final class Pd2LaunchDiagnostics {
             if ("applied".equals(status.optString("status")) || "unchanged".equals(status.optString("status")))
                 return "Last launch: using the game cursor setting.";
             return "Last launch: game cursor restoration was not verified. Export support logs.";
+        } catch (IOException | JSONException | RuntimeException ignored) { return ""; }
+    }
+
+    public static synchronized String scalingSettingsSummary(Context context) {
+        try {
+            File file = new File(logs(context), "launch.json");
+            if (!file.isFile() || file.length() > 128 * 1024) return "";
+            JSONObject status = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8))
+                    .optJSONObject("d2glSettings");
+            if (status == null || !status.has("simpleScalingRequested")) return "";
+            if (status.optBoolean("scalingApplied")) return "Last launch: bilinear scaling configured.";
+            if (status.optBoolean("simpleScalingRequested"))
+                return "Last launch: simple scaling was not applied. Export support logs.";
+            if ("applied".equals(status.optString("status")) || "unchanged".equals(status.optString("status")))
+                return "Last launch: using the game shader setting.";
+            return "Last launch: shader restoration was not verified. Export support logs.";
         } catch (IOException | JSONException | RuntimeException ignored) { return ""; }
     }
 

@@ -42,12 +42,21 @@ public final class Pd2D2glConfig {
                                                 File capturedProjectD2Directory, int fps,
                                                 boolean lighterEffects, boolean classicCursorRequested,
                                                 String launchId) throws IOException {
+        return prepareAfterCleanup(context, cleanup, capturedProjectD2Directory, fps, lighterEffects,
+                classicCursorRequested, false, launchId);
+    }
+
+    public static JSONObject prepareAfterCleanup(Context context, Pd2WineSession.Result cleanup,
+                                                File capturedProjectD2Directory, int fps,
+                                                boolean lighterEffects, boolean classicCursorRequested,
+                                                boolean simpleScalingRequested, String launchId) throws IOException {
         requireCleanup(cleanup);
         File files = context.getFilesDir();
         try {
             return prepareFiles(files.getCanonicalFile(), normalizeCapturedDirectory(files, capturedProjectD2Directory),
-                    fps, lighterEffects, classicCursorRequested, launchId, null);
-        } catch (IOException error) { return failure(status(fps, lighterEffects, classicCursorRequested), error); }
+                    fps, lighterEffects, classicCursorRequested, simpleScalingRequested, launchId, null);
+        } catch (IOException error) { return failure(status(fps, lighterEffects, classicCursorRequested,
+                simpleScalingRequested), error); }
     }
 
     /** Bounded, read-only snapshot; the hash/values describe the file, not what a running DLL read. */
@@ -73,8 +82,13 @@ public final class Pd2D2glConfig {
 
     static JSONObject prepareFiles(File files, File game, int fps, boolean light, boolean classicCursorRequested,
                                    String launchId, TransactionHook hook) {
+        return prepareFiles(files, game, fps, light, classicCursorRequested, false, launchId, hook);
+    }
+
+    static JSONObject prepareFiles(File files, File game, int fps, boolean light, boolean classicCursorRequested,
+                                   boolean simpleScalingRequested, String launchId, TransactionHook hook) {
         synchronized (LOCK) {
-            JSONObject report = status(fps, light, classicCursorRequested);
+            JSONObject report = status(fps, light, classicCursorRequested, simpleScalingRequested);
             try {
                 if (fps != -1 && fps != 0 && fps != 30 && fps != 60)
                     throw new IOException("Unsupported D2GL frame limit; config kept");
@@ -90,11 +104,14 @@ public final class Pd2D2glConfig {
                     return skipped(report, unsupported.getMessage());
                 }
                 describe(report, document, before);
-                Map<String, Object> desired = Pd2D2glPolicy.desired(document, fps, light, classicCursorRequested);
+                Map<String, Object> desired = Pd2D2glPolicy.desired(document, fps, light, classicCursorRequested,
+                        simpleScalingRequested);
                 if (light && !document.lightSchema())
                     report.put("effectsReason", "Existing graphics booleans are not recognized; effects kept");
                 if (classicCursorRequested && !document.cursorSchema())
                     report.put("cursorReason", "Existing features.hd_cursor Boolean is missing or unrecognized; cursor setting kept");
+                if (simpleScalingRequested && !document.scalingSchema())
+                    report.put("scalingReason", "Existing graphics.shader_preset safe string is missing or unrecognized; shader setting kept");
 
                 File marker = new File(game, MARKER);
                 safe(files, marker);
@@ -105,7 +122,7 @@ public final class Pd2D2glConfig {
                     for (Map.Entry<String, Object> item : desired.entrySet())
                         changes |= !same(document.value(item.getKey()), item.getValue());
                     if (!changes) {
-                        applied(report, document, fps, light, classicCursorRequested);
+                        applied(report, document, fps, light, classicCursorRequested, simpleScalingRequested);
                         return unchanged(report, "Existing D2GL settings already match the request");
                     }
                     id = UUID.randomUUID().toString();
@@ -152,12 +169,17 @@ public final class Pd2D2glConfig {
                     for (String key : group) {
                         Entry owned = previous.get(key);
                         Object current = document.value(key);
-                        if (light && !document.lightSchema() && key.startsWith("graphics.")) {
+                        if (light && !document.lightSchema() && Pd2D2glPolicy.effectKey(key)) {
                             if (owned != null) next.put(key, owned);
                             continue;
                         }
                         if (classicCursorRequested && !document.cursorSchema()
                                 && Pd2D2glPolicy.CURSOR_KEYS[0].equals(key)) {
+                            if (owned != null) next.put(key, owned);
+                            continue;
+                        }
+                        if (simpleScalingRequested && !document.scalingSchema()
+                                && Pd2D2glPolicy.SCALING_KEYS[0].equals(key)) {
                             if (owned != null) next.put(key, owned);
                             continue;
                         }
@@ -200,9 +222,10 @@ public final class Pd2D2glConfig {
                 report.put("changedFields", changes.size()).put("restoredFields", restored)
                         .put("conflictsPreserved", conflicts).put("userValuesRebased", rebased)
                         .put("fieldChanges", fieldChanges);
-                applied(report, document, fps, light, classicCursorRequested);
+                applied(report, document, fps, light, classicCursorRequested, simpleScalingRequested);
                 report.put("status", changes.isEmpty() && !report.optBoolean("capApplied")
-                                && !report.optBoolean("effectsApplied") && !report.optBoolean("cursorApplied") ? "unchanged" : "applied")
+                                && !report.optBoolean("effectsApplied") && !report.optBoolean("cursorApplied")
+                                && !report.optBoolean("scalingApplied") ? "unchanged" : "applied")
                         .put("reason", conflicts > 0 ? "Launcher-owned settings restored; later user changes kept"
                                 : changes.isEmpty() ? "Existing D2GL settings match the captured request"
                                 : "Validated D2GL settings written atomically before launch");
@@ -255,7 +278,7 @@ public final class Pd2D2glConfig {
         return result;
     }
     private static Map<String, Entry> entries(JSONObject object) throws IOException, JSONException {
-        if (object == null || object.length() > 7) throw new IOException("Invalid D2GL ownership journal; config kept");
+        if (object == null || object.length() > 8) throw new IOException("Invalid D2GL ownership journal; config kept");
         Map<String, Entry> result = new LinkedHashMap<>();
         Iterator<String> keys = object.keys();
         while (keys.hasNext()) {
@@ -382,11 +405,17 @@ public final class Pd2D2glConfig {
         return status(fps, light, false);
     }
     private static JSONObject status(int fps, boolean light, boolean classicCursorRequested) {
+        return status(fps, light, classicCursorRequested, false);
+    }
+    private static JSONObject status(int fps, boolean light, boolean classicCursorRequested, boolean simpleScalingRequested) {
         JSONObject object = new JSONObject();
         try { object.put("revision", Pd2D2glPolicy.REVISION).put("sourceCommit", Pd2D2glPolicy.SOURCE_COMMIT)
                 .put("scope", "Existing JSON settings only; DLL identity and achieved game FPS are not measured")
                 .put("requestedFps", fps).put("lighterEffectsRequested", light)
                 .put("classicCursorRequested", classicCursorRequested).put("cursorApplied", false).put("status", "skipped")
+                .put("simpleScalingRequested", simpleScalingRequested).put("scalingApplied", false)
+                .put("scalingReason", simpleScalingRequested ? "Shader selection has not been prepared"
+                        : "Game shader retention or restoration has not been verified")
                 .put("schemaRecognized", false).put("configFound", false).put("capApplied", false)
                 .put("effectsApplied", false).put("changedFields", 0).put("restoredFields", 0)
                 .put("conflictsPreserved", 0).put("userValuesRebased", 0).put("backupAvailable", false)
@@ -399,7 +428,7 @@ public final class Pd2D2glConfig {
                 .put("configSha256", hash(bytes)).put("current", document.current());
     }
     private static void applied(JSONObject report, Pd2D2glPolicy.Document document, int fps, boolean light,
-                                boolean classicCursorRequested) throws JSONException {
+                                boolean classicCursorRequested, boolean simpleScalingRequested) throws JSONException {
         report.put("capApplied", fps >= 0 && Boolean.FALSE.equals(document.value(Pd2D2glPolicy.FRAME_KEYS[0]))
                 && Boolean.valueOf(fps > 0).equals(document.value(Pd2D2glPolicy.FRAME_KEYS[1]))
                 && (fps == 0 || same(document.value(Pd2D2glPolicy.FRAME_KEYS[2]), fps)));
@@ -407,9 +436,14 @@ public final class Pd2D2glConfig {
         for (String key : Pd2D2glPolicy.EFFECT_KEYS) effects &= Boolean.FALSE.equals(document.value(key));
         report.put("effectsApplied", effects);
         report.put("cursorApplied", classicCursorRequested && Boolean.FALSE.equals(document.value(Pd2D2glPolicy.CURSOR_KEYS[0])));
+        boolean scaling = simpleScalingRequested && Pd2D2glPolicy.SIMPLE_SCALING_PRESET.equals(document.value(Pd2D2glPolicy.SCALING_KEYS[0]));
+        report.put("scalingApplied", scaling);
+        if (scaling) report.put("scalingReason", "Configured D2GL bilinear preset; archive availability and runtime execution are not measured");
+        else if (!simpleScalingRequested) report.put("scalingReason", "Game shader setting retained or restored");
     }
     private static JSONObject unchanged(JSONObject report, String reason) throws JSONException {
-        return report.put("status", report.optBoolean("capApplied") || report.optBoolean("effectsApplied") || report.optBoolean("cursorApplied")
+        return report.put("status", report.optBoolean("capApplied") || report.optBoolean("effectsApplied")
+                || report.optBoolean("cursorApplied") || report.optBoolean("scalingApplied")
                 ? "applied" : "unchanged").put("reason", reason);
     }
     private static JSONObject skipped(JSONObject report, String reason) throws JSONException { return report.put("status", "skipped").put("reason", reason); }

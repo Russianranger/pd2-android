@@ -8,6 +8,7 @@ public final class Pd2FramePacingPolicy {
     public static final String PREFERENCE = "pd2_present_fps";
     public static final String LIGHT_PREFERENCE = "pd2_light_graphics";
     public static final String CLASSIC_CURSOR_PREFERENCE = "pd2_classic_cursor";
+    public static final String SIMPLE_SCALING_PREFERENCE = "pd2_simple_scaling";
     public static final int GAME_SETTINGS = -1;
     private Pd2FramePacingPolicy() {}
 
@@ -31,5 +32,10 @@ public final class Pd2FramePacingPolicy {
     public static boolean classicCursor(SharedPreferences preferences) {
         try { return preferences.getBoolean(CLASSIC_CURSOR_PREFERENCE, false); }
         catch (ClassCastException invalid) { return false; }
+    }
+
+    public static boolean simpleScaling(SharedPreferences preferences) {
+        try { return preferences.getBoolean(SIMPLE_SCALING_PREFERENCE, true); }
+        catch (ClassCastException invalid) { return true; }
     }
 }

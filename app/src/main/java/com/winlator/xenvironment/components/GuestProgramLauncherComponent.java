@@ -50,6 +50,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private int pd2FrameLimit = -1;
     private boolean pd2LightGraphics;
     private boolean pd2ClassicCursor;
+    private boolean pd2SimpleScaling;
     private boolean pd2EcoAudio;
     private EnvVars envVars;
     private String box64Preset = Box64Preset.CONSERVATIVE;
@@ -62,12 +63,16 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         setPd2PerformanceSettings(gameDirectory, arguments, fps, light, eco, false);
     }
     public void setPd2PerformanceSettings(File gameDirectory, String arguments, int fps, boolean light, boolean eco, boolean classicCursor) {
+        setPd2PerformanceSettings(gameDirectory, arguments, fps, light, eco, classicCursor, false);
+    }
+    public void setPd2PerformanceSettings(File gameDirectory, String arguments, int fps, boolean light, boolean eco, boolean classicCursor, boolean simpleScaling) {
         pd2GameDirectory = gameDirectory;
         pd2GameArguments = arguments;
         pd2FrameLimit = fps;
         pd2LightGraphics = light;
         pd2EcoAudio = eco;
         pd2ClassicCursor = classicCursor;
+        pd2SimpleScaling = simpleScaling;
     }
     public String getPd2LaunchFailure() { return pd2LaunchFailure; }
 
@@ -150,16 +155,18 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
                 status = new org.json.JSONObject().put("status", "skipped")
                         .put("reason", directDraw ? "Wine DirectDraw compatibility does not use D2GL" : "No captured game directory")
                         .put("capApplied", false).put("effectsApplied", false).put("cursorApplied", false)
-                        .put("classicCursorRequested", pd2ClassicCursor);
+                        .put("classicCursorRequested", pd2ClassicCursor)
+                        .put("simpleScalingRequested", pd2SimpleScaling).put("scalingApplied", false);
             } else {
                 status = Pd2D2glConfig.prepareAfterCleanup(environment.getContext(), cleanup,
-                        pd2GameDirectory, pd2FrameLimit, pd2LightGraphics, pd2ClassicCursor, pd2LaunchId);
+                        pd2GameDirectory, pd2FrameLimit, pd2LightGraphics, pd2ClassicCursor, pd2SimpleScaling, pd2LaunchId);
             }
         } catch (java.io.IOException | org.json.JSONException | RuntimeException error) {
             status = new org.json.JSONObject();
             try { status.put("status", "failed").put("reason", error.getClass().getSimpleName())
                     .put("requestedFps", pd2FrameLimit).put("lighterEffectsRequested", pd2LightGraphics)
                     .put("classicCursorRequested", pd2ClassicCursor).put("cursorApplied", false)
+                    .put("simpleScalingRequested", pd2SimpleScaling).put("scalingApplied", false)
                     .put("capApplied", false).put("effectsApplied", false); }
             catch (org.json.JSONException ignored) { }
         }
@@ -167,6 +174,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         Pd2Activity.appendLauncherLog(environment.getContext(), "D2GL settings: " + status.optString("status")
                 + "; capApplied=" + status.optBoolean("capApplied") + "; effectsApplied=" + status.optBoolean("effectsApplied")
                 + "; cursorApplied=" + status.optBoolean("cursorApplied")
+                + "; scalingApplied=" + status.optBoolean("scalingApplied")
                 + "; reason=" + status.optString("reason"));
     }
 

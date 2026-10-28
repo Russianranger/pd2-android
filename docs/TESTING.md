@@ -1,4 +1,16 @@
-# 0.1.25 cursor regression and FPS diagnosis
+# 0.1.26 scaling comparison
+
+The user accepts the temperature benefit of the 60 FPS game cap and confirms that Classic cursor fixes the black square. FPS remains poor. This pass changes one graphics variable: the requested D2GL scaling shader. It is a comparison build, not a measured performance fix.
+
+1. Install over the existing app, reuse its runtime/import/saves, and keep **60 fps game limit**, **Eco audio**, **Classic cursor**, the accepted controller backend and Stability. Do not re-import or prepare the runtime again.
+2. **Image scaling → Simple · bilinear (default)** requests the built-in lighter shader. **Stop client → Play** applies it after verified cleanup. The last-launch summary must say bilinear scaling is configured; the picture may be softer. Resolution remains 1280×720 if that was the existing setting.
+3. Play the same area for 2–3 minutes, watching the game's own FPS display if available. Check cursor appearance, movement and one Save/Quit/re-entry. **Export support logs before Stop**, during the slow part, so the bounded CPU/image samples cover it.
+4. For an isolated comparison, select **Performance & temperature → Graphics & audio → Image scaling → Restore game shader**, then Stop and Play the same route. Keep every other setting, brightness, charging and fan setting the same. The previous owned shader is restored unless a later manual edit must be preserved.
+5. Compare actual game FPS/smoothness and image quality. Capture request/compositor rates are not game FPS. CPU totals include all process threads; battery temperature is not CPU/GPU temperature. The config snapshot verifies a setting, not which DLL/preset executed.
+
+New tests cover string quoting and exact backslash-path restoration, existing six/seven-key journal compatibility, missing/untyped/unsafe presets, effect-schema independence, conflicts and requested/applied failure summaries. Runtime/controller/audio/graphics binaries are unchanged.
+
+# Historical 0.1.25 cursor regression and FPS diagnosis
 
 1. Install over the existing app; keep the runtime, import, saves, working controller reader and 60 Hz display request. Keep **Eco audio** selected, since the user reports improvement and its actual 22.05 kHz negotiation is confirmed.
 2. Choose **Performance & temperature → Game frame settings (default)**, then **Stop client → Play**. This restores the frame settings owned by the 0.1.24 launcher and removes its Android content redraw delay. Explicit previously saved frame limits remain selected until changed, so select this choice for the regression check. Observe the title-menu cursor first; record whether its square disappears.

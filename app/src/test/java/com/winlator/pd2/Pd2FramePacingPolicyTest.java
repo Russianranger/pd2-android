@@ -48,4 +48,19 @@ public final class Pd2FramePacingPolicyTest {
         preferences.edit().putString(Pd2FramePacingPolicy.CLASSIC_CURSOR_PREFERENCE, "invalid").commit();
         assertFalse(Pd2FramePacingPolicy.classicCursor(preferences));
     }
+
+    @Test public void simpleScalingDefaultsOnAndExplicitGameShaderSurvivesWithoutChangingAcceptedChoices() {
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(RuntimeEnvironment.getApplication());
+        preferences.edit().putInt(Pd2FramePacingPolicy.PREFERENCE, 60)
+                .putBoolean(Pd2FramePacingPolicy.CLASSIC_CURSOR_PREFERENCE, true)
+                .putBoolean(Pd2AudioPolicy.ECO_PREFERENCE, true).commit();
+        assertTrue(Pd2FramePacingPolicy.simpleScaling(preferences));
+        preferences.edit().putBoolean(Pd2FramePacingPolicy.SIMPLE_SCALING_PREFERENCE, false).commit();
+        assertFalse(Pd2FramePacingPolicy.simpleScaling(preferences));
+        assertEquals(60, Pd2FramePacingPolicy.requestedFps(preferences));
+        assertTrue(Pd2FramePacingPolicy.classicCursor(preferences));
+        assertTrue(Pd2AudioPolicy.ecoMode(preferences));
+        preferences.edit().putString(Pd2FramePacingPolicy.SIMPLE_SCALING_PREFERENCE, "invalid").commit();
+        assertTrue(Pd2FramePacingPolicy.simpleScaling(preferences));
+    }
 }
