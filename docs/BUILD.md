@@ -80,7 +80,7 @@ pin verification. `--check` verifies existing dependencies without downloads;
 
 Launcher visual checks use Robolectric native graphics on Android 13 and write actual native View renders to `app/build/outputs/ui-previews/`; CI uploads them for visual inspection. These are layout checks, not screenshots from the physical Thor. The preview fixture models a focused window and restores Android's Window/Decor focus lookup in its scoped test shadow: Robolectric 4.14.1's default `ShadowActivity.getCurrentFocus()` returns a separate manually seeded field. The real launcher stick handler and framework focus search execute unchanged; the below-fold tools assertion checks the actual focused hierarchy, not a fabricated focus result.
 
-The current output is `app/build/distributions/PD2-Android-0.1.23-preview.apk` and a
+The current output is `app/build/distributions/PD2-Android-0.1.24-preview.apk` and a
 `SHA256SUMS` file. This describes a repeatable toolchain and stable signing
 identity, not a claim that two independent builds are byte-for-byte identical.
 
@@ -247,6 +247,12 @@ Local verification passed **122 tests across 16 suites**, with no failures, erro
 APK: `PD2-Android-0.1.11-preview.apk`, **174,055,860 bytes**. SHA-256: `0a307e4cde8a88312ec82f4413e76f71cf1f7d935a1597e86557081460e7a89c`. Identity: `com.pd2.thor`, 0.1.11/code 12, min SDK 26, target SDK 28, ARM64 only. [Published 0.1.11 CI run 37206816716](https://github.com/Russianranger/pd2-android/actions/runs/37206816716) passed for code commit `2f5e1a9086c3131a9de265813c636f4c57eda6c0`; physical Save/Quit and shoulder-tab qualification remain pending. See [Testing](TESTING.md) and the [research evidence](evidence/2026-10-04-controller-research.md) for the separate physical qualification.
 
 
-## 0.1.23 graphics qualification
+## 0.1.24 active-renderer and audio qualification
+
+[CI 40613733110](https://github.com/Russianranger/pd2-android/actions/runs/40613733110) builds source `3049f542c9bad707b21d1b32fa4b6bb26fa4d7f4` and passes 464 Android tests across 52 suites, all runtime/host checks, ARM64 assembly and the actual packaged Wine recovery gate. The new audio gates pass 21 host scenarios / 139 checks and 8 ARM64 module scenarios / 2,428 checks. All 15 native UI previews match final local renders. The optional module is reproducibly rebuilt against the packaged ABI; its probe transport is mocked, so it does not establish Android sound quality or performance.
+
+The 0.1.24/code 25 APK is 174,255,144 bytes, SHA-256 `7547cfd4e83d5c737170760ed810cde43038ae9008c67f276e31443021c67a3e`. Manifest, signature, ZIP integrity and alignment pass independent verification. All 78 prior assets and 35 ARM64 libraries match 0.1.23; exactly three new audio assets match their tracked sources. Detailed source/artifact identities are in [HANDOFF.md](HANDOFF.md). Physical gains remain to be tested.
+
+## Historical 0.1.23 graphics qualification
 
 [CI 40429777390](https://github.com/Russianranger/pd2-android/actions/runs/40429777390) builds source `22525db3a26543737cae33823c6882b456be62a9` and passes 404 Android tests/46 suites, the ten-scenario/219-check production Present harness, all retained host/runtime checks and the actual packaged Wine recovery gate. The 0.1.23/code 24 APK is 174,207,644 bytes, SHA-256 `cdc2ae14e4ebfa217332765b56d16d0668c1198cef4a9b8034eda9faa4ad1be3`; manifest, signing identity and ZIP integrity/alignment are independently verified. All 78 assets and 35 ARM64 libraries match 0.1.22. The local final Android suite also passes all 404 tests; nine native UI previews match the CI renders. These checks do not measure Thor FPS or temperature gains.

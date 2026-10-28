@@ -6,9 +6,15 @@ The user reports no apparent gains and some audio stutter on 0.1.23, asks for a 
 
 0.1.24/code25 changes supported existing D2GL JSON settings after exact-prefix cleanup: 60 fps by default (30/Unlimited/Restore choices), disabling V-Sync as required by its limiter; default lighter bloom/FXAA/sharpening effects, with restoration. Unrelated bytes, resolution, binaries and saves remain unchanged. Atomic backups and a per-import journal preserve later user changes and reject unrecognized configs. App-root aliases are normalized without accepting symlinks inside the imported tree. The launcher exposes applied/skipped status and support export includes only six allowlisted config values. Android content redraw requests coalesce nonblockingly; urgent pointer/control updates remain immediate. The uncovered X Present sleep is disabled for PD2.
 
-Audio uses32ms default buffering with16/64ms choices and bounded actual AudioTrack underrun/rate/buffer/write diagnostics. Zero-progress loops, counter overflow/stale-observation races, shared-buffer length growth and pre-join shutdown are covered by21 host scenarios/139checks. Optional Eco selects a new uniquely named ARM64 ALSA module at22.05kHz; Standard keeps the original. Asset71448bytes, SHA256 `c3c344f2f8740aaca3db6ba6216b6908dcceb367358cdca31e1907ec7043a3bd`. Its exact packaged-library QEMU probe passes 8 scenarios / 2,428 checks, including byte-identical reproducible rebuild and original48kHz vsEco22.05kHz negotiation under a48kHz request. Transport is mocked; Android sound/CPU benefit is unmeasured.
+Audio uses 32 ms default buffering with 16/64 ms choices and bounded actual AudioTrack underrun/rate/buffer/write diagnostics. Zero-progress loops, counter overflow/stale-observation races, shared-buffer length growth and pre-join shutdown are covered by 21 host scenarios / 139 checks. Optional Eco selects a new uniquely named ARM64 ALSA module at 22.05 kHz; Standard keeps the original. Asset: 71,448 bytes, SHA-256 `c3c344f2f8740aaca3db6ba6216b6908dcceb367358cdca31e1907ec7043a3bd`. Its exact packaged-library QEMU probe passes 8 scenarios / 2,428 checks, including byte-identical reproducible rebuild and original 48 kHz versus Eco 22.05 kHz negotiation under a 48 kHz request. Transport is mocked; Android sound/CPU benefit is unmeasured.
 
-Independent reviews found no source blocker in the config transaction/restore, audio protocol/teardown, optional Eco installer/ABI, or content scheduler. Thirteen pure scheduler tests pass. Local Android qualification passes 464 tests across 52 suites, zero failures/errors/skips, with 15 native UI previews. All 206 dependency pins verify; all 78 existing assets match 0.1.23 byte-for-byte, with three new audio assets. CI qualification and the offered APK identity are pending at this source checkpoint; do not label an APK qualified before those results. [Release notes](RELEASE-0.1.24.md) and [device checks](TESTING.md) describe the test.
+Independent reviews found no source blocker in the config transaction/restore, audio protocol/teardown, optional Eco installer/ABI, or content scheduler. Thirteen pure scheduler tests pass. Local Android qualification passes 464 tests across 52 suites, zero failures/errors/skips. A focused 25-test rerun also passes after shortening the performance dialog header so all four choices fit in landscape. All 15 CI native UI previews match the final local renders byte-for-byte. [Release notes](RELEASE-0.1.24.md) and [device checks](TESTING.md) describe the test.
+
+**Qualified preview:** source `3049f542c9bad707b21d1b32fa4b6bb26fa4d7f4`, tree `b881d67602432d97f618c2e42702a049395dec7c`. [CI 40613733110](https://github.com/Russianranger/pd2-android/actions/runs/40613733110), job `122571220745`, passes all 464 Android tests across 52 suites, zero failures/ignored tests, ARM64 assembly, all 206 runtime dependency pins and retained host checks. The audio gates pass 21 host scenarios / 139 checks and 8 actual ARM64 ALSA/module scenarios / 2,428 checks. The packaged Wine gate reproduces the donor failure and passes repaired recovery, held-state freshness and stale expiry: 1,268 dynamic checks, nine discoveries and 336 state frames. These scheduling-dependent Wine counts are observations, not fixed expectations.
+
+The offered APK is **0.1.24/code 25**, `PD2-Android-0.1.24-preview.apk`, **174,255,144 bytes**, SHA-256 **`7547cfd4e83d5c737170760ed810cde43038ae9008c67f276e31443021c67a3e`**. Independent checks pass ZIP CRCs, duplicate exclusion, four-byte stored-entry alignment, package/SDK/ARM64 identity and the unchanged V2 preview signer (`a61297bef1be2652b53b763730275e1f0e0975222294602ed8ffa5f8147ddb1e`). All 78 existing assets and 35 ARM64 libraries match 0.1.23 byte-for-byte. Exactly three new audio assets match tracked sources; the accepted XInput reader remains `5a05fabaaf028749c306b76103451f72215ce69c0605e3876f9beb981f417ce0`. No release tag was published.
+
+Downloaded artifact sizes and SHA-256 digests match GitHub: APK wrapper `12783922781`, 173,324,192 bytes, `1949d6237a4ab7f9900de06f2619c752b3109d01f5625b87bc7b8c5cb1b9a95f`; reports `12783729784`, 82,415 bytes, `943e311f3766a80456bb16a5afbb42dcc663c047fca8baf2178ae75dd9951a02`; 15 previews `12783837906`, 1,043,687 bytes, `51a98ec6aa8fcffecb45e5a443342d783add9a1af4b4c2e9515ae243c9a8e212`. Physical audio smoothness, FPS and cooling remain unmeasured.
 
 # Historical 0.1.23 graphics optimization pass
 
@@ -26,7 +32,7 @@ Local final validation also passes all 404 tests/46 suites, zero failures/errors
 
  The new local capture is 0.1.22, not a test of these changes. It has no frame-time/CPU-utilization measurements; battery 33→32°C and thermal status zero over about 96 seconds do not establish sustained cooling. Do not claim hardware gains or universal FPS limiting from these source changes.
 
-# Current pass — 0.1.22
+# Historical 0.1.22 pass
 
 The user confirms 0.1.21 finally resolves controller recovery after Save/Quit. Preserve its exact XInput DLL and the provisionally accepted 0.1.20 cursor fix. See [accepted capture](evidence/2026-10-26-xinput-reader-accepted.md). The repaired reader becomes the default, including one-time preference migration; explicit manual fallback choices after migration remain persistent.
 
@@ -746,7 +752,7 @@ Published 0.1.7 CI run 37169294205 passed. The user rejected its physical menu t
 
 Robolectric models Android framework/resources in the JVM; it does not qualify the physical Thor, Android's service watchdog, ARM64 native-library loading, Wine/controller forwarding, graphics drivers, or PD2. The standalone source checks use small stand-ins and do not execute Android lifecycle behavior. Synthetic PE/MPQ fixtures do not establish compatibility with a real installation. The user accepted launcher/setup/import, title startup on 0.1.4, and native input inside a character on 0.1.6. The original Android crash and mechanisms of the earlier Wine 10/Fog and Native re-entry failures remain unconfirmed. The user accepts the repaired XInput reader for Save/Quit recovery on 0.1.21.
 
-The current physical baseline is the accepted 0.1.21 reader repair. The 0.1.22 pass promotes it to the default and targets diagnostic/display overhead plus launcher appearance. Preserve existing setup/import and binding acceptance.
+The physical controller baseline remains the accepted 0.1.21 reader repair, made the default in 0.1.22. The user also accepts the gothic launcher and 60 Hz request, but reports no apparent performance gains and some audio stutter after 0.1.23. The 0.1.24 pass at the top of this document addresses the active renderer and audio paths. Preserve existing setup/import and binding acceptance.
 
 | Gate | Status | Evidence or next requirement |
 | --- | --- | --- |
@@ -759,13 +765,13 @@ The current physical baseline is the accepted 0.1.21 reader repair. The 0.1.22 p
 | Menu visibility/clicks | Historical acceptance retained; latest capture is Native only | Do not infer a new Menu click test from XInput telemetry |
 | Native after full same-app Stop/Play | Historical 0.1.16 acceptance; current fresh input works | Preserve verified cleanup; repeat only if a regression is reported |
 | Native combinations / shoulder tabs | Accepted on 0.1.11 and preserved | No binding changes in this pass |
-| Gothic launcher | Native framework preview checks; Thor confirmation pending | Check touch, controller focus, settings and readability |
+| Gothic launcher | Accepted by user | Retained layout; native framework previews cover the new settings dialogs |
 | Sustained FPS / temperature / power | Unmeasured | Same scene, brightness, charging/fan settings and duration; leave API trace Off |
 | Input switching / lifecycle | Broader repeated switching/background checks pending | Gear/chord, Resume and no held input after transitions |
 | Offline save persistence | Broader stop/relaunch check pending | Save, stop, relaunch and reopen the same character |
 | Online play | Pending | User authenticates and enters a normal PD2 online game |
 
-The next device check reuses the accepted controller/graphics configuration. Check one initial Native and Save/Quit regression, the new launcher, then a sustained comparable play session. Export support logs before Stop for battery/thermal and display-request observations. The 60 Hz request is not measured refresh or a guest FPS cap. Keep old identity/reconnect/HID experiments off; enable detailed input tracing only for a short failure investigation.
+The next device check follows the 0.1.24 section in [TESTING.md](TESTING.md): initial Native and Save/Quit regression, D2GL applied/skipped status, then sustained comparable gameplay and audio. Export support logs before Stop for actual audio counters and renderer settings. The 60 Hz display request is separate from the D2GL limit; neither selected preference measures actual FPS. Keep old identity/reconnect/HID experiments off; enable detailed input tracing only for a short failure investigation.
 
 ## Remaining device qualification
 

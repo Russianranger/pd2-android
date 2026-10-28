@@ -12,4 +12,6 @@ Install over the existing app; no Prepare runtime or re-import is needed. Open *
 
 ## Validation
 
-Automated qualification and the offered APK identity will be recorded in [HANDOFF.md](HANDOFF.md). A Thor test is still required for audible stutter, sustained frame times and temperature. Compare the same route, brightness, fan and charging conditions. Export support logs before Stop after the comparison; they now include allowlisted D2GL values and actual Android audio counters. Battery temperature is not CPU/GPU temperature.
+[CI 40613733110](https://github.com/Russianranger/pd2-android/actions/runs/40613733110) passes 464 Android tests, ARM64 assembly, the audio module/bridge gates and the packaged Wine controller recovery test. The offered APK's identity, signature and unchanged prior runtime assets are independently verified; exact hashes and source identity are recorded in [HANDOFF.md](HANDOFF.md).
+
+A Thor test is still required for audible stutter, sustained frame times and temperature. Compare the same route, brightness, fan and charging conditions. Export support logs before Stop after the comparison; they now include allowlisted D2GL values and actual Android audio counters. Battery temperature is not CPU/GPU temperature.
