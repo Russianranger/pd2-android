@@ -248,7 +248,13 @@ Local verification passed **122 tests across 16 suites**, with no failures, erro
 APK: `PD2-Android-0.1.11-preview.apk`, **174,055,860 bytes**. SHA-256: `0a307e4cde8a88312ec82f4413e76f71cf1f7d935a1597e86557081460e7a89c`. Identity: `com.pd2.thor`, 0.1.11/code 12, min SDK 26, target SDK 28, ARM64 only. [Published 0.1.11 CI run 37206816716](https://github.com/Russianranger/pd2-android/actions/runs/37206816716) passed for code commit `2f5e1a9086c3131a9de265813c636f4c57eda6c0`; physical Save/Quit and shoulder-tab qualification remain pending. See [Testing](TESTING.md) and the [research evidence](evidence/2026-10-04-controller-research.md) for the separate physical qualification.
 
 
-## 0.1.24 active-renderer and audio qualification
+## 0.1.25 cursor and diagnostic qualification
+
+[CI 40629691147](https://github.com/Russianranger/pd2-android/actions/runs/40629691147) builds source `f6763ffb5341cfd9a7223b01d5a58008788cca5c` and passes 481 Android tests across 52 suites, all runtime/host checks, ARM64 assembly and the packaged Wine recovery gate. The actual MIT-SHM handler/Drawable fixture passes 43 checks with explicit transport/GL stand-ins; it observes preserved branch and buffer-alias behavior without testing native pixel copies. All 17 UI previews match final local renders.
+
+The 0.1.25/code 26 APK is 174,260,772 bytes, SHA-256 `482dcb5d86a6a447ae2640a0036d741cd67932ddd740ca9563c93a5c2a6afce9`. Manifest, signer, ZIP integrity/alignment and all 81 existing assets / 35 ARM64 libraries are independently verified against 0.1.24. There are no new runtime assets. Detailed identities and remaining physical cursor/FPS checks are in [HANDOFF.md](HANDOFF.md).
+
+## Historical 0.1.24 active-renderer and audio qualification
 
 [CI 40613733110](https://github.com/Russianranger/pd2-android/actions/runs/40613733110) builds source `3049f542c9bad707b21d1b32fa4b6bb26fa4d7f4` and passes 464 Android tests across 52 suites, all runtime/host checks, ARM64 assembly and the actual packaged Wine recovery gate. The new audio gates pass 21 host scenarios / 139 checks and 8 ARM64 module scenarios / 2,428 checks. All 15 native UI previews match final local renders. The optional module is reproducibly rebuilt against the packaged ABI; its probe transport is mocked, so it does not establish Android sound quality or performance.
 
