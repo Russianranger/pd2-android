@@ -272,8 +272,15 @@ public final class Pd2D2glConfigTest {
         manual = new String(read(f.config), StandardCharsets.UTF_8).replace("bilinear.slangp", "custom/shader.slangp");
         Files.write(f.config.toPath(), bytes(manual));
         assertEquals(1, prepare(f, -1, false, false, true).getInt("userValuesRebased"));
-        prepare(f, -1, false, false);
-        assertArrayEquals(bytes(manual), read(f.config));
+        JSONObject restored = prepare(f, -1, false, false);
+        assertEquals(1, restored.getInt("restoredFields"));
+        assertEquals("applied", restored.getString("status"));
+        assertFalse(restored.getBoolean("scalingApplied"));
+        assertEquals("custom/shader.slangp", config(f).getJSONObject("graphics").getString("shader_preset"));
+        // Restore the owned string's value using Android's JSON escaping; all other bytes stay exact.
+        String expected = manual.replace("\"shader_preset\": \"custom/shader.slangp\"",
+                "\"shader_preset\": " + JSONObject.quote("custom/shader.slangp"));
+        assertArrayEquals(bytes(expected), read(f.config));
     }
 
     @Test public void missingUntypedOrUnsafePresetSkipsScalingButAllowsOtherSettings() throws Exception {
